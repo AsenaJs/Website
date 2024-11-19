@@ -2,6 +2,7 @@ import {defineConfig} from "vitepress";
 
 export default defineConfig({
     title: "Asena",
+    base: "/website/",
     description: "Ioc web framework for bun",
     themeConfig: {
         // https://vitepress.dev/reference/default-theme-config
