@@ -2,7 +2,6 @@ import {defineConfig} from "vitepress";
 
 export default defineConfig({
     title: "Asena",
-    base: "/website/",
     description: "Ioc web framework for bun",
     themeConfig: {
         // https://vitepress.dev/reference/default-theme-config
@@ -11,12 +10,12 @@ export default defineConfig({
             {text: "Docs", link: "/get-started"},
         ],
         sidebar: [
-            {text: "Quick Start", link: "/get-started"},
-            {text: "Examples", link: "/examples"},
+            {text: "Quick Start", link: "/docs/get-started"},
+            {text: "Examples", link: "/docs/examples"},
             {
                 text: "Concepts",
                 items: [
-                    {text: "Controller", link: "/controller"},
+                    {text: "Controller", link: "/docs/controller"},
                 ],
             },
         ],

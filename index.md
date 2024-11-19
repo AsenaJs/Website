@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Get started
-      link: /get-started
+      link: /docs/get-started
     - theme: alt
       text: View on GitHub
       link: https://github.com/AsenaJs/Asena
