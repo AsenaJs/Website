@@ -7,7 +7,7 @@ export default defineConfig({
         // https://vitepress.dev/reference/default-theme-config
         nav: [
             {text: "Home", link: "/"},
-            {text: "Docs", link: "/get-started"},
+            {text: "Docs", link: "/docs/get-started"},
         ],
         sidebar: [
             {text: "Quick Start", link: "/docs/get-started"},
@@ -15,6 +15,8 @@ export default defineConfig({
             {
                 text: "Concepts",
                 items: [
+                    {text: "Context", link: "/docs/context"},
+                    {text: "Dependency Injection", link: "/docs/dependency-injection"},
                     {text: "Controller", link: "/docs/controller"},
                 ],
             },
