@@ -20,6 +20,16 @@ export default defineConfig({
                     {text: "Controller", link: "/docs/controller"},
                 ],
             },
+            {
+                text:"Asena CLI",
+                items:[
+                    {text:"Overview",link:"/docs/cli/overview"},
+                    {text:"Installation",link:"/docs/cli/installation"},
+                    {text:"Commands",link:"/docs/cli/commands"},
+                    {text:"Configuration",link:"/docs/cli/configuration"},
+                    {text:"Examples",link:"/docs/cli/examples"},
+                ]
+            }
         ],
 
         socialLinks: [
