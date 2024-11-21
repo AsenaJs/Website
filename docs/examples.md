@@ -82,7 +82,7 @@ await new AsenaServer().logger(new DefaultLogger()).port(3000).start();
 
 then run
 ```bash
-asena-cli dev start
+asena dev start
 ```
 
 You should see the following output:

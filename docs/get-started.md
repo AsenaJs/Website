@@ -63,7 +63,7 @@ Then, create a new .asenarc.json file using the CLI:
 ```bash
 
 ## Creates a .asenarc.json file with default values (requires manual updates). Source folder is 'src'.
-asena-cli init
+asena init
 ```
 
 `Note`: Built options directly copy of bun options, you can check bun documentation for more
@@ -99,13 +99,13 @@ Finally, run the project:
 ```bash
 
 ## only for fast developing purposes
-asena-cli dev start 
+asena dev start 
 ````
 
 or you can simply build then run your bundled project
 
 ```bash
-asena-cli build
+asena build
 ## then go to dist folder and run the project this way it will consume less memory 
 bun index.asena.js
 ```
