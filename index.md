@@ -5,6 +5,9 @@ hero:
   name: "Asena"
   text: "A modern ioc web-framework for bun"
   tagline: Easy to use, fast to develop
+  image:
+    src: /images/code.png
+    alt: Asena
   actions:
     - theme: brand
       text: Get started
