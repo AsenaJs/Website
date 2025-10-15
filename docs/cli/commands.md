@@ -393,7 +393,7 @@ Use `asena init` when:
 ## Related Documentation
 
 - [Configuration](/docs/cli/configuration) - CLI configuration options
-- [Project Structure](/docs/guides/project-structure) - Recommended project structure
+- [CLI Examples](/docs/cli/examples) - See complete project examples
 - [Controllers](/docs/concepts/controllers) - Controller patterns
 - [Services](/docs/concepts/services) - Service patterns
 - [Middleware](/docs/concepts/middleware) - Middleware patterns
@@ -403,5 +403,5 @@ Use `asena init` when:
 
 **Next Steps:**
 - Learn about [CLI Configuration](/docs/cli/configuration)
-- Explore [Project Structure](/docs/guides/project-structure)
+- See [CLI Examples](/docs/cli/examples) for project structure
 - Understand [Controllers](/docs/concepts/controllers)

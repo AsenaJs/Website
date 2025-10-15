@@ -538,10 +538,6 @@ export class StaticController {
 }
 ```
 
-::: info
-For static file serving, see [Static Files](/docs/guides/static-files).
-:::
-
 ## Migrating from Standalone Hono
 
 If you're migrating from a standalone Hono application to Asena with Hono adapter:
