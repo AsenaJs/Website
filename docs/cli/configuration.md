@@ -490,7 +490,7 @@ export default defineConfig({
 ## Related Documentation
 
 - [CLI Commands](/docs/cli/commands) - Available CLI commands
-- [Project Structure](/docs/guides/project-structure) - Recommended structure
+- [CLI Examples](/docs/cli/examples) - See project structure examples
 - [Deployment](/docs/guides/deployment) - Production deployment
 - [Bun Bundler](https://bun.sh/docs/bundler) - Complete bundler reference
 
@@ -499,4 +499,4 @@ export default defineConfig({
 **Next Steps:**
 - Explore [CLI Commands](/docs/cli/commands)
 - Learn about [Deployment](/docs/guides/deployment)
-- Understand [Project Structure](/docs/guides/project-structure)
+- See [CLI Examples](/docs/cli/examples) for project structure

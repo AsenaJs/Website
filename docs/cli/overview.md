@@ -78,7 +78,7 @@ asena dev start
 
 - [Get Started Guide](/docs/get-started) - Complete beginner's guide
 - [Adapters Overview](/docs/adapters/overview) - Choose between Ergenecore and Hono
-- [Project Structure](/docs/guides/project-structure) - Recommended file organization
+- [CLI Examples](/docs/cli/examples) - See project structure examples
 
 ---
 

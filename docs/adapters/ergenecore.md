@@ -401,10 +401,6 @@ Ergenecore leverages Bun's SIMD-accelerated router for ultra-fast route matching
 
 Uses `Bun.file()` for serving static files without copying data to memory. This provides optimal performance for static assets.
 
-::: info Static Files
-For static file serving, see [Static Files](/docs/guides/static-files).
-:::
-
 ### Bun-Native APIs
 
 Ergenecore is built exclusively with:
