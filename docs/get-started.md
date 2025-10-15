@@ -1,111 +1,303 @@
 ---
+title: Get Started
+description: Quick start guide for Asena framework
 outline: deep
 ---
 
-# Getting Start
+# Get Started
 
-First, create a new project using Bun:
+Get up and running with Asena in minutes. This guide shows you how to create your first Asena application.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) v1.2.8 or higher
+
+**Verify Bun installation:**
 
 ```bash
-bun init
-````
+bun --version
+```
 
-For decorators working properly, you need to add some settings to your tsconfig. Here is an recommended file:
+## Option 1: With Asena CLI (Recommended)
+
+The fastest way to create a new Asena project.
+
+### 1. Install Asena CLI
+
+```bash
+bun install -g @asenajs/asena-cli
+```
+
+### 2. Create Project
+
+```bash
+asena create
+```
+
+Answer the interactive prompts:
+
+```bash
+✔ Enter your project name: my-app
+✔ Select adapter: Ergenecore
+✔ Do you want to setup ESLint? No
+✔ Do you want to setup Prettier? No
+```
+
+### 3. Start Development Server
+
+```bash
+cd my-app
+asena dev start
+```
+
+Your server is now running at `http://localhost:3000`!
+
+Test it:
+
+```bash
+curl http://localhost:3000
+# Output: Hello asena
+```
+
+That's it! You now have a working Asena application. Skip to [Next Steps](#next-steps) to learn more.
+
+---
+
+## Option 2: Manual Setup
+
+If you prefer to set up your project manually.
+
+### 1. Create Project
+
+```bash
+mkdir my-app
+cd my-app
+bun init -y
+```
+
+### 2. Install Dependencies
+
+**For Ergenecore adapter (recommended):**
+
+```bash
+bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger
+bun add -D @asenajs/asena-cli
+```
+
+**For Hono adapter:**
+
+```bash
+bun add @asenajs/asena @asenajs/hono-adapter hono @asenajs/asena-logger
+bun add -D @asenajs/asena-cli
+```
+
+### 3. Configure TypeScript
+
+Update your `tsconfig.json` to enable decorators:
 
 ```json
 {
   "compilerOptions": {
-    // Enable latest features
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    // Bundler mode
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": true,
-    // Best practices
-    "strict": false,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    // Some stricter flags
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true
+    "emitDecoratorMetadata": true
   }
 }
-
 ```
 
-Then, install the required packages:
+::: tip
+These two settings are **required** for Asena decorators to work properly.
+:::
 
-```bash
+### 4. Create Logger
 
-bun add @asenajs/asena hono winston
+Create `src/logger.ts`:
+
+```typescript
+import { AsenaLogger } from '@asenajs/asena-logger';
+
+export const logger = new AsenaLogger();
 ```
 
-Add @asenajs/asena-cli to your package. This package provides a CLI for creating and managing Asena projects.
+### 5. Create Entry Point
+
+Create `src/index.ts`:
+
+**For Ergenecore:**
+
+```typescript
+import { AsenaServerFactory } from '@asenajs/asena/server';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { logger } from './logger';
+
+const adapter = createErgenecoreAdapter();
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000
+});
+
+await server.start();
+```
+
+**For Hono:**
+
+```typescript
+import { AsenaServerFactory } from '@asenajs/asena/server';
+import { createHonoAdapter } from '@asenajs/hono-adapter';
+import { logger } from './logger';
+
+const adapter = createHonoAdapter();
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000
+});
+
+await server.start();
+```
+
+### 6. Create Your First Controller
+
+Create `src/controllers/HelloController.ts`:
+
+**For Ergenecore:**
+
+```typescript
+import { Controller } from '@asenajs/asena/server';
+import { Get } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/ergenecore/types';
+
+@Controller('/')
+export class HelloController {
+  @Get('/')
+  async hello(context: Context) {
+    return context.send('Hello World!');
+  }
+}
+```
+
+**For Hono:**
+
+```typescript
+import { Controller } from '@asenajs/asena/server';
+import { Get } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/hono-adapter/types';
+
+@Controller('/')
+export class HelloController {
+  @Get('/')
+  async hello(context: Context) {
+    return context.send('Hello World!');
+  }
+}
+```
+
+### 7. Initialize CLI Configuration
 
 ```bash
-bun add -D @asenajs/asena-cli
-````
-
-Then, create a new .asenarc.json file using the CLI:
-
-```bash
-
-## Creates a .asenarc.json file with default values (requires manual updates). Source folder is 'src'.
 asena init
 ```
 
-`Note`: Built options directly copy of bun options, you can check bun documentation for more
-options. [Bun Documentation](https://bun.sh/docs/bundler#reference)
+This creates `asena.config.ts` with default build settings.
 
-Create index.ts file under your src folder:
+### 8. Run Your Application
 
-```typescript
-// src/index.ts
-import {AsenaServer, DefaultLogger} from "@asenajs/asena";
-
-await new AsenaServer().logger(new DefaultLogger()).port(3000).start();
-```
-
-To run asena you need at least one controller. Create a new controller:
-
-```typescript
-// src/controllers/TestController.ts
-import {type Context, Controller, Get} from "@asenajs/asena";
-
-@Controller("/hello")
-export class TestController {
-
-    @Get("/world")
-    public async getHello(context: Context) {
-        return context.send("Hello World");
-    }
-}
-```
-
-Finally, run the project:
+**Development mode:**
 
 ```bash
+asena dev start
+```
 
-## only for fast developing purposes
-asena dev start 
-````
-
-or you can simply build then run your bundled project
+**Production build:**
 
 ```bash
 asena build
-## then go to dist folder and run the project this way it will consume less memory 
-bun index.asena.js
+bun dist/index.js
 ```
+
+Test your application:
+
+```bash
+curl http://localhost:3000
+# Output: Hello World!
+```
+
+---
+
+## Project Structure
+
+Your project should now look like this:
+
+```
+my-app/
+├── src/
+│   ├── controllers/
+│   │   └── HelloController.ts
+│   ├── index.ts
+│   └── logger.ts
+├── asena.config.ts
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## Next Steps
+
+Now that you have a working Asena application:
+
+- **Add more routes** - Learn about [Controllers](/docs/concepts/controllers)
+- **Add business logic** - Learn about [Services](/docs/concepts/services)
+- **Add middleware** - Learn about [Middleware](/docs/concepts/middleware)
+- **Add validation** - Learn about [Validation](/docs/concepts/validation) (Ergenecore only)
+- **Explore CLI** - Check out [CLI Commands](/docs/cli/commands)
+- **See examples** - Browse [Examples](/docs/examples)
+
+---
+
+## Common Issues
+
+### Decorators not working
+
+Make sure your `tsconfig.json` has:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+### Command not found: asena
+
+Add Bun's global bin directory to your PATH:
+
+```bash
+# For bash
+echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# For zsh
+echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Port already in use
+
+Change the port in `AsenaServerFactory.create()`:
+
+```typescript
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3001
+});
+```
+
+---
+
+**Need help?** Check out our [documentation](https://asena.sh) or visit our [GitHub repository](https://github.com/AsenaJs/Asena).

@@ -1,127 +1,352 @@
-# 📖 Commands
+---
+title: CLI Commands
+description: Complete reference for Asena CLI commands
+outline: deep
+---
 
-### ```asena create```
+# CLI Commands
 
-The Create command bootstraps new Asena projects with a complete development environment setup.
+Asena CLI provides command-line utilities to help you manage your Asena applications efficiently.
 
-#### Features
+## Installation
 
-- **Interactive Setup**: Uses inquirer for a user-friendly setup experience
-- **Project Structure**: Creates the basic project structure with necessary files and directories
-- **Default Components**: Generates default controller and server setup
-- **Development Tools**: Optional integration of:
-    - ESLint configuration
-    - Prettier setup
-- **Dependency Management**: Automatically installs required dependencies
+**Prerequisite:** [Bun runtime](https://bun.sh) (v1.2.8 or higher)
 
 ```bash
-✔ Enter your project name: ProjectName
+bun install -g @asenajs/asena-cli
+```
+
+Verify installation:
+
+```bash
+asena --version
+```
+
+## asena create
+
+Bootstrap a new Asena project with a complete development environment setup.
+
+### Features
+
+- **Interactive Setup** - User-friendly setup experience with inquirer
+- **Multi-Adapter Support** - Choose between Hono or Ergenecore adapters
+- **Project Structure** - Creates complete project structure with necessary files
+- **Default Components** - Generates default controller and server setup
+- **Development Tools** - Optional ESLint and Prettier integration
+- **Dependency Management** - Automatically installs required dependencies
+
+### Usage
+
+```bash
+asena create
+```
+
+### Interactive Prompts
+
+```bash
+✔ Enter your project name: my-asena-app
+✔ Select adapter: Ergenecore
 ✔ Do you want to setup ESLint? Yes
 ✔ Do you want to setup Prettier? Yes
 ⠙ Creating asena project...
 ```
 
-### ```asena generate```
+### Generated Project Structure
 
-Note: You can also use `asena g` as a shortcut.
+```
+my-asena-app/
+├── src/
+│   ├── controllers/    # Route controllers
+│   ├── services/       # Business logic
+│   ├── middlewares/    # Middleware files
+│   ├── config/         # Server configuration classes
+│   ├── namespaces/     # WebSocket namespaces
+│   └── index.ts        # Application entry point
+├── tests/              # Test files
+├── public/             # Static assets
+├── asena.config.ts     # Configuration
+├── package.json
+└── tsconfig.json
+```
 
-The generate command allows you to quickly and consistently create project components.
+## asena generate
 
-#### Features
+Quickly and consistently create project components with proper structure and imports.
 
-- **Multi-Component Support**: Ability to generate controllers, services, and middlewares
-- **Automatic Code Generation**: Creates template code with base structure and necessary imports
-- **Project Structure Integration**: Places generated files in the correct directories
-- **Shortcuts**: Command aliases for faster usage (g, c, s, m)
+**Shortcut:** `asena g`
 
+### Features
 
-| **Component** | **Full Command**              | **Shortcut Command** | **Description**              |
-|---------------|-------------------------------|-----------------------|--------------------------|
-| Controller    | `asena generate controller`   | `asena g c`           | Generates a controller   |
-| Service       | `asena generate service`      | `asena g s`           | Generates a service      |
-| Middleware    | `asena generate middleware`   | `asena g m`           | Generates a middleware   |
+- **Multi-Component Support** - Generate controllers, services, middlewares, configs, and websockets
+- **Automatic Code Generation** - Creates template code with base structure and necessary imports
+- **Adapter-Aware** - Generates adapter-specific code based on project configuration
+- **Project Structure Integration** - Places files in the correct directories
+- **Command Shortcuts** - Faster usage with aliases
 
-After executing these commands, the created component is placed under the relevant folder. For example:
+### Commands
+
+| Component  | Full Command                | Shortcut      | Description                 |
+|:-----------|:----------------------------|:--------------|:----------------------------|
+| Controller | `asena generate controller` | `asena g c`   | Generates a controller      |
+| Service    | `asena generate service`    | `asena g s`   | Generates a service         |
+| Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
+| Config     | `asena generate config`     | `asena g config` | Generates a server config |
+| WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
+
+### Examples
+
+#### Generate Controller
 
 ```bash
-asena g m
+asena g c
+# or
+asena generate controller
 ```
-After executing the command, the component will be created in the middleware folder under the source folder. Assuming we have created a middleware named MiddlewareExample and our source folder is ``src``, the middleware can be found in the path ``src/middleware/MiddlewareExample.ts``. The middleware to be created is as shown below:
+
+**Prompt:**
+```bash
+✔ Enter controller name: User
+```
+
+**Generated:** `src/controllers/UserController.ts`
 
 ```typescript
-import {Middleware} from '@asenajs/asena/server'; 
-import {type Context,MiddlewareService} from '@asenajs/hono-adapter'; 
+import { Controller } from '@asenajs/asena/server';
+import { Get } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/ergenecore/types';
 
-@Middleware()
-export class MiddlewareExample extends MiddlewareService{
-
-	public handle(context:Context, next:Function) {
-		context.setValue("testValue","test");
-
-		next();
-	}
+@Controller('/user')
+export class UserController {
+  @Get({ path: '/' })
+  async index(context: Context) {
+    return context.send({ message: 'Hello from UserController!' });
+  }
 }
 ```
 
-### ```asena dev start```
+#### Generate Service
 
-The Dev command enables development mode with enhanced debugging capabilities.
+```bash
+asena g s
+# or
+asena generate service
+```
 
-#### Features
+**Prompt:**
+```bash
+✔ Enter service name: User
+```
 
-- **Build Integration**: Automatically builds the project before starting
+**Generated:** `src/services/UserService.ts`
 
-After executing this command, the project is automatically compiled and started. For example:
+```typescript
+import { Service } from '@asenajs/asena/server';
+
+@Service()
+export class UserService {
+  async getUsers() {
+    // Add your business logic here
+    return [];
+  }
+}
+```
+
+#### Generate Middleware
+
+```bash
+asena g m
+# or
+asena generate middleware
+```
+
+**Prompt:**
+```bash
+✔ Enter middleware name: Auth
+```
+
+**Generated:** `src/middlewares/AuthMiddleware.ts`
+
+```typescript
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
+@Middleware()
+export class AuthMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>) {
+    // Add your middleware logic here
+    await next();
+  }
+}
+```
+
+#### Generate Config
+
+```bash
+asena g config
+# or
+asena generate config
+```
+
+**Prompt:**
+```bash
+✔ Enter config name: Server
+```
+
+**Generated:** `src/config/ServerConfig.ts`
+
+```typescript
+import { Config } from '@asenajs/asena/server';
+import { ConfigService, type Context } from '@asenajs/ergenecore';
+
+@Config()
+export class ServerConfig extends ConfigService {
+  onError(error: Error, context: Context): Response {
+    console.error('Error:', error);
+    return context.send({ error: 'Internal server error' }, 500);
+  }
+}
+```
+
+#### Generate WebSocket
+
+```bash
+asena g ws
+# or
+asena generate websocket
+```
+
+**Prompt:**
+```bash
+✔ Enter websocket namespace name: Chat
+```
+
+**Generated:** `src/namespaces/ChatNamespace.ts`
+
+```typescript
+import { Websocket } from '@asenajs/asena/server';
+import { WebsocketService, type Context } from '@asenajs/ergenecore';
+
+@Websocket({ namespace: '/chat' })
+export class ChatNamespace extends WebsocketService {
+  onConnect(context: Context): void {
+    console.log('Client connected to /chat');
+  }
+
+  onMessage(context: Context, message: any): void {
+    console.log('Message received:', message);
+  }
+
+  onDisconnect(context: Context): void {
+    console.log('Client disconnected from /chat');
+  }
+}
+```
+
+::: tip Adapter-Specific Generation
+The CLI automatically detects your adapter (Ergenecore or Hono) from `asena.config.ts` and generates appropriate imports and base classes.
+:::
+
+## asena dev start
+
+Start the application in development mode with automatic building.
+
+### Features
+
+- **Automatic Build** - Builds the project before starting
+- **Component Registration** - Automatically registers all controllers, services, and middlewares
+- **Hot Reload** - Restarts server on file changes (when used with `--watch`)
+
+### Usage
 
 ```bash
 asena dev start
 ```
-Output:
 
-```bash
+### Output
+
+```
 Build completed successfully.
-2025-04-09 22:17:19 [info]: 	
-    ___    _____  ______ _   __ ___ 
+2025-10-15 14:30:19 [info]:
+    ___    _____  ______ _   __ ___
    /   |  / ___/ / ____// | / //   |
   / /| |  \__ \ / __/  /  |/ // /| |
  / ___ | ___/ // /___ / /|  // ___ |
-/_/  |_|/____//_____//_/ |_//_/  |_|  
-                             
-2025-04-09 22:17:20 [info]: 	Adapter: HonoAdapter implemented 
-2025-04-09 22:17:20 [info]: 	All components registered and ready to use 
-2025-04-09 22:17:20 [info]: 	No configs found 
-2025-04-09 22:17:20 [info]: 	Controller: AsenaController found: 
-2025-04-09 22:17:20 [info]: 	Successfully registered GET route for PATH: / 
-2025-04-09 22:17:20 [info]: 	Controller: AsenaController successfully registered. 
-2025-04-09 22:17:20 [info]: 	No websockets found 
-2025-04-09 22:17:20 [info]: 	Server started on port 3000 
+/_/  |_|/____//_____//_/ |_//_/  |_|
+
+2025-10-15 14:30:20 [info]:   Adapter: ErgenecoreAdapter implemented
+2025-10-15 14:30:20 [info]:   All components registered and ready to use
+2025-10-15 14:30:20 [info]:   Controller: UserController found:
+2025-10-15 14:30:20 [info]:   Successfully registered GET route for PATH: /users
+2025-10-15 14:30:20 [info]:   Controller: UserController successfully registered.
+2025-10-15 14:30:20 [info]:   Server started on port 3000
 ```
 
-You can see the controllers name if your identifiers value in asena-config.ts is false
+::: info Controller Names in Output
+Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena.config.ts`.
+:::
 
-### ```asena build```
+## asena build
 
-The Build command handles project deployment preparation.
+Build the project for production deployment.
 
-#### Features
+### Features
 
-- **Configuration Processing**: Reads and processes the Asena configuration file
-- **Code Generation**: Creates a temporary build file that combines all controllers and components
-- **Import Management**: Handles import statements and organizes them based on the project structure. No need to add controllers manually to root file
-- **Server Integration**: Processes the AsenaServer configuration and integrates components
+- **Configuration Processing** - Reads and processes `asena.config.ts`
+- **Code Generation** - Creates a temporary build file combining all components
+- **Import Management** - Automatically organizes imports based on project structure
+- **Server Integration** - Integrates all components with AsenaServer
+- **No Manual Registration** - Controllers are automatically discovered and registered
 
-### ```asena init```
+### Usage
 
-The Init command helps set up project configuration with default settings(no need if you used ```asena create```).
+```bash
+asena build
+```
 
-#### Features
+### Build Process
 
-- **Configuration Generation**: Creates `asena-config` configuration file
-- **Default Values**: Provides sensible defaults for quick start
+1. Reads `asena.config.ts`
+2. Scans source folder for controllers, services, middlewares, configs, and websockets
+3. Generates a temporary build file with all imports
+4. Bundles the application using Bun's bundler
+5. Outputs compiled files to `buildOptions.outdir` (default: `dist/`)
 
-Default asena-config.ts file:
+### Build Output
+
+```
+Build completed successfully.
+Output: dist/index.js
+```
+
+::: tip Production Deployment
+After building, you can run your application with:
+```bash
+bun dist/index.js
+```
+:::
+
+## asena init
+
+Initialize an existing project with Asena configuration.
+
+### Features
+
+- **Configuration Generation** - Creates `asena.config.ts`
+- **Default Values** - Provides sensible defaults for quick start
+- **No Need if Using `create`** - Not required if you used `asena create`
+
+### Usage
+
+```bash
+asena init
+```
+
+### Generated Configuration
+
+Creates `asena.config.ts`:
+
 ```typescript
-import {defineConfig} from "@asenajs/asena-cli";
+import { defineConfig } from '@asenajs/asena-cli';
 
 export default defineConfig({
   sourceFolder: 'src',
@@ -137,5 +362,46 @@ export default defineConfig({
     },
   },
 });
-
 ```
+
+::: info When to Use `asena init`
+Use `asena init` when:
+- Adding Asena to an existing project
+- Manually setting up a project without `asena create`
+- Resetting configuration to defaults
+:::
+
+## Command Reference
+
+### Quick Reference
+
+| Command              | Shortcut        | Description                          |
+|:---------------------|:----------------|:-------------------------------------|
+| `asena create`       | -               | Create a new Asena project           |
+| `asena generate`     | `asena g`       | Generate project components          |
+| `asena generate controller` | `asena g c` | Generate a controller         |
+| `asena generate service` | `asena g s`    | Generate a service            |
+| `asena generate middleware` | `asena g m` | Generate a middleware         |
+| `asena generate config` | `asena g config` | Generate a config          |
+| `asena generate websocket` | `asena g ws` | Generate a WebSocket namespace |
+| `asena dev start`    | -               | Start development server             |
+| `asena build`        | -               | Build for production                 |
+| `asena init`         | -               | Initialize configuration             |
+| `asena --version`    | `asena -v`      | Show CLI version                     |
+| `asena --help`       | `asena -h`      | Show help                            |
+
+## Related Documentation
+
+- [Configuration](/docs/cli/configuration) - CLI configuration options
+- [Project Structure](/docs/guides/project-structure) - Recommended project structure
+- [Controllers](/docs/concepts/controllers) - Controller patterns
+- [Services](/docs/concepts/services) - Service patterns
+- [Middleware](/docs/concepts/middleware) - Middleware patterns
+- [WebSocket](/docs/concepts/websocket) - WebSocket patterns
+
+---
+
+**Next Steps:**
+- Learn about [CLI Configuration](/docs/cli/configuration)
+- Explore [Project Structure](/docs/guides/project-structure)
+- Understand [Controllers](/docs/concepts/controllers)
