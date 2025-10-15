@@ -8,16 +8,16 @@ export default defineConfig({
     cleanUrls: true,
 
     head: [
-        ['link', { rel: 'icon', type: 'image/png', href: '/images/code.png' }],
+        ['link', { rel: 'icon', type: 'image/png', href: '/asena-logo-256.png' }],
         ['meta', { name: 'theme-color', content: '#646cff' }],
         ['meta', { name: 'og:type', content: 'website' }],
         ['meta', { name: 'og:locale', content: 'en' }],
         ['meta', { name: 'og:site_name', content: 'Asena Framework' }],
-        ['meta', { name: 'og:image', content: 'https://asena.sh/images/code.png' }],
+        ['meta', { name: 'og:image', content: 'https://asena.sh/asena-logo-512.png' }],
     ],
 
     themeConfig: {
-        logo: '/images/code.png',
+        logo: '/asena-logo.svg',
 
         nav: [
             {text: "Home", link: "/"},
