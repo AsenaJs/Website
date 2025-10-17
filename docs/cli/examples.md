@@ -47,6 +47,7 @@ Answer the prompts:
 ```bash
 ✔ Enter your project name: my-asena-app
 ✔ Select adapter: Ergenecore
+✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
 ✔ Do you want to setup Prettier? Yes
 ⠙ Creating asena project...
@@ -57,8 +58,13 @@ Answer the prompts:
 - **Hono** - Hono framework-based adapter with ecosystem compatibility
 :::
 
-::: info ESLint and Prettier
-Setting up ESLint and Prettier is recommended for maintaining code quality and consistency.
+::: warning SSH or CI/CD Environment?
+If you're working over SSH or in a CI/CD pipeline, interactive prompts won't work. Use non-interactive mode instead:
+
+```bash
+# Create project with all options via CLI arguments
+asena create my-asena-app --adapter=ergenecore --logger --eslint --prettier
+```
 :::
 
 ## Step 3: Verify Project Setup
