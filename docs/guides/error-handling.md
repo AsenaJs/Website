@@ -653,7 +653,7 @@ public map(error: Error, context: Context): Response {
 
 ## Related
 
-- [Middleware](/concepts/middleware) - Error handling in middleware
-- [Validation](/guides/validation) - Handling validation errors
-- [Logger Package](/packages/logger) - Structured logging with AsenaLogger
-- [Context API](/concepts/context) - Understanding request context
+- [Middleware](/docs/concepts/middleware) - Error handling in middleware
+- [Validation](/docs/concepts/validation) - Handling validation errors
+- [Logger Package](/docs/packages/logger) - Structured logging with AsenaLogger
+- [Context API](/docs/concepts/context) - Understanding request context
