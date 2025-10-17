@@ -208,7 +208,16 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Troubleshooting (PATH, permissions, version mismatch)
 
 - Commands: https://asena.sh/docs/cli/commands.html
-  - asena create - Bootstrap new project (interactive)
+  - asena create - Bootstrap new project
+    - Interactive mode (default) - Prompts for all options
+    - Non-interactive mode - For SSH/CI/CD environments with CLI arguments
+    - CLI Options:
+      - [project-name] - Project name (use '.' for current directory)
+      - --adapter <adapter> - hono or ergenecore
+      - --logger / --no-logger - Setup logger (default: true)
+      - --eslint / --no-eslint - Setup ESLint (default: true)
+      - --prettier / --no-prettier - Setup Prettier (default: true)
+    - Example: asena create my-app --adapter=ergenecore --logger --eslint --prettier
   - asena generate (g) - Generate components:
     - asena g c [name] - Generate controller
     - asena g s [name] - Generate service

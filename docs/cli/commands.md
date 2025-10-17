@@ -29,6 +29,7 @@ Bootstrap a new Asena project with a complete development environment setup.
 ### Features
 
 - **Interactive Setup** - User-friendly setup experience with inquirer
+- **Non-Interactive Mode** - Support for SSH and CI/CD environments with CLI arguments
 - **Multi-Adapter Support** - Choose between Hono or Ergenecore adapters
 - **Project Structure** - Creates complete project structure with necessary files
 - **Default Components** - Generates default controller and server setup
@@ -37,15 +38,49 @@ Bootstrap a new Asena project with a complete development environment setup.
 
 ### Usage
 
+**Interactive Mode** (prompts for all options):
+
 ```bash
 asena create
+# or create in current directory
+asena create .
 ```
 
+::: warning SSH Connection Issue
+Interactive prompts may not work properly over SSH connections or in non-TTY environments (CI/CD pipelines). Use non-interactive mode instead.
+:::
+
+**Non-Interactive Mode** (specify options via CLI arguments):
+
+```bash
+# Create with all features enabled
+asena create my-project --adapter=hono --logger --eslint --prettier
+
+# Create in current directory without optional features
+asena create . --adapter=ergenecore --no-logger --no-eslint --no-prettier
+
+# Mix of CLI arguments and interactive prompts
+asena create my-app --adapter=hono  # Will prompt for remaining options
+```
+
+### CLI Options
+
+| Option | Description | Values | Default |
+|:-------|:------------|:-------|:--------|
+| `[project-name]` | Project name (use `.` for current directory) | Any string | Prompted |
+| `--adapter <adapter>` | Adapter to use | `hono`, `ergenecore` | Prompted |
+| `--logger` / `--no-logger` | Setup Asena logger | boolean | `true` |
+| `--eslint` / `--no-eslint` | Setup ESLint | boolean | `true` |
+| `--prettier` / `--no-prettier` | Setup Prettier | boolean | `true` |
+
 ### Interactive Prompts
+
+When using interactive mode without CLI arguments:
 
 ```bash
 ✔ Enter your project name: my-asena-app
 ✔ Select adapter: Ergenecore
+✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
 ✔ Do you want to setup Prettier? Yes
 ⠙ Creating asena project...
