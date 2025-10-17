@@ -23,11 +23,15 @@ export default defineConfig({
             {text: "Home", link: "/"},
             {text: "Docs", link: "/docs/get-started"},
             {text: "Examples", link: "/docs/examples"},
+            {text: "Showcase", link: "/docs/showcase"},
+            {text: "Roadmap", link: "/docs/roadmap"},
         ],
 
         sidebar: [
             {text: "Quick Start", link: "/docs/get-started"},
             {text: "Examples", link: "/docs/examples"},
+            {text: "Showcase", link: "/docs/showcase"},
+            {text: "Roadmap", link: "/docs/roadmap"},
             {
                 text: "Concepts",
                 items: [
@@ -69,6 +73,7 @@ export default defineConfig({
                 text: "Guides",
                 items: [
                     {text: "Configuration", link: "/docs/guides/configuration"},
+                    {text: "Error Handling", link: "/docs/guides/error-handling"},
                 ],
             },
         ],
