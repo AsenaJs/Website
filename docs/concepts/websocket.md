@@ -110,7 +110,24 @@ export class ChatSocket extends AsenaWebSocketService<UserData> {
 }
 ```
 
-## Complete Chat Example
+## Built-in Room Management
+
+::: tip Asena's Built-in Features
+Asena provides **automatic room management** with built-in pub/sub pattern. You don't need to manually manage `Map<string, Socket[]>` or track connections yourself - Asena handles everything for you!
+
+**Key built-in features:**
+- `ws.subscribe(room)` - Automatically joins room and tracks membership
+- `ws.publish(room, data)` - Broadcasts to all room subscribers
+- `ws.unsubscribe(room)` - Leaves room with automatic cleanup
+- `this.sockets` - All connected sockets (managed automatically)
+- `this.rooms` - All rooms and their members (managed automatically)
+- `this.to(room, data)` - Broadcast from service level
+- `this.in(data)` - Broadcast to all connected clients
+:::
+
+### Subscribing to Rooms
+
+When a client connects, use `subscribe()` to join a room. Asena automatically tracks the socket in that room:
 
 ```typescript
 interface ChatData {
@@ -120,272 +137,465 @@ interface ChatData {
 
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
-  private users = new Map<string, { username: string; socket: Socket<ChatData> }>();
-  private rooms = new Map<string, Set<string>>(); // room -> socketIds
-
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data?.username || 'Anonymous';
     const room = ws.data?.room || 'general';
+    const username = ws.data?.username || 'Anonymous';
 
-    // Store user
-    this.users.set(ws.id, { username, socket: ws });
+    // Subscribe to room - Asena tracks this automatically
+    ws.subscribe(room);
 
-    // Add to room
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Set());
-    }
-    this.rooms.get(room)!.add(ws.id);
-
-    // Notify room
-    this.broadcastToRoom(room, JSON.stringify({
-      type: 'user_joined',
-      username,
-      room,
-      totalUsers: this.rooms.get(room)!.size
-    }), ws.id);
-
-    // Send welcome message
+    // Welcome the user
     ws.send(JSON.stringify({
       type: 'welcome',
-      message: `Welcome to ${room}, ${username}!`,
-      users: Array.from(this.rooms.get(room)!)
-        .map(id => this.users.get(id)?.username)
-        .filter(Boolean)
+      message: `Welcome to ${room}, ${username}!`
     }));
-  }
 
-  protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-    const user = this.users.get(ws.id);
-    const room = ws.data?.room || 'general';
-
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === 'message') {
-        // Broadcast message to room
-        this.broadcastToRoom(room, JSON.stringify({
-          type: 'message',
-          username: user?.username,
-          message: data.message,
-          timestamp: new Date().toISOString()
-        }));
-      }
-
-      if (data.type === 'typing') {
-        // Notify others in room
-        this.broadcastToRoom(room, JSON.stringify({
-          type: 'typing',
-          username: user?.username
-        }), ws.id);
-      }
-    } catch (error) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-    }
-  }
-
-  protected async onClose(ws: Socket<ChatData>): Promise<void> {
-    const user = this.users.get(ws.id);
-    const room = ws.data?.room || 'general';
-
-    // Remove from users
-    this.users.delete(ws.id);
-
-    // Remove from room
-    if (this.rooms.has(room)) {
-      this.rooms.get(room)!.delete(ws.id);
-
-      // Notify room
-      this.broadcastToRoom(room, JSON.stringify({
-        type: 'user_left',
-        username: user?.username,
-        totalUsers: this.rooms.get(room)!.size
-      }));
-
-      // Clean up empty rooms
-      if (this.rooms.get(room)!.size === 0) {
-        this.rooms.delete(room);
-      }
-    }
-  }
-
-  private broadcastToRoom(room: string, message: string, excludeId?: string) {
-    const socketIds = this.rooms.get(room);
-    if (!socketIds) return;
-
-    for (const socketId of socketIds) {
-      if (excludeId && socketId === excludeId) continue;
-
-      const user = this.users.get(socketId);
-      if (user) {
-        user.socket.send(message);
-      }
-    }
+    // Notify others in the room using publish
+    ws.publish(room, JSON.stringify({
+      type: 'user_joined',
+      username,
+      timestamp: new Date().toISOString()
+    }));
   }
 }
 ```
 
-## Client-Side Connection
+### Publishing Messages
 
-### JavaScript/TypeScript Client
+Use `ws.publish()` to broadcast messages to all subscribers of a room:
 
 ```typescript
-// Connect to WebSocket
-const ws = new WebSocket('ws://localhost:3000/chat');
+protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
+  const room = ws.data?.room || 'general';
+  const username = ws.data?.username;
 
-// Listen for connection
-ws.addEventListener('open', () => {
-  console.log('Connected to chat!');
+  try {
+    const data = JSON.parse(message);
 
-  // Send message
-  ws.send(JSON.stringify({
-    type: 'message',
-    message: 'Hello everyone!'
-  }));
-});
-
-// Listen for messages
-ws.addEventListener('message', (event) => {
-  const data = JSON.parse(event.data);
-
-  if (data.type === 'message') {
-    console.log(`${data.username}: ${data.message}`);
+    if (data.type === 'message') {
+      // Broadcast to all subscribers in the room
+      ws.publish(room, JSON.stringify({
+        type: 'message',
+        username,
+        message: data.message,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  } catch (error) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
   }
-
-  if (data.type === 'user_joined') {
-    console.log(`${data.username} joined the chat`);
-  }
-});
-
-// Handle disconnection
-ws.addEventListener('close', () => {
-  console.log('Disconnected from chat');
-});
-
-// Handle errors
-ws.addEventListener('error', (error) => {
-  console.error('WebSocket error:', error);
-});
+}
 ```
 
-### With Custom Data
+### Unsubscribing from Rooms
+
+When a client disconnects or leaves a room, use `unsubscribe()`:
 
 ```typescript
-// Client connects with custom data in URL query
-const username = 'John';
-const room = 'tech';
-const ws = new WebSocket(`ws://localhost:3000/chat?username=${username}&room=${room}`);
+protected async onClose(ws: Socket<ChatData>): Promise<void> {
+  const room = ws.data?.room || 'general';
+  const username = ws.data?.username;
+
+  // Notify room before leaving
+  ws.publish(room, JSON.stringify({
+    type: 'user_left',
+    username
+  }));
+
+  // Unsubscribe - Asena handles cleanup automatically
+  ws.unsubscribe(room);
+}
+```
+
+### Accessing Room Members
+
+You can access all sockets in a room using the built-in `this.rooms` map:
+
+```typescript
+protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
+  const room = ws.data?.room || 'general';
+
+  // Get all sockets in this room
+  const roomMembers = this.getSocketsByRoom(room);
+
+  ws.send(JSON.stringify({
+    type: 'room_info',
+    totalUsers: roomMembers?.length || 0
+  }));
+}
 ```
 
 ## Broadcasting
 
 ### Broadcast to All Clients
 
+Use the built-in `this.in()` method to broadcast to all connected clients:
+
 ```typescript
 @WebSocket({ path: '/notifications', name: 'NotificationSocket' })
 export class NotificationSocket extends AsenaWebSocketService<void> {
-  private sockets = new Map<string, Socket<void>>();
-
-  protected async onOpen(ws: Socket<void>): Promise<void> {
-    this.sockets.set(ws.id, ws);
-  }
-
-  protected async onClose(ws: Socket<void>): Promise<void> {
-    this.sockets.delete(ws.id);
-  }
+  // No need to manually track sockets - Asena does it for you!
 
   // Public method to broadcast notifications
   broadcastNotification(notification: any) {
     const message = JSON.stringify(notification);
 
-    for (const socket of this.sockets.values()) {
-      socket.send(message);
-    }
+    // Broadcast to all connected clients
+    this.in(message);
+  }
+
+  // You can also access all sockets via this.sockets (built-in)
+  getConnectedUsers() {
+    return Array.from(this.sockets.keys());
   }
 }
 ```
 
-### Selective Broadcasting
+### Broadcast to Specific Room
 
-```typescript
-// Broadcast to specific users
-broadcastToUsers(userIds: string[], message: string) {
-  for (const [socketId, user] of this.users.entries()) {
-    if (userIds.includes(user.userId)) {
-      user.socket.send(message);
-    }
-  }
-}
-```
-
-## Authentication
-
-```typescript
-interface AuthenticatedData {
-  userId: string;
-  token: string;
-}
-
-@WebSocket({ path: '/private', name: 'PrivateSocket' })
-export class PrivateSocket extends AsenaWebSocketService<AuthenticatedData> {
-  @Inject(AuthService)
-  private authService: AuthService;
-
-  protected async onOpen(ws: Socket<AuthenticatedData>): Promise<void> {
-    const token = ws.data?.token;
-
-    if (!token) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized' }));
-      ws.close();
-      return;
-    }
-
-    try {
-      // Verify token
-      const user = await this.authService.verifyToken(token);
-
-      // Socket is authenticated
-      ws.send(JSON.stringify({
-        type: 'authenticated',
-        userId: user.id
-      }));
-    } catch (error) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
-      ws.close();
-    }
-  }
-}
-```
-
-## Room/Channel Management
+Use `this.to(room, data)` to broadcast to a specific room from the service level:
 
 ```typescript
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
-export class ChatSocket extends AsenaWebSocketService<{ username: string }> {
-  private rooms = new Map<string, Set<Socket>>();
+export class ChatSocket extends AsenaWebSocketService<{ room: string }> {
+  // Broadcast to a specific room
+  notifyRoom(room: string, notification: any) {
+    this.to(room, JSON.stringify(notification));
+  }
 
-  joinRoom(socket: Socket, roomId: string) {
-    if (!this.rooms.has(roomId)) {
-      this.rooms.set(roomId, new Set());
+  // Example: Admin sends announcement to a room
+  sendAnnouncement(room: string, message: string) {
+    this.to(room, JSON.stringify({
+      type: 'announcement',
+      message,
+      timestamp: new Date().toISOString()
+    }));
+  }
+}
+```
+
+### Private Messages
+
+Send a message to a specific user using their socket ID:
+
+```typescript
+sendPrivateMessage(targetSocketId: string, message: string) {
+  const targetSocket = this.sockets.get(targetSocketId);
+
+  if (targetSocket) {
+    targetSocket.send(JSON.stringify({
+      type: 'private_message',
+      message
+    }));
+  }
+}
+```
+
+## WebSocket Middleware
+
+Just like controllers, WebSocket services support middleware! This is the **recommended way** to handle authentication, logging, and rate limiting.
+
+### Creating WebSocket Middleware
+
+```typescript
+import { Middleware } from '@asenajs/asena/server';
+import type { Context, MiddlewareService } from '@asenajs/ergenecore';
+
+@Middleware()
+export class WsAuthMiddleware implements MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<boolean | Response> {
+    // Check query params for token
+    const url = new URL(context.req.url);
+    const token = url.searchParams.get('token');
+
+    // Or check Authorization header
+    const authHeader = context.req.headers.get('Authorization');
+    const tokenFromHeader = authHeader?.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : null;
+
+    const finalToken = token || tokenFromHeader;
+
+    if (!finalToken) {
+      return context.send({ error: 'Unauthorized' }, 401);
     }
-    this.rooms.get(roomId)!.add(socket);
+
+    // Verify token (replace with your auth logic)
+    if (finalToken !== 'valid-token') {
+      return context.send({ error: 'Invalid token' }, 401);
+    }
+
+    // Pass user data to WebSocket using setWebSocketValue
+    context.setWebSocketValue({
+      userId: '123',
+      username: 'john_doe'
+    });
+
+    await next();
+  }
+}
+```
+
+::: tip context.setWebSocketValue()
+This is the key method! Use `context.setWebSocketValue()` in middleware to pass authenticated user data to your WebSocket service. The data will be available in `ws.data.values`.
+:::
+
+### Using Middleware in WebSocket
+
+```typescript
+import { WebSocket } from '@asenajs/asena/server';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+import { WsAuthMiddleware } from '../middlewares/WsAuthMiddleware';
+
+interface UserData {
+  userId: string;
+  username: string;
+}
+
+@WebSocket({
+  path: '/private',
+  middlewares: [WsAuthMiddleware], // Add middleware here
+  name: 'PrivateSocket'
+})
+export class PrivateSocket extends AsenaWebSocketService<UserData> {
+  protected async onOpen(ws: Socket<UserData>): Promise<void> {
+    // Access authenticated user data from middleware
+    const { userId, username } = ws.data.values;
+
+    console.log(`Authenticated user connected: ${username}`);
+
+    ws.send(JSON.stringify({
+      type: 'authenticated',
+      userId,
+      username
+    }));
   }
 
-  leaveRoom(socket: Socket, roomId: string) {
-    this.rooms.get(roomId)?.delete(socket);
+  protected async onMessage(ws: Socket<UserData>, message: string): Promise<void> {
+    const { username } = ws.data.values;
+    console.log(`Message from ${username}:`, message);
+  }
+}
+```
+
+### Multiple Middleware
+
+You can use multiple middleware, just like in controllers:
+
+```typescript
+import { WsLoggingMiddleware } from '../middlewares/WsLoggingMiddleware';
+import { WsAuthMiddleware } from '../middlewares/WsAuthMiddleware';
+import { WsRateLimitMiddleware } from '../middlewares/WsRateLimitMiddleware';
+
+@WebSocket({
+  path: '/admin',
+  middlewares: [
+    WsLoggingMiddleware,      // Runs first
+    WsAuthMiddleware,          // Then authentication
+    WsRateLimitMiddleware      // Finally rate limiting
+  ],
+  name: 'AdminSocket'
+})
+export class AdminSocket extends AsenaWebSocketService<AdminData> {
+  protected async onOpen(ws: Socket<AdminData>): Promise<void> {
+    // Only authenticated and rate-limited users reach here
+    const userData = ws.data.values;
+
+    ws.send(JSON.stringify({
+      type: 'admin-welcome',
+      user: userData,
+      permissions: ['read', 'write', 'delete']
+    }));
+  }
+}
+```
+
+::: info Middleware Execution Order
+Middleware executes in the order specified in the array, **before** the WebSocket connection is established. If any middleware returns a response or doesn't call `next()`, the connection is rejected.
+:::
+
+### Client-Side Example
+
+Connect with authentication:
+
+```typescript
+// With query parameter
+const ws = new WebSocket('ws://localhost:3000/private?token=valid-token');
+
+// Or with Authorization header (if your WebSocket client supports it)
+const ws = new WebSocket('ws://localhost:3000/private', {
+  headers: {
+    'Authorization': 'Bearer valid-token'
+  }
+});
+```
+
+## Using WebSocket in Services
+
+You can inject a WebSocket service into other services to send messages from anywhere in your application:
+
+```typescript
+import { Service } from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/ioc';
+import { ChatSocket } from './ChatSocket';
+
+@Service('NotificationService')
+export class NotificationService {
+  @Inject(ChatSocket)
+  private chatSocket: ChatSocket;
+
+  async sendSystemMessage(room: string, message: string) {
+    // Broadcast from outside the WebSocket service
+    this.chatSocket.to(room, JSON.stringify({
+      type: 'system_message',
+      message,
+      timestamp: new Date().toISOString()
+    }));
   }
 
-  broadcastToRoom(roomId: string, message: string, excludeSocket?: Socket) {
-    const room = this.rooms.get(roomId);
-    if (!room) return;
+  async notifyAllUsers(message: string) {
+    // Broadcast to all connected clients
+    this.chatSocket.in(JSON.stringify({
+      type: 'notification',
+      message
+    }));
+  }
+}
+```
 
-    for (const socket of room) {
-      if (socket !== excludeSocket) {
-        socket.send(message);
+::: tip Service Injection
+This is a powerful pattern! You can send WebSocket messages from controllers, services, or background jobs by injecting the WebSocket service.
+:::
+
+## Real-World Example: Notification System
+
+Here's a simple notification system showing how to use WebSocket with service injection:
+
+### WebSocket Service
+
+```typescript
+import { WebSocket } from '@asenajs/asena/server';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+
+interface NotificationData {
+  userId: string;
+}
+
+@WebSocket({ path: '/ws/notifications', name: 'NotificationSocket' })
+export class NotificationSocket extends AsenaWebSocketService<NotificationData> {
+  protected async onOpen(ws: Socket<NotificationData>): Promise<void> {
+    const userId = ws.data?.userId;
+
+    // Subscribe to user's personal notification channel
+    ws.subscribe(`user:${userId}`);
+
+    // Subscribe to global announcements
+    ws.subscribe('announcements');
+
+    // Send welcome message
+    ws.send(JSON.stringify({
+      type: 'connected',
+      message: 'Connected to notification system'
+    }));
+  }
+
+  protected async onClose(ws: Socket<NotificationData>): Promise<void> {
+    const userId = ws.data?.userId;
+
+    // Unsubscribe from channels - Asena handles cleanup
+    ws.unsubscribe(`user:${userId}`);
+    ws.unsubscribe('announcements');
+  }
+
+  protected async onMessage(ws: Socket<NotificationData>, message: string): Promise<void> {
+    try {
+      const data = JSON.parse(message);
+
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
       }
+    } catch (error) {
+      console.error('Invalid message format');
     }
   }
 }
 ```
+
+### Using WebSocket from a Service
+
+Now you can send notifications from any service in your application:
+
+```typescript
+import { Service } from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/ioc';
+import { NotificationSocket } from '../websocket/NotificationSocket';
+
+@Service('UserService')
+export class UserService {
+  @Inject(NotificationSocket)
+  private notificationSocket: NotificationSocket;
+
+  async updateUserProfile(userId: string, data: any): Promise<void> {
+    // ... update user in database
+
+    // Notify the user via WebSocket
+    this.notificationSocket.to(`user:${userId}`, JSON.stringify({
+      type: 'profile_updated',
+      message: 'Your profile has been updated',
+      timestamp: new Date().toISOString()
+    }));
+  }
+
+  async sendGlobalAnnouncement(message: string): Promise<void> {
+    // Broadcast to all users subscribed to announcements
+    this.notificationSocket.to('announcements', JSON.stringify({
+      type: 'announcement',
+      message,
+      timestamp: new Date().toISOString()
+    }));
+  }
+}
+```
+
+### Using from a Controller
+
+You can also trigger notifications from HTTP endpoints:
+
+```typescript
+import { Controller } from '@asenajs/asena/server';
+import { Post } from '@asenajs/asena/web';
+import { Inject } from '@asenajs/asena/ioc';
+import type { Context } from '@asenajs/ergenecore/types';
+
+@Controller('/admin')
+export class AdminController {
+  @Inject(NotificationSocket)
+  private notificationSocket: NotificationSocket;
+
+  @Post('/announcement')
+  async sendAnnouncement(context: Context) {
+    const { message } = await context.getBody();
+
+    // Broadcast to all connected clients
+    this.notificationSocket.to('announcements', JSON.stringify({
+      type: 'announcement',
+      message,
+      timestamp: new Date().toISOString()
+    }));
+
+    return context.json({ success: true });
+  }
+}
+```
+
+::: info Key Takeaways
+This example demonstrates:
+- **Built-in room management** with `subscribe()` / `unsubscribe()`
+- **Service injection** to send WebSocket messages from anywhere
+- **Multiple channels** (user-specific and global)
+- **Controller integration** for HTTP → WebSocket communication
+- Asena handles all socket/room tracking automatically
+:::
 
 ## Error Handling
 
@@ -421,53 +631,61 @@ export class ChatSocket extends AsenaWebSocketService<void> {
 
 ## Best Practices
 
-### 1. Use JSON for Messages
+### 1. Use Built-in Room Management
 
 ```typescript
-// ✅ Good: Structured JSON messages
-ws.send(JSON.stringify({ type: 'update', data: { count: 42 } }));
-
-// ❌ Bad: Raw strings
-ws.send('update:42');
-```
-
-### 2. Handle Errors Gracefully
-
-```typescript
-// ✅ Good: Try-catch in onMessage
-protected async onMessage(ws: Socket, message: string) {
-  try {
-    const data = JSON.parse(message);
-    // Process data
-  } catch (error) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Invalid format' }));
-  }
+// ✅ Good: Use Asena's built-in subscribe/unsubscribe
+protected async onOpen(ws: Socket) {
+  ws.subscribe('room-1');
+  ws.publish('room-1', 'Hello room!');
 }
-```
 
-### 3. Clean Up on Close
-
-```typescript
-// ✅ Good: Remove from maps on close
 protected async onClose(ws: Socket) {
-  this.users.delete(ws.id);
-  this.rooms.forEach(room => room.delete(ws.id));
+  ws.unsubscribe('room-1');
+}
+
+// ❌ Bad: Manually managing rooms with Map
+private rooms = new Map<string, Set<Socket>>(); // Don't do this!
+```
+
+::: warning Avoid Manual Room Management
+Asena automatically tracks sockets in rooms when you use `subscribe()` and `unsubscribe()`. Manual Map-based room management can lead to memory leaks and synchronization issues.
+:::
+
+### 2. Use Broadcasting Methods
+
+```typescript
+// ✅ Good: Use built-in broadcasting
+this.to('room-1', 'Message to room');  // Broadcast to specific room
+this.in('Message to all');             // Broadcast to all clients
+
+// ✅ Good: Use publish from socket level
+ws.publish('room-1', 'Message from user');
+
+// ❌ Bad: Manual iteration over sockets
+for (const socket of this.sockets.values()) {
+  socket.send(message); // Inefficient and error-prone
 }
 ```
 
-### 4. Validate Messages
+### 3. Let Asena Handle Cleanup
 
 ```typescript
-// ✅ Good: Validate message structure
-protected async onMessage(ws: Socket, message: string) {
-  const data = JSON.parse(message);
+// ✅ Good: Asena handles cleanup automatically
+protected async onClose(ws: Socket) {
+  // Just unsubscribe from rooms
+  ws.unsubscribe('room-1');
 
-  if (!data.type || typeof data.type !== 'string') {
-    ws.send(JSON.stringify({ type: 'error', message: 'Invalid message' }));
-    return;
-  }
+  // Asena automatically:
+  // - Removes socket from this.sockets
+  // - Cleans up room references
+  // - Handles connection termination
+}
 
-  // Process valid message
+// ❌ Bad: Manual cleanup (unnecessary and error-prone)
+protected async onClose(ws: Socket) {
+  this.sockets.delete(ws.id);           // Asena does this!
+  this.rooms.forEach(r => r.delete(ws)); // Asena does this too!
 }
 ```
 

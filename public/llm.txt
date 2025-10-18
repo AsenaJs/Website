@@ -82,15 +82,41 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
     - setCookie(name, value, options?) - Set cookie
 
 - WebSocket: https://asena.sh/docs/concepts/websocket.html
-  - @WebSocketNamespace decorator
+  - @WebSocket decorator for WebSocket services
+  - AsenaWebSocketService base class with built-in room management
+  - **Middleware Support** (Just like controllers):
+    - middlewares array in @WebSocket decorator
+    - Executes BEFORE WebSocket connection is established
+    - context.setWebSocketValue(data) - Pass data from middleware to WebSocket
+    - Access middleware data via ws.data.values in lifecycle methods
+    - Multiple middleware support with execution order
+    - Recommended for authentication, logging, rate limiting
+  - **Built-in Features** (Do NOT manually manage rooms with Map):
+    - this.sockets - Auto-managed Map of all connected sockets
+    - this.rooms - Auto-managed Map of room subscribers
+    - this.to(room, data) - Broadcast to specific room from service
+    - this.in(data) - Broadcast to all connected clients
+    - getSocketsByRoom(room) - Get all sockets in a room
+  - Socket API (ws parameter in lifecycle methods):
+    - ws.subscribe(room) - Join room (auto-tracked by Asena)
+    - ws.unsubscribe(room) - Leave room (auto-cleanup)
+    - ws.publish(room, data) - Broadcast to room from socket level
+    - ws.send(data) - Send to specific client
+    - ws.id - Unique socket identifier
+    - ws.data.values - Data passed from middleware via setWebSocketValue()
   - Lifecycle Methods:
-    - onOpen(ws) - Connection established
+    - onOpen(ws) - Connection established (after middleware)
     - onMessage(ws, message) - Message received
-    - onClose(ws) - Connection closed
-  - Broadcasting to all clients
-  - Room management (join/leave/broadcast to room)
-  - WebSocket state management
-  - Integration with services via @Inject
+    - onClose(ws) - Connection closed (auto-cleanup by Asena)
+    - onDrain(ws), onPing(ws), onPong(ws) - Optional handlers
+  - Service Injection Pattern:
+    - Inject WebSocket service into other services
+    - Send messages from controllers/services/background jobs
+    - Example: @Inject(ChatSocket) private chatSocket: ChatSocket
+  - Pub/Sub pattern with automatic room tracking
+  - **IMPORTANT**:
+    - Asena handles room/socket tracking automatically - avoid manual Map management
+    - Use middleware for authentication, NOT inside onOpen()
 
 - Validation: https://asena.sh/docs/concepts/validation.html
   - **Ergenecore Adapter Only** - Not available in Hono adapter
