@@ -19,6 +19,22 @@ Middleware is code that executes **before** your route handler. It can:
 - Rate limiting
 - Error handling
 
+::: info Adapter-Specific Response Handling
+The way you handle responses in middleware differs between adapters:
+
+**Ergenecore:** Supports both approaches:
+
+- `context.send()` - Direct response (native feature)
+- `throw new HttpException()` - Throwing HTTP exceptions
+
+**Hono:** Only supports:
+
+- `throw new HTTPException()` - Throwing HTTP exceptions
+- `context.send()` does NOT work in middleware
+
+This guide shows both approaches using code-groups where applicable.
+:::
+
 ## Creating Middleware
 
 Create middleware by extending `MiddlewareService` and implementing the `handle` method:
@@ -141,7 +157,9 @@ export class UserController {
 
 ### Authentication Middleware
 
-```typescript
+::: code-group
+
+```typescript [Ergenecore]
 import { Middleware } from '@asenajs/asena/server';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
@@ -171,9 +189,47 @@ export class AuthMiddleware extends MiddlewareService {
 }
 ```
 
+```typescript [Hono]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
+import { HTTPException } from 'hono/http-exception';
+
+@Middleware()
+export class AuthMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+
+    if (!token) {
+      throw new HTTPException(401, { message: 'No token provided' });
+    }
+
+    try {
+      // Verify JWT token
+      const payload = await this.verifyToken(token);
+      context.setValue('user', payload);
+      await next();
+    } catch (error) {
+      throw new HTTPException(401, { message: 'Invalid token' });
+    }
+  }
+
+  private async verifyToken(token: string) {
+    // JWT verification logic
+    return { id: 123, role: 'user' };
+  }
+}
+```
+
+:::
+
 ### Role-Based Authorization
 
-```typescript
+::: code-group
+
+```typescript [Ergenecore]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
 @Middleware()
 export class AdminRoleMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
@@ -187,6 +243,27 @@ export class AdminRoleMiddleware extends MiddlewareService {
   }
 }
 ```
+
+```typescript [Hono]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
+import { HTTPException } from 'hono/http-exception';
+
+@Middleware()
+export class AdminRoleMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    const user = context.getValue('user');
+
+    if (!user || user.role !== 'admin') {
+      throw new HTTPException(403, { message: 'Forbidden' });
+    }
+
+    await next();
+  }
+}
+```
+
+:::
 
 ### Request Logging
 
@@ -214,7 +291,12 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 
 ### Error Handling Middleware
 
-```typescript
+::: code-group
+
+```typescript [Ergenecore]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
 @Middleware()
 export class ErrorHandlerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
@@ -236,6 +318,35 @@ export class ErrorHandlerMiddleware extends MiddlewareService {
   }
 }
 ```
+
+```typescript [Hono]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
+import { HTTPException } from 'hono/http-exception';
+
+@Middleware()
+export class ErrorHandlerMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    try {
+      await next();
+    } catch (error) {
+      console.error('Error:', error);
+
+      if (error instanceof ValidationError) {
+        throw new HTTPException(400, { message: error.message });
+      }
+
+      if (error instanceof UnauthorizedError) {
+        throw new HTTPException(401, { message: 'Unauthorized' });
+      }
+
+      throw new HTTPException(500, { message: 'Internal server error' });
+    }
+  }
+}
+```
+
+:::
 
 ## Built-in Middleware (Ergenecore)
 
@@ -322,7 +433,11 @@ export class AdvancedRateLimiter extends RateLimiterMiddleware {
 
 Middleware can use dependency injection just like services:
 
-```typescript
+::: code-group
+
+```typescript [Ergenecore]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 import { Inject } from '@asenajs/asena/ioc';
 
 @Middleware()
@@ -353,11 +468,47 @@ export class AuthMiddleware extends MiddlewareService {
 }
 ```
 
+```typescript [Hono]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
+import { Inject } from '@asenajs/asena/ioc';
+import { HTTPException } from 'hono/http-exception';
+
+@Middleware()
+export class AuthMiddleware extends MiddlewareService {
+  @Inject(JwtService)
+  private jwtService: JwtService;
+
+  @Inject(UserService)
+  private userService: UserService;
+
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+
+    if (!token) {
+      throw new HTTPException(401, { message: 'Unauthorized' });
+    }
+
+    try {
+      const payload = await this.jwtService.verify(token);
+      const user = await this.userService.findById(payload.id);
+
+      context.setValue('user', user);
+      await next();
+    } catch (error) {
+      throw new HTTPException(401, { message: 'Invalid token' });
+    }
+  }
+}
+```
+
+:::
+
 ## Middleware Execution Order
 
 Middleware executes in the order it's defined:
 
-```
+```text
 Global Middleware
   ↓
 Pattern-Based Middleware
@@ -396,7 +547,12 @@ export class UserController {
 
 Don't call `next()` to stop the middleware chain:
 
-```typescript
+::: code-group
+
+```typescript [Ergenecore]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
 @Middleware()
 export class MaintenanceMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
@@ -414,33 +570,33 @@ export class MaintenanceMiddleware extends MiddlewareService {
 }
 ```
 
-## Best Practices
+```typescript [Hono]
+import { Middleware } from '@asenajs/asena/server';
+import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
+import { HTTPException } from 'hono/http-exception';
 
-### 1. Keep Middleware Focused
-
-```typescript
-// ✅ Good: Single responsibility
 @Middleware()
-export class AuthMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>) {
-    // Only handles authentication
-  }
-}
+export class MaintenanceMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
-// ❌ Bad: Too many responsibilities
-@Middleware()
-export class MegaMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>) {
-    // Authentication
-    // Logging
-    // Rate limiting
-    // CORS
-    // ... too much!
+    if (isMaintenanceMode) {
+      // Don't call next() - stop here
+      throw new HTTPException(503, {
+        message: 'Service under maintenance'
+      });
+    }
+
+    await next(); // Continue if not in maintenance mode
   }
 }
 ```
 
-### 2. Use Context for Sharing Data
+:::
+
+## Best Practices
+
+### 1. Use Context for Sharing Data
 
 ```typescript
 // ✅ Good: Store data in context
@@ -456,7 +612,7 @@ export class AuthMiddleware extends MiddlewareService {
 let currentUser; // Don't!
 ```
 
-### 3. Always Await next()
+### 2. Always Await next()
 
 ```typescript
 // ✅ Good
@@ -466,7 +622,7 @@ await next();
 next(); // Missing await!
 ```
 
-### 4. Order Matters
+### 3. Order Matters
 
 ```typescript
 // ✅ Good: Logger first, then auth
@@ -492,6 +648,7 @@ middlewares = [
 ---
 
 **Next Steps:**
+
 - Learn about [Validation](/docs/concepts/validation)
 - Explore [Context API](/docs/concepts/context)
 - Understand [Configuration](/docs/guides/configuration)

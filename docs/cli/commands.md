@@ -140,7 +140,7 @@ asena generate controller
 
 **Prompt:**
 ```bash
-✔ Enter controller name: User
+✔ Enter controller name: UserController
 ```
 
 **Generated:** `src/controllers/UserController.ts`
@@ -169,7 +169,7 @@ asena generate service
 
 **Prompt:**
 ```bash
-✔ Enter service name: User
+✔ Enter service name: UserService
 ```
 
 **Generated:** `src/services/UserService.ts`
@@ -196,7 +196,7 @@ asena generate middleware
 
 **Prompt:**
 ```bash
-✔ Enter middleware name: Auth
+✔ Enter middleware name: AuthMiddleware
 ```
 
 **Generated:** `src/middlewares/AuthMiddleware.ts`
@@ -224,7 +224,7 @@ asena generate config
 
 **Prompt:**
 ```bash
-✔ Enter config name: Server
+✔ Enter config name: ServerConfig
 ```
 
 **Generated:** `src/config/ServerConfig.ts`
@@ -252,7 +252,7 @@ asena generate websocket
 
 **Prompt:**
 ```bash
-✔ Enter websocket namespace name: Chat
+✔ Enter websocket namespace name: ChatNamespace
 ```
 
 **Generated:** `src/namespaces/ChatNamespace.ts`

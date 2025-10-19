@@ -508,37 +508,33 @@ Context provides WebSocket-specific methods for upgrade handling.
 
 ### Set WebSocket Value - `setWebSocketValue()`
 
-Store data before WebSocket upgrade.
+Store data before WebSocket upgrade. 
 
 ```typescript
-@Get('/ws')
-async handleWebSocket(context: Context) {
-  const userId = context.getValue('userId');
+import { Middleware } from '@asenajs/asena/server';
+import type { Context, MiddlewareService } from '@asenajs/ergenecore';
 
-  // Store data for WebSocket handler
-  context.setWebSocketValue({ userId, connectedAt: Date.now() });
+@Middleware()
+export class WsAuthMiddleware implements MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<boolean | Response> {
 
-  // WebSocket upgrade happens automatically
+    //.. Rest of code
+
+    context.setWebSocketValue({
+      userId: '123',
+      username: 'john_doe'
+    });
+
+    await next();
+  }
 }
 ```
 
 ### Get WebSocket Value - `getWebSocketValue()`
 
-Retrieve data in WebSocket handlers.
-
-```typescript
-@WebSocket('/ws')
-export class ChatWebSocket {
-  open(ws: ServerWebSocket) {
-    const data = ws.data.context.getWebSocketValue<{
-      userId: string;
-      connectedAt: number;
-    }>();
-
-    console.log(`User ${data.userId} connected at ${data.connectedAt}`);
-  }
-}
-```
+::: warning
+Socket data will automaticly injectining in `ws.data.value` by adapter. So you dont need to use this.
+:::
 
 ## Advanced Methods
 

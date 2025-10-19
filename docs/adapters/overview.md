@@ -56,38 +56,32 @@ Benchmark conditions: 12 threads, 400 connections, 120s duration, Hello World en
 
 ## Feature Comparison
 
-| Feature                  | Ergenecore | Hono |
-|:-------------------------|:-----------|:-----|
-| HTTP Methods             | ✅          | ✅    |
-| WebSocket Support        | ✅          | ✅    |
-| Middleware System        | ✅          | ✅    |
-| Request Validation       | ✅ (Zod)    | ✅    |
-| Static File Serving      | ✅          | ✅    |
-| Cookie Support           | ✅          | ✅    |
-| CORS Middleware          | ✅          | ✅    |
-| Rate Limiting            | ✅          | ⚠️    |
-| Zero-Copy File Serving   | ✅          | ❌    |
-| SIMD-Accelerated Routing | ✅          | ❌    |
-| External Dependencies    | 1 (Zod)    | Many |
-
+| Feature                  | Ergenecore | Hono     |
+|:-------------------------|:-----------|:-----    |
+| HTTP Methods             | ✅          | ✅      |
+| WebSocket Support        | ✅          | ✅      |
+| Middleware System        | ✅          | ✅      |
+| Request Validation       | ✅ (Zod)    | ✅ (Zod) |
+| Static File Serving      | ✅          | ✅      |
+| Cookie Support           | ✅          | ✅      |
+| CORS Middleware          | ✅          | ✅      |
+| Rate Limiting            | ✅          | ✅      |
 ## Choosing the Right Adapter
 
 ### Use **Ergenecore** when:
 
-✅ You need **maximum performance**
-✅ You're building a **production API**
-✅ You want **zero external dependencies**
-✅ You're using **Bun runtime** exclusively
-✅ You need **built-in rate limiting**
-✅ You want **native Bun optimizations**
+- ✅ You need **maximum performance**
+- ✅ You're building a **Test or Poc project**
+- ✅ You want **zero external dependencies**
+- ✅ You're using **Bun runtime** exclusively
+- ✅ You want **native Bun optimizations**
 
 ### Use **Hono** when:
 
-✅ You're already **familiar with Hono**
-✅ You're **migrating** an existing Hono project
-✅ You need **Hono-specific middleware**
-✅ You want a **battle-tested** adapter
-✅ You might **switch runtimes** later
+- ✅ You're already **familiar with Hono**
+- ✅ You're **migrating** an existing Hono project
+- ✅ You need **Hono-specific middleware**
+- ✅ You want a **battle-tested** adapter
 
 ## Quick Start Comparison
 
@@ -148,9 +142,9 @@ return context.send({ data }, 200);
 import type { Context } from '@asenajs/hono-adapter';
 
 // Get parameters
-const id = context.req.param('id');
-const page = context.req.query('page');
-const body = await context.req.json();
+const id = context.getParam('id');
+const page = context.getQuery('page');
+const body = await context.getBody();
 
 // Send response
 return context.json({ data }, 200);
@@ -159,37 +153,32 @@ return context.json({ data }, 200);
 ## Migration Between Adapters
 
 ::: warning
-Migrating between adapters requires updating your Context API calls, but your controllers, services, and business logic remain unchanged.
+Migrating between adapters requires updating your Import and maybe some context calls, but your controllers, services, and business logic remain unchanged.
 :::
 
 ### From Hono to Ergenecore
 
 ```typescript
+import { Get } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/hono-adapter';
+
 // Before (Hono)
 @Get('/:id')
 async getUser(context: Context) {
-  const id = context.req.param('id');
+  const id = context.getParam('id');
   return context.json({ id });
 }
 
 // After (Ergenecore)
+import { Get } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/ergenecore';
+
 @Get('/:id')
 async getUser(context: Context) {
   const id = context.getParam('id');
   return context.send({ id });
 }
 ```
-
-### Migration Checklist
-
-- [ ] Update adapter import and initialization
-- [ ] Change Context type import
-- [ ] Replace `context.req.param()` with `context.getParam()`
-- [ ] Replace `context.req.query()` with `context.getQuery()`
-- [ ] Replace `context.req.json()` with `context.getBody()`
-- [ ] Replace `context.json()` with `context.send()`
-- [ ] Update middleware base class imports
-- [ ] Test all endpoints
 
 ## Advanced Adapter Configuration
 
@@ -239,6 +228,8 @@ export class MyCustomAdapter implements AsenaAdapter {
 
 ::: tip
 Check the [Ergenecore source code](https://github.com/AsenaJs/Asena-ergenecore) for a complete implementation example.
+or
+Check the [Hono-adapter source code](https://github.com/AsenaJs/hono-adapter) for a complete implementation example.
 :::
 
 ## Recommendations
@@ -262,8 +253,7 @@ bun add @asenajs/hono-adapter
 ### For Maximum Performance
 
 **Ergenecore** provides:
-- SIMD-accelerated routing
-- Zero-copy file serving
+
 - Native Bun optimizations
 - Minimal dependency overhead
 
@@ -277,6 +267,7 @@ bun add @asenajs/hono-adapter
 ---
 
 **Next Steps:**
+
 - Learn about [Ergenecore features](/docs/adapters/ergenecore)
 - Explore [Hono adapter usage](/docs/adapters/hono)
 - Understand [Context API](/docs/concepts/context)
