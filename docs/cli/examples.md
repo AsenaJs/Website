@@ -345,7 +345,7 @@ The build files are in the `dist/` directory (configured in `asena.config.ts`).
 Run the production build:
 
 ```bash
-bun dist/index.js
+bun dist/index.asena.js
 ```
 
 ::: tip Build Output

@@ -2,16 +2,19 @@
 
 Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime with full dependency injection support. Designed for speed with decorator-based architecture, achieving 200k-300k requests/sec.
 
+> **Note**: This file is available at https://asena.sh/llm.txt - A comprehensive reference optimized for LLM consumption.
+
 ## Quick Links
 
 - Documentation: https://asena.sh
+- LLM Reference: https://asena.sh/llm.txt
 - GitHub: https://github.com/AsenaJs/Asena
 - Examples: https://github.com/LibirSoft/AsenaExample
 - Bun Runtime: https://bun.sh
 
 ## Installation
 
-- Getting Started: https://asena.sh/docs/get-started.html
+- Getting Started: https://asena.sh/docs/get-started
   - Prerequisites (Bun v1.2.8+)
   - Installation & Setup
   - TypeScript Configuration (experimentalDecorators required)
@@ -20,7 +23,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## Core Concepts
 
-- Controllers: https://asena.sh/docs/concepts/controllers.html
+- Controllers: https://asena.sh/docs/concepts/controllers
   - @Controller decorator with path prefix
   - HTTP Method Decorators (@Get, @Post, @Put, @Delete, @Patch, @Options, @Head)
   - Route Parameters (context.getParam())
@@ -31,7 +34,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
     - String-based injection (no type safety)
   - Controller-level middleware configuration
 
-- Services: https://asena.sh/docs/concepts/services.html
+- Services: https://asena.sh/docs/concepts/services
   - @Service decorator for business logic classes
   - Service Scopes:
     - Scope.SINGLETON (default) - Single instance shared across app
@@ -42,14 +45,14 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Field-based dependency injection
   - Service composition and separation of concerns
 
-- Dependency Injection: https://asena.sh/docs/concepts/dependency-injection.html
+- Dependency Injection: https://asena.sh/docs/concepts/dependency-injection
   - @Inject decorator for field injection
   - Class-based vs String-based injection
   - Service resolution from IoC container
   - Automatic component registration
   - Scope management (SINGLETON/PROTOTYPE)
 
-- Middleware: https://asena.sh/docs/concepts/middleware.html
+- Middleware: https://asena.sh/docs/concepts/middleware
   - @Middleware decorator
   - Custom middleware extending MiddlewareService
   - Global middleware (via @Config)
@@ -59,7 +62,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Middleware execution order
   - Next function for middleware chaining
 
-- Context API: https://asena.sh/docs/concepts/context.html
+- Context API: https://asena.sh/docs/concepts/context
   - **Unified API** - Same interface for both Ergenecore and Hono adapters
   - Request Methods:
     - getRequest() - Raw request object
@@ -81,7 +84,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Cookie Management:
     - setCookie(name, value, options?) - Set cookie
 
-- WebSocket: https://asena.sh/docs/concepts/websocket.html
+- WebSocket: https://asena.sh/docs/concepts/websocket
   - @WebSocket decorator for WebSocket services
   - AsenaWebSocketService base class with built-in room management
   - **Middleware Support** (Just like controllers):
@@ -117,8 +120,60 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - **IMPORTANT**:
     - Asena handles room/socket tracking automatically - avoid manual Map management
     - Use middleware for authentication, NOT inside onOpen()
+  - **For breaking circular dependencies, use Ulak** - See below
 
-- Validation: https://asena.sh/docs/concepts/validation.html
+- Ulak (WebSocket Messaging System): https://asena.sh/docs/concepts/ulak
+  - **Problem Solved**: Breaks circular dependencies between services and WebSocket handlers
+    - Services need WebSocket to send messages
+    - WebSocket handlers need services for business logic
+    - Direct injection creates circular dependency
+  - **Solution**: Ulak acts as centralized message broker/mediator
+  - **Three Ways to Use Ulak**:
+    1. Scoped Namespace (Recommended - Most Ergonomic):
+       - @Inject(ulak('/namespace')) private ns: Ulak.NameSpace<'/namespace'>
+       - No namespace repetition in method calls
+       - Clean, type-safe API
+    2. Expression-Based Injection:
+       - @Inject(ICoreServiceNames.__ULAK__, (ulak) => ulak.namespace('/ns'))
+       - For advanced transformations
+    3. Direct Ulak Injection:
+       - @Inject(ICoreServiceNames.__ULAK__) private ulak: Ulak
+       - Useful for multiple or dynamic namespaces
+  - **Ulak Core API** (when injecting Ulak directly):
+    - broadcast(namespace, data) - Broadcast to all clients in namespace
+    - to(namespace, room, data) - Send to specific room
+    - toSocket(namespace, socketId, data) - Send to specific socket
+    - toMany(namespace, rooms[], data) - Send to multiple rooms (parallel)
+    - broadcastAll(data) - Broadcast to all namespaces
+    - bulkSend(operations[]) - Execute multiple operations in bulk
+    - namespace(path) - Get scoped namespace interface
+    - getNamespaces() - Get all registered namespace paths
+    - hasNamespace(namespace) - Check if namespace exists
+    - getSocketCount(namespace) - Get active socket count
+  - **Scoped Namespace API** (when using ulak() helper):
+    - broadcast(data) - Broadcast to namespace
+    - to(room, data) - Send to room
+    - toSocket(socketId, data) - Send to socket
+    - toMany(rooms[], data) - Send to multiple rooms
+    - getSocketCount() - Get socket count
+    - path - Namespace path (readonly)
+  - **Error Handling**:
+    - UlakError class with structured error codes
+    - Error codes: NAMESPACE_NOT_FOUND, NAMESPACE_ALREADY_EXISTS, INVALID_NAMESPACE, INVALID_MESSAGE, SEND_FAILED, BROADCAST_FAILED, SOCKET_NOT_FOUND, SERVICE_NOT_INITIALIZED
+    - Access error.code, error.namespace, error.cause
+  - **Best Practices**:
+    - Prefer scoped namespaces with ulak() helper
+    - Subscribe to rooms in WebSocket's onOpen()
+    - Handle errors gracefully with try-catch
+    - Use batch operations (toMany) for multiple rooms
+    - Type your messages with TypeScript interfaces
+  - **Usage Pattern**:
+    - WebSocket handlers subscribe sockets to rooms
+    - Services inject Ulak to send messages
+    - No circular dependency between them
+    - Example: Service uses ulak.to(room, data) to notify WebSocket clients
+
+- Validation: https://asena.sh/docs/concepts/validation
   - **Ergenecore Adapter Only** - Not available in Hono adapter
   - Zod integration via ValidationService
   - @Validation() decorator for route-level validation
@@ -132,12 +187,12 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## HTTP Adapters
 
-- Adapters Overview: https://asena.sh/docs/adapters/overview.html
+- Adapters Overview: https://asena.sh/docs/adapters/overview
   - Adapter Comparison (Performance, Features, Use Cases)
   - When to Use Ergenecore (Bun-native, fastest, built-in features)
   - When to Use Hono (Hono ecosystem compatibility)
 
-- Ergenecore Adapter (Fastest - 295k req/sec): https://asena.sh/docs/adapters/ergenecore.html
+- Ergenecore Adapter (Fastest - 295k req/sec): https://asena.sh/docs/adapters/ergenecore
   - Bun-native adapter with zero dependencies
   - Factory Functions:
     - createErgenecoreAdapter(options) - Full configuration
@@ -152,7 +207,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - WebSocket support (enableWebSocket option)
   - Error Handling
 
-- Hono Adapter (233k req/sec): https://asena.sh/docs/adapters/hono.html
+- Hono Adapter (233k req/sec): https://asena.sh/docs/adapters/hono
   - Hono framework-based adapter
   - Setup & Configuration via createHonoAdapter()
   - Context API (HonoContextWrapper implements AsenaContext)
@@ -169,7 +224,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## Official Packages
 
-- AsenaLogger (Winston-based): https://asena.sh/docs/packages/logger.html
+- AsenaLogger (Winston-based): https://asena.sh/docs/packages/logger
   - Installation: bun add @asenajs/asena-logger
   - **Recommended Pattern**: Global Export
     - export const logger = new AsenaLogger()
@@ -190,7 +245,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
     - Log rotation
   - Performance Profiling with startTimer()
 
-- Asena Drizzle (Database & Repository): https://asena.sh/docs/packages/drizzle.html
+- Asena Drizzle (Database & Repository): https://asena.sh/docs/packages/drizzle
   - Installation: bun add @asenajs/asena-drizzle
   - @Database Decorator:
     - type: 'postgresql' | 'mysql' | 'bun-sql'
@@ -218,14 +273,14 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## CLI
 
-- CLI Overview: https://asena.sh/docs/cli/overview.html
+- CLI Overview: https://asena.sh/docs/cli/overview
   - Quick project scaffolding
   - Code generation (controllers, services, middleware, etc.)
   - Development mode with hot reload
   - Production builds with Bun bundler
   - Multi-adapter support (Ergenecore/Hono)
 
-- Installation: https://asena.sh/docs/cli/installation.html
+- Installation: https://asena.sh/docs/cli/installation
   - Prerequisites: Bun v1.2.8+
   - Install: bun install -g @asenajs/asena-cli
   - Verify: asena --version
@@ -233,7 +288,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Uninstall: bun remove -g @asenajs/asena-cli
   - Troubleshooting (PATH, permissions, version mismatch)
 
-- Commands: https://asena.sh/docs/cli/commands.html
+- Commands: https://asena.sh/docs/cli/commands
   - asena create - Bootstrap new project
     - Interactive mode (default) - Prompts for all options
     - Non-interactive mode - For SSH/CI/CD environments with CLI arguments
@@ -255,23 +310,33 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - asena init - Initialize asena.config.ts
   - All commands support both full and shortcut forms
 
-- Configuration: https://asena.sh/docs/cli/configuration.html
+- Configuration: https://asena.sh/docs/cli/configuration
   - asena.config.ts - CLI configuration file
   - defineConfig() helper for type safety
-  - Build Options:
-    - sourceFolder - Source directory (default: 'src')
-    - rootFile - Entry point (default: 'src/index.ts')
-    - outdir - Build output directory
-    - sourcemap - Source map generation ('linked', 'inline', 'external', 'none')
-    - target - Build target (default: 'bun')
-    - minify - Minification options:
-      - whitespace: boolean
-      - syntax: boolean
-      - identifiers: boolean (set false to preserve names in logs)
-  - Environment-specific configuration with process.env
+  - Configuration Structure:
+    - sourceFolder: string - Source directory (default: 'src')
+    - rootFile: string - Entry point (default: 'src/index.ts')
+    - buildOptions?: BuildOptions - Optional Bun bundler options
+  - BuildOptions (All optional - Partial<Pick<Bun.BuildConfig>>):
+    - outdir?: string - Build output directory (default: './out')
+    - sourcemap?: 'none' | 'inline' | 'external' | 'linked' - Source map generation
+    - minify?: boolean | MinifyOptions - Minification options:
+      - whitespace: boolean (default: true)
+      - syntax: boolean (default: true)
+      - identifiers: boolean (default: false - preserves names in logs)
+      - keepNames: boolean (default: true - preserves function/class names)
+    - external?: string[] - Dependencies to exclude from bundling (e.g., ['pg', 'mysql2'])
+    - format?: 'esm' | 'cjs' - Output module format (default: 'esm')
+    - drop?: string[] - Remove function calls from bundle (e.g., ['console', 'debugger'])
+  - Managed Internally (NOT configurable):
+    - entrypoints - Managed by Asena CLI based on rootFile
+    - target - Always 'bun' (Asena is Bun-native)
+  - Unsupported Options: splitting, define, loader (not relevant for backend builds)
+  - Environment-specific configuration (dev/prod configs)
   - TypeScript Requirements (experimentalDecorators, emitDecoratorMetadata)
+  - Bun Bundler Reference: https://bun.com/docs/bundler
 
-- Examples: https://asena.sh/docs/cli/examples.html
+- Examples: https://asena.sh/docs/cli/examples
   - Step-by-step tutorial from project creation to production
   - Adapter selection (Ergenecore vs Hono)
   - Creating controllers, services, middleware
@@ -280,7 +345,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## Guides
 
-- Configuration: https://asena.sh/docs/guides/configuration.html
+- Configuration: https://asena.sh/docs/guides/configuration
   - @Config Decorator for server configuration
   - **Single @Config Class** - Only ONE @Config class supported per app
   - ConfigService base class
@@ -294,7 +359,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Environment Variables for configuration
   - CLI Configuration (asena.config.ts) for build process
 
-- Testing: https://asena.sh/docs/guides/testing.html
+- Testing: https://asena.sh/docs/guides/testing
   - Testing Controllers:
     - Use AsenaServerFactory.create() for test server
     - components parameter to register specific controllers
@@ -310,7 +375,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
     - onOpen/onMessage/onClose lifecycle testing
   - Integration Tests with full server setup
 
-- Deployment: https://asena.sh/docs/guides/deployment.html
+- Deployment: https://asena.sh/docs/guides/deployment
   - Building for Production:
     - asena build with production optimizations
     - Minification and bundling
@@ -332,7 +397,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 
 ## Examples
 
-- Examples Overview: https://asena.sh/docs/examples.html
+- Examples Overview: https://asena.sh/docs/examples
   - REST API Examples:
     - Complete CRUD operations
     - Request/response handling

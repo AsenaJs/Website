@@ -29,7 +29,7 @@ asena build
 Then run the production build:
 
 ```bash
-bun dist/index.js
+bun dist/index.asena.js
 ```
 
 ## Related Documentation

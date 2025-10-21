@@ -28,8 +28,19 @@ export default defineConfig({
 interface AsenaConfig {
   sourceFolder: string;           // Source code directory
   rootFile: string;                // Application entry point
-  buildOptions: BuildOptions;      // Bun bundler options
+  buildOptions?: BuildOptions;     // Optional Bun bundler options
 }
+
+/**
+ * BuildOptions is a subset of Bun's BuildConfig.
+ * Only backend-relevant options are exposed.
+ */
+type BuildOptions = Partial<
+  Pick<
+    Bun.BuildConfig,
+    'outdir' | 'sourcemap' | 'minify' | 'external' | 'format' | 'drop'
+  >
+>;
 ```
 
 ## Default Configuration
@@ -44,12 +55,11 @@ export default defineConfig({
   rootFile: 'src/index.ts',
   buildOptions: {
     outdir: 'dist',
-    sourcemap: 'linked',
-    target: 'bun',
     minify: {
       whitespace: true,
       syntax: true,
-      identifiers: false,
+      identifiers: false, //It's better for you to make this false for better debugging during the running phase of the application.
+      keepNames: true
     },
   },
 });
@@ -113,10 +123,22 @@ await server.start();
 
 ### buildOptions
 
-**Type:** `BuildOptions`
-**Default:** See below
+**Type:** `BuildOptions` (optional)
+**Default:** `{ outdir: './out' }` if not specified
 
-Configuration options for Bun's bundler. Asena supports all Bun bundler options.
+Configuration options for Bun's bundler. Asena exposes only backend-relevant build options from Bun's `BuildConfig`.
+
+::: info Managed Internally
+The `entrypoints` and `target` properties are managed internally by Asena CLI and cannot be configured by users. Asena always builds for the `bun` target since it's a Bun-native backend framework.
+:::
+
+**Available BuildOptions:**
+- `outdir` - Output directory for compiled files
+- `sourcemap` - Source map generation strategy
+- `minify` - Code minification options
+- `external` - Dependencies to exclude from bundling
+- `format` - Output module format (ESM/CJS)
+- `drop` - Remove function calls from bundle (e.g., `console`, `debugger`)
 
 ## Build Options Reference
 
@@ -138,7 +160,7 @@ export default defineConfig({
 ### sourcemap
 
 **Type:** `'none' | 'inline' | 'external' | 'linked'`
-**Default:** `'linked'`
+**Default:** Not set (optional)
 
 Controls source map generation for debugging:
 
@@ -160,17 +182,84 @@ export default defineConfig({
 - **Production:** Use `'none'` for smaller bundle size
 :::
 
-### target
+### format
 
-**Type:** `'bun' | 'node' | 'browser'`
-**Default:** `'bun'`
+**Type:** `'esm' | 'cjs'`
+**Default:** `'esm'` (Bun's default)
 
-Specifies the compilation target runtime.
+Specifies the output module format.
 
 ```typescript
 export default defineConfig({
   buildOptions: {
-    target: 'bun', // Optimize for Bun runtime
+    format: 'esm', // ES modules (recommended for Bun)
+  },
+});
+```
+
+::: tip
+Asena works best with ESM format since Bun has native ESM support. CJS is supported but not recommended unless you have specific compatibility requirements.
+:::
+
+### external
+
+**Type:** `string[]`
+**Default:** `[]` (empty array)
+
+List of dependencies that should not be bundled into the output. Useful for native modules or dependencies that should be resolved at runtime.
+
+```typescript
+export default defineConfig({
+  buildOptions: {
+    external: ['pg', 'mysql2', 'better-sqlite3'], // Don't bundle database drivers
+  },
+});
+```
+
+**Common use cases:**
+- Native Node.js modules (e.g., `fs`, `path` - though Bun handles these)
+- Database drivers with native bindings
+- Large dependencies that should be installed separately
+
+::: warning Native Dependencies
+Some packages with native bindings (like `better-sqlite3`) must be marked as external to work correctly.
+:::
+
+### drop
+
+**Type:** `string[]`
+**Default:** `[]` (empty array)
+
+Removes specified function calls from the bundle during build. Commonly used to strip debugging code in production.
+
+```typescript
+export default defineConfig({
+  buildOptions: {
+    drop: ['console', 'debugger'], // Remove all console calls and debugger statements
+  },
+});
+```
+
+**Common values:**
+- `'console'` - Removes all `console.*` calls
+- `'debugger'` - Removes `debugger` statements
+- Custom identifiers like `'logger.debug'`
+
+::: danger Side Effects Warning
+The `drop` option removes the entire call expression, including arguments, even if they have side effects. For example, `drop: ['console']` will turn `console.log(doSomething())` into nothing, so `doSomething()` will never execute.
+:::
+
+**Example - Production build:**
+
+```typescript
+export default defineConfig({
+  sourceFolder: 'src',
+  rootFile: 'src/index.ts',
+  buildOptions: {
+    outdir: 'dist',
+    sourcemap: 'none',
+    minify: true,
+    drop: ['console', 'debugger'], // Clean production output
   },
 });
 ```
@@ -178,7 +267,7 @@ export default defineConfig({
 ### minify
 
 **Type:** `boolean | MinifyOptions`
-**Default:** `{ whitespace: true, syntax: true, identifiers: false }`
+**Default:** `{ whitespace: true, syntax: true, identifiers: false, keepNames: true }`
 
 Controls code minification for smaller bundle sizes.
 
@@ -201,6 +290,7 @@ export default defineConfig({
       whitespace: true,   // Remove unnecessary whitespace
       syntax: true,       // Apply smart condensation transforms
       identifiers: false, // Keep original variable/function names
+      keepNames: true     // Preserve function and class names
     },
   },
 });
@@ -213,6 +303,7 @@ export default defineConfig({
 | `whitespace`  | `boolean` | Removes unnecessary whitespace and newlines    |
 | `syntax`      | `boolean` | Applies syntax-level optimizations             |
 | `identifiers` | `boolean` | Renames variables/functions to shorter names   |
+| `keepNames`   | `boolean` | Preserves function and class names for debugging |
 
 ::: warning identifiers and Debugging
 Setting `identifiers: true` makes debugging harder because:
@@ -239,12 +330,12 @@ export default defineConfig({
   buildOptions: {
     outdir: 'dist',
     sourcemap: 'linked',  // Full debugging support
-    target: 'bun',
     minify: {
       whitespace: false,  // Keep readable
       syntax: false,
       identifiers: false, // Keep original names
     },
+    drop: [], // Keep all console logs for debugging
   },
 });
 ```
@@ -261,12 +352,12 @@ export default defineConfig({
   buildOptions: {
     outdir: 'dist',
     sourcemap: 'none',    // No source maps
-    target: 'bun',
     minify: {
       whitespace: true,   // Minimize size
       syntax: true,
       identifiers: true,  // Shorten names
     },
+    drop: ['console', 'debugger'], // Remove debugging code
   },
 });
 ```
@@ -285,7 +376,7 @@ asena build
 
 ## Advanced Build Options
 
-Asena supports all Bun bundler options. Here are some common advanced configurations:
+Asena exposes backend-relevant build options from Bun's bundler. Here are some common advanced configurations:
 
 ### Custom Entry Points
 
@@ -299,7 +390,7 @@ export default defineConfig({
 });
 ```
 
-### Multiple Output Formats
+### Production-Optimized Build
 
 ```typescript
 export default defineConfig({
@@ -307,8 +398,10 @@ export default defineConfig({
   rootFile: 'src/index.ts',
   buildOptions: {
     outdir: 'dist',
-    format: 'esm', // Output as ES modules
-    splitting: true, // Code splitting
+    format: 'esm',
+    sourcemap: 'none',
+    minify: true,
+    drop: ['console', 'debugger'], // Strip debugging code
   },
 });
 ```
@@ -321,7 +414,7 @@ export default defineConfig({
   rootFile: 'src/index.ts',
   buildOptions: {
     outdir: 'dist',
-    external: ['pg', 'mysql2'], // Don't bundle these
+    external: ['pg', 'mysql2', 'better-sqlite3'], // Don't bundle native modules
   },
 });
 ```
@@ -353,7 +446,7 @@ export default defineConfig({
   buildOptions: {
     outdir: 'packages/api/dist',
     sourcemap: 'linked',
-    target: 'bun',
+    format: 'esm',
   },
 });
 ```
@@ -369,29 +462,36 @@ export default defineConfig({
   buildOptions: {
     outdir: '/app/dist',
     sourcemap: 'none',
-    target: 'bun',
     minify: true,
+    drop: ['console', 'debugger'], // Clean production logs
   },
 });
 ```
 
 ## Bun Bundler Options
 
-Asena uses Bun's bundler under the hood. For complete bundler options, see the [Bun Bundler Documentation](https://bun.sh/docs/bundler).
+Asena uses Bun's bundler under the hood and exposes only the options relevant for backend framework builds.
 
-**Common Options:**
+::: info
+The `entrypoints` and `target` are managed internally by Asena CLI. All exposed options are **optional** (wrapped in `Partial<>`).
+:::
 
-| Option        | Type                  | Description                          |
-|:--------------|:----------------------|:-------------------------------------|
-| `outdir`      | `string`              | Output directory                     |
-| `sourcemap`   | `string`              | Source map generation                |
-| `target`      | `string`              | Compilation target                   |
-| `minify`      | `boolean \| object`   | Code minification                    |
-| `format`      | `'esm' \| 'cjs'`      | Output format                        |
-| `splitting`   | `boolean`             | Code splitting                       |
-| `external`    | `string[]`            | External dependencies                |
-| `define`      | `Record<string, string>` | Define constants                  |
-| `loader`      | `Record<string, string>` | File loaders                      |
+**Supported BuildOptions:**
+
+| Option        | Type                  | Description                                      | Reference                                                |
+|:--------------|:----------------------|:-------------------------------------------------|:---------------------------------------------------------|
+| `outdir`      | `string`              | Output directory for compiled files              | [Bun Docs](https://bun.com/docs/bundler#outdir)           |
+| `sourcemap`   | `'none' \| 'inline' \| 'external' \| 'linked'` | Source map generation strategy | [Bun Docs](https://bun.com/docs/bundler#sourcemap) |
+| `minify`      | `boolean \| MinifyOptions`   | Code minification options             | [Bun Docs](https://bun.com/docs/bundler#minify)           |
+| `external`    | `string[]`            | Dependencies to exclude from bundling           | [Bun Docs](https://bun.com/docs/bundler#external)         |
+| `format`      | `'esm' \| 'cjs'`      | Output module format                             | [Bun Docs](https://bun.com/docs/bundler#format)           |
+| `drop`        | `string[]`            | Remove function calls (e.g., `console`, `debugger`) | [Bun Docs](https://bun.com/docs/bundler#drop)       |
+
+::: warning Unsupported Options
+Options like `target`, `entrypoints`, `splitting`, `define`, and `loader` are **not exposed** because they're either managed internally or not relevant for backend framework builds.
+:::
+
+For a complete reference of Bun's bundler capabilities, see the [Bun Bundler Documentation](https://bun.com/docs/bundler).
 
 ## Best Practices
 
@@ -492,7 +592,7 @@ export default defineConfig({
 - [CLI Commands](/docs/cli/commands) - Available CLI commands
 - [CLI Examples](/docs/cli/examples) - See project structure examples
 - [Deployment](/docs/guides/deployment) - Production deployment
-- [Bun Bundler](https://bun.sh/docs/bundler) - Complete bundler reference
+- [Bun Bundler](https://bun.com/docs/bundler) - Complete bundler reference
 
 ---
 
