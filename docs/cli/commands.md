@@ -356,7 +356,7 @@ Output: dist/index.js
 ::: tip Production Deployment
 After building, you can run your application with:
 ```bash
-bun dist/index.js
+bun dist/index.asena.js
 ```
 :::
 

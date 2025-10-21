@@ -214,7 +214,7 @@ asena dev start
 
 ```bash
 asena build
-bun dist/index.js
+bun dist/index.asena.js
 ```
 
 Test your application:

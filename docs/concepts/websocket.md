@@ -689,8 +689,97 @@ protected async onClose(ws: Socket) {
 }
 ```
 
+## Breaking Circular Dependencies with Ulak
+
+When building complex applications, you may encounter **circular dependency** issues when:
+
+1. **WebSocket services need to inject business services** for domain logic
+2. **Business services need to inject WebSocket services** to send real-time updates
+
+::: danger Circular Dependency Problem
+```typescript
+// ❌ This creates a circular dependency
+@WebSocket('/notifications')
+export class NotificationWebSocket extends AsenaWebSocketService<{}> {
+  @Inject(UserService)  // WebSocket needs service
+  private userService: UserService;
+}
+
+@Service('UserService')
+export class UserService {
+  @Inject(NotificationWebSocket)  // ❌ Service needs WebSocket - CIRCULAR!
+  private notificationWs: NotificationWebSocket;
+}
+```
+:::
+
+### The Solution: Ulak Message Broker
+
+**Ulak** (Turkish: Messenger/Courier) is Asena's centralized WebSocket message broker that breaks this circular dependency by acting as a mediator between services and WebSocket connections.
+
+```typescript
+// ✅ No circular dependency with Ulak
+import { Service, Inject, ulak } from '@asenajs/asena';
+import type { Ulak } from '@asenajs/asena';
+
+@Service('UserService')
+export class UserService {
+  // Inject scoped Ulak namespace instead of WebSocket service
+  @Inject(ulak('/notifications'))
+  private notifications: Ulak.NameSpace<'/notifications'>;
+
+  async createUser(name: string, email: string) {
+    const user = await this.saveUser(name, email);
+
+    // Send messages to WebSocket clients without injecting the WebSocket service
+    await this.notifications.broadcast({
+      type: 'user_created',
+      user
+    });
+
+    return user;
+  }
+
+  async notifyUser(userId: string, message: string) {
+    // Send to specific room
+    await this.notifications.to(`user:${userId}`, {
+      type: 'notification',
+      message
+    });
+  }
+
+  private async saveUser(name: string, email: string) {
+    // Database logic
+    return { id: '123', name, email };
+  }
+}
+```
+
+::: tip When to Use Ulak
+Use **Ulak** when you need to:
+- Send WebSocket messages from services, controllers, or background jobs
+- Avoid circular dependencies between WebSocket handlers and domain services
+- Broadcast to multiple namespaces from a single service
+- Build scalable real-time features with clean separation of concerns
+
+**Continue using direct WebSocket injection** (this guide's approach) when:
+- You only need simple, one-way communication patterns
+- You're not facing circular dependency issues
+- Your WebSocket logic is self-contained
+:::
+
+### Ulak Key Features
+
+- **Three injection styles**: Scoped namespace (recommended), expression-based, or direct Ulak injection
+- **Unified API**: `broadcast()`, `to()`, `toSocket()`, `toMany()` for messaging
+- **Error handling**: Structured `UlakError` with specific error codes
+- **Bulk operations**: Send multiple messages efficiently with `bulkSend()`
+
+For complete documentation, see [Ulak - WebSocket Messaging System](/docs/concepts/ulak).
+
 ## Related Documentation
 
+- [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies
 - [Ergenecore Adapter](/docs/adapters/ergenecore)
 - [Hono Adapter](/docs/adapters/hono)
 - [Services](/docs/concepts/services)

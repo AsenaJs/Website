@@ -180,12 +180,11 @@ export default defineConfig({
   rootFile: 'src/index.ts',
   buildOptions: {
     outdir: 'dist',
-    sourcemap: 'linked',
-    target: 'bun',
     minify: {
       whitespace: true,
       syntax: true,
-      identifiers: false,
+      identifiers: false, //It's better for you to make this false for better debugging during the running phase of the application.
+      keepNames: true
     },
   },
 });
@@ -204,7 +203,6 @@ export default defineConfig({
   buildOptions: {
     outdir: 'dist',
     sourcemap: isDev ? 'linked' : 'none',
-    target: 'bun',
     minify: isDev ? false : {
       whitespace: true,
       syntax: true,

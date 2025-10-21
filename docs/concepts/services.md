@@ -604,6 +604,61 @@ export class ServiceB {
 }
 ```
 
+::: tip WebSocket + Services Circular Dependencies
+A common circular dependency occurs when **services need to send WebSocket messages** and **WebSocket handlers need to inject services** for business logic.
+
+**Problem:**
+```typescript
+// ❌ This creates a circular dependency
+@WebSocket('/notifications')
+export class NotificationWebSocket extends AsenaWebSocketService<{}> {
+  @Inject(UserService)  // WebSocket needs service
+  private userService: UserService;
+}
+
+@Service('UserService')
+export class UserService {
+  @Inject(NotificationWebSocket)  // ❌ Circular!
+  private notificationWs: NotificationWebSocket;
+}
+```
+
+**Solution: Use Ulak Message Broker**
+
+Ulak breaks this circular dependency by acting as a centralized message broker:
+
+```typescript
+import { Service, Inject, ulak } from '@asenajs/asena';
+import type { Ulak } from '@asenajs/asena';
+
+@Service('UserService')
+export class UserService {
+  // ✅ Inject Ulak namespace instead of WebSocket service
+  @Inject(ulak('/notifications'))
+  private notifications: Ulak.NameSpace<'/notifications'>;
+
+  async createUser(name: string, email: string) {
+    const user = await this.saveUser(name, email);
+
+    // Send WebSocket message without injecting the WebSocket service
+    await this.notifications.broadcast({
+      type: 'user_created',
+      user
+    });
+
+    return user;
+  }
+
+  private async saveUser(name: string, email: string) {
+    // Database logic
+    return { id: '123', name, email };
+  }
+}
+```
+
+For complete documentation on breaking WebSocket circular dependencies, see [Ulak - WebSocket Messaging System](/docs/concepts/ulak).
+:::
+
 ## Testing Services
 
 Services are easy to test in isolation:
@@ -654,6 +709,8 @@ describe('UserService', () => {
 
 - [Dependency Injection](/docs/concepts/dependency-injection)
 - [Controllers](/docs/concepts/controllers)
+- [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
+- [WebSocket](/docs/concepts/websocket)
 - [Drizzle ORM](/docs/packages/drizzle)
 - [Testing Guide](/docs/guides/testing)
 

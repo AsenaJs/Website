@@ -25,6 +25,7 @@ export default defineConfig({
             {text: "Examples", link: "/docs/examples"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
+            {text: "LLM.txt", link: "/llm.txt"},
         ],
 
         sidebar: [
@@ -32,6 +33,7 @@ export default defineConfig({
             {text: "Examples", link: "/docs/examples"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
+            {text: "📄 LLM.txt", link: "/llm.txt"},
             {
                 text: "Concepts",
                 items: [
@@ -42,6 +44,7 @@ export default defineConfig({
                     {text: "Context", link: "/docs/concepts/context"},
                     {text: "Validation", link: "/docs/concepts/validation"},
                     {text: "WebSocket", link: "/docs/concepts/websocket"},
+                    {text: "Ulak", link: "/docs/concepts/ulak"},
                 ],
             },
             {
