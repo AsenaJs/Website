@@ -587,9 +587,27 @@ export default defineConfig({
 });
 ```
 
+## .asena/config.json
+
+The `.asena/config.json` file is automatically created by `asena create` or `asena init` commands and stores project-level settings.
+
+### Suffix Configuration
+
+Configure how component names are suffixed when using `asena generate` commands. You can use default suffixes (`Controller`, `Service`), disable them entirely, or define custom ones.
+
+```json
+{
+  "adapter": "hono",
+  "suffixes": true  // or false, or custom object
+}
+```
+
+For complete suffix configuration options and examples, see [Suffix Configuration](/docs/cli/suffix-configuration).
+
 ## Related Documentation
 
 - [CLI Commands](/docs/cli/commands) - Available CLI commands
+- [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See project structure examples
 - [Deployment](/docs/guides/deployment) - Production deployment
 - [Bun Bundler](https://bun.com/docs/bundler) - Complete bundler reference

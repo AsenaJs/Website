@@ -25,7 +25,7 @@ export default defineConfig({
             {text: "Examples", link: "/docs/examples"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
-            {text: "LLM.txt", link: "/llm.txt"},
+            {text: "LLMS.txt", link: "/llms.txt"},
         ],
 
         sidebar: [
@@ -33,7 +33,7 @@ export default defineConfig({
             {text: "Examples", link: "/docs/examples"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
-            {text: "📄 LLM.txt", link: "/llm.txt"},
+            {text: "📄 LLMS.txt", link: "/llms.txt"},
             {
                 text: "Concepts",
                 items: [
@@ -69,6 +69,7 @@ export default defineConfig({
                     {text: "Installation", link: "/docs/cli/installation"},
                     {text: "Commands", link: "/docs/cli/commands"},
                     {text: "Configuration", link: "/docs/cli/configuration"},
+                    {text: "Suffix Configuration", link: "/docs/cli/suffix-configuration"},
                     {text: "Examples", link: "/docs/cli/examples"},
                 ]
             },
