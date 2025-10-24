@@ -115,6 +115,7 @@ Quickly and consistently create project components with proper structure and imp
 - **Multi-Component Support** - Generate controllers, services, middlewares, configs, and websockets
 - **Automatic Code Generation** - Creates template code with base structure and necessary imports
 - **Adapter-Aware** - Generates adapter-specific code based on project configuration
+- **Suffix Configuration** - Customize component naming conventions (see [Suffix Configuration](/docs/cli/suffix-configuration))
 - **Project Structure Integration** - Places files in the correct directories
 - **Command Shortcuts** - Faster usage with aliases
 
@@ -140,7 +141,7 @@ asena generate controller
 
 **Prompt:**
 ```bash
-✔ Enter controller name: UserController
+✔ Enter controller name: User
 ```
 
 **Generated:** `src/controllers/UserController.ts`
@@ -169,7 +170,7 @@ asena generate service
 
 **Prompt:**
 ```bash
-✔ Enter service name: UserService
+✔ Enter service name: User
 ```
 
 **Generated:** `src/services/UserService.ts`
@@ -196,7 +197,7 @@ asena generate middleware
 
 **Prompt:**
 ```bash
-✔ Enter middleware name: AuthMiddleware
+✔ Enter middleware name: Auth
 ```
 
 **Generated:** `src/middlewares/AuthMiddleware.ts`
@@ -224,7 +225,7 @@ asena generate config
 
 **Prompt:**
 ```bash
-✔ Enter config name: ServerConfig
+✔ Enter config name: Server
 ```
 
 **Generated:** `src/config/ServerConfig.ts`
@@ -252,7 +253,7 @@ asena generate websocket
 
 **Prompt:**
 ```bash
-✔ Enter websocket namespace name: ChatNamespace
+✔ Enter websocket namespace name: Chat
 ```
 
 **Generated:** `src/namespaces/ChatNamespace.ts`
@@ -428,6 +429,7 @@ Use `asena init` when:
 ## Related Documentation
 
 - [Configuration](/docs/cli/configuration) - CLI configuration options
+- [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See complete project examples
 - [Controllers](/docs/concepts/controllers) - Controller patterns
 - [Services](/docs/concepts/services) - Service patterns

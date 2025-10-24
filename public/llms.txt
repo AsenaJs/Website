@@ -2,7 +2,7 @@
 
 Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime with full dependency injection support. Designed for speed with decorator-based architecture, achieving 200k-300k requests/sec.
 
-> **Note**: This file is available at https://asena.sh/llm.txt - A comprehensive reference optimized for LLM consumption.
+> **Note**: This file is available at https://asena.sh/llms.txt - A comprehensive reference optimized for LLMS consumption.
 
 ## Quick Links
 
@@ -343,6 +343,10 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Building and deploying
   - Complete project structure examples
 
+- Suffixes: https://asena.sh/docs/cli/suffix-configuration
+  - for how to configure suffixes in asena cli
+
+
 ## Guides
 
 - Configuration: https://asena.sh/docs/guides/configuration
@@ -358,42 +362,6 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
     - Environment-based error responses
   - Environment Variables for configuration
   - CLI Configuration (asena.config.ts) for build process
-
-- Testing: https://asena.sh/docs/guides/testing
-  - Testing Controllers:
-    - Use AsenaServerFactory.create() for test server
-    - components parameter to register specific controllers
-    - Isolated testing without full app bootstrap
-  - Testing Services:
-    - Unit testing with mocked dependencies
-    - Service scope considerations (SINGLETON vs PROTOTYPE)
-  - Testing Middleware:
-    - Middleware execution order
-    - Context manipulation testing
-  - Testing WebSocket:
-    - WebSocket client simulation
-    - onOpen/onMessage/onClose lifecycle testing
-  - Integration Tests with full server setup
-
-- Deployment: https://asena.sh/docs/guides/deployment
-  - Building for Production:
-    - asena build with production optimizations
-    - Minification and bundling
-  - Docker Deployment:
-    - Dockerfile with Bun base image
-    - Multi-stage builds
-  - Environment Configuration:
-    - Environment variables for secrets
-    - Production vs development configs
-  - Performance Optimization:
-    - Adapter selection (Ergenecore for max performance)
-    - Service scope optimization
-    - Middleware ordering
-  - Security Best Practices:
-    - CORS configuration
-    - Rate limiting
-    - Input validation
-    - Error handling in production
 
 ## Examples
 
