@@ -7,7 +7,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 ## Quick Links
 
 - Documentation: https://asena.sh
-- LLM Reference: https://asena.sh/llm.txt
+- LLM Reference: https://asena.sh/llms.txt
 - GitHub: https://github.com/AsenaJs/Asena
 - Examples: https://github.com/LibirSoft/AsenaExample
 - Bun Runtime: https://bun.sh
