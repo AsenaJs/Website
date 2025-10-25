@@ -29,6 +29,7 @@ export default defineConfig({
         ],
 
         sidebar: [
+            {text: "Philosophy", link: "/docs/philosophy"},
             {text: "Quick Start", link: "/docs/get-started"},
             {text: "Examples", link: "/docs/examples"},
             {text: "Showcase", link: "/docs/showcase"},
