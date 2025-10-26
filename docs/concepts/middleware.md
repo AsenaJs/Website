@@ -47,8 +47,8 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 export class LoggerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
     const start = Date.now();
-    const method = context.getRequest().method;
-    const url = context.getRequest().url;
+    const method = context.req.method;
+    const url = context.req.url;
 
     console.log(`[${method}] ${url} - Start`);
 
@@ -166,7 +166,7 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       return context.send({ error: 'No token provided' }, 401);
@@ -197,7 +197,7 @@ import { HTTPException } from 'hono/http-exception';
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       throw new HTTPException(401, { message: 'No token provided' });
@@ -248,10 +248,12 @@ export class AdminRoleMiddleware extends MiddlewareService {
 import { Middleware } from '@asenajs/asena/server';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
+import type { Next } from 'hono';
+
 
 @Middleware()
 export class AdminRoleMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+  async handle(context: Context, next: Next): Promise<any> {
     const user = context.getValue('user');
 
     if (!user || user.role !== 'admin') {
@@ -270,14 +272,14 @@ export class AdminRoleMiddleware extends MiddlewareService {
 ```typescript
 @Middleware()
 export class RequestLoggerMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const request = context.getRequest();
+  async handle(context: Context, next: Next): Promise<any> {
+    const request = context.req;
     const start = Date.now();
 
     console.log({
       method: request.method,
       url: request.url,
-      ip: request.headers.get('x-forwarded-for') || 'unknown',
+      ip: request.headers['x-forwarded-for'] || 'unknown',
       timestamp: new Date().toISOString()
     });
 
@@ -289,70 +291,12 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 }
 ```
 
-### Error Handling Middleware
-
-::: code-group
-
-```typescript [Ergenecore]
-import { Middleware } from '@asenajs/asena/server';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
-
-@Middleware()
-export class ErrorHandlerMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    try {
-      await next();
-    } catch (error) {
-      console.error('Error:', error);
-
-      if (error instanceof ValidationError) {
-        return context.send({ error: error.message }, 400);
-      }
-
-      if (error instanceof UnauthorizedError) {
-        return context.send({ error: 'Unauthorized' }, 401);
-      }
-
-      return context.send({ error: 'Internal server error' }, 500);
-    }
-  }
-}
-```
-
-```typescript [Hono]
-import { Middleware } from '@asenajs/asena/server';
-import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
-
-@Middleware()
-export class ErrorHandlerMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    try {
-      await next();
-    } catch (error) {
-      console.error('Error:', error);
-
-      if (error instanceof ValidationError) {
-        throw new HTTPException(400, { message: error.message });
-      }
-
-      if (error instanceof UnauthorizedError) {
-        throw new HTTPException(401, { message: 'Unauthorized' });
-      }
-
-      throw new HTTPException(500, { message: 'Internal server error' });
-    }
-  }
-}
-```
-
-:::
-
-## Built-in Middleware (Ergenecore)
+## Built-in Middleware
 
 ### CORS Middleware
 
 ```typescript
+import { Middleware } from '@asenajs/asena/server';
 import { CorsMiddleware } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -449,7 +393,7 @@ export class AuthMiddleware extends MiddlewareService {
   private userService: UserService;
 
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.req.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       return context.send({ error: 'Unauthorized' }, 401);
@@ -518,6 +462,15 @@ Controller Middleware
 Route Middleware
   ↓
 Route Handler
+  ↓
+Route Middleware
+  ↓
+Controller Middleware
+  ↓
+Pattern-Based Middleware
+  ↓
+Global Middleware
+
 ```
 
 **Example:**

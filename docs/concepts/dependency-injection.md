@@ -25,9 +25,9 @@ The `@Inject` decorator is used to inject dependencies into your classes.
 
 ```typescript
 import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
 import { Inject } from '@asenajs/asena/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import { Delete, Get, Post, Put } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 
 @Controller('/users')
@@ -45,6 +45,16 @@ export class UserController {
 
 ### String-Based Injection
 
+You can also inject services using their registered name as a string. This is useful when you want to decouple your code from concrete implementations or when working with dynamically registered services.
+
+First, register your service with a custom name:
+
+::: tip String-Based Injection Requires Named Components
+When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+
+**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+:::
+
 Inject services by their registered name:
 
 ```typescript
@@ -61,7 +71,7 @@ export class UserService {
 @Controller('/users')
 export class UserController {
   @Inject('UserService')
-  private userService: any; // Type must be specified manually
+  private userService: UserService;
 
   @Get('/')
   async list(context: Context) {
@@ -431,7 +441,7 @@ Control the lifecycle of injected services with scopes.
 One instance shared across the entire application:
 
 ```typescript
-import { Service, Scope } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/server';
 
 @Service() // Default: Scope.SINGLETON
 export class ConfigService {
@@ -449,6 +459,7 @@ New instance created for every injection:
 
 ```typescript
 import { Service, Scope } from '@asenajs/asena/server';
+import { Scope } from '@asenajs/asena/ioc';
 
 @Service({ scope: Scope.PROTOTYPE })
 export class RequestLogger {
@@ -521,7 +532,7 @@ export class AuthMiddleware extends MiddlewareService {
   private userService: UserService;
 
   async handle(context: Context, next: () => Promise<void>) {
-    const token = context.getHeader('authorization');
+    const token = context.req.headers['authorization'];
     const payload = this.jwtService.verify(token);
     const user = await this.userService.findById(payload.id);
 
