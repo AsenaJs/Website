@@ -227,9 +227,29 @@ try {
 
 ### Request Headers
 
-Access specific headers using `getHeader()` (via native request object).
+Access specific headers using `req.headers` (via native request object).
+
+
+
+::: tip
+`Hono` req.headers is a function that returns headers as values
 
 ```typescript
+const age:string = context.req.header().Age;
+```
+
+but in the other hand `ergenecore` is just a regular records
+
+```typescript
+const server:string = context.req.headers.get("X-Server")
+```
+:::
+
+
+Here is example 
+
+::: code-group
+```typescript [ergenecore]
 @Get('/auth')
 async checkAuth(context: Context) {
   const token = context.req.headers.get('authorization');
@@ -242,6 +262,21 @@ async checkAuth(context: Context) {
   return context.send({ token, userAgent });
 }
 ```
+
+```typescript [hono]
+@Get('/auth')
+async checkAuth(context: Context) {
+  const token = context.req.header().Authorization;
+  const userAgent = context.req.header()["User-Agent"];
+
+  if (!token) {
+    return context.send({ error: 'Unauthorized' }, 401);
+  }
+
+  return context.send({ token, userAgent });
+}
+```
+:::
 
 ### Form Data
 
@@ -589,11 +624,11 @@ async uploadBlob(context: Context) {
 ### Authentication Flow
 
 ```typescript
-// Middleware sets user data
+// Middleware sets user data 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
   async use(context: Context) {
-    const token = context.req.headers.get('authorization');
+    const token = context.req.header().Authorization;
 
     if (!token) {
       throw new Error('Unauthorized');
@@ -611,66 +646,6 @@ export class ApiController {
   async getProfile(context: Context) {
     const user = context.getValue('user');
     return context.send({ user });
-  }
-}
-```
-
-### Pagination
-
-```typescript
-@Get('/posts')
-async listPosts(context: Context) {
-  const page = Number(await context.getQuery('page')) || 1;
-  const limit = Number(await context.getQuery('limit')) || 20;
-  const offset = (page - 1) * limit;
-
-  const posts = await this.postService.findAll({ offset, limit });
-  const total = await this.postService.count();
-
-  return context.send({
-    posts,
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit),
-      hasNext: offset + limit < total,
-      hasPrev: page > 1
-    }
-  });
-}
-```
-
-### Error Responses
-
-```typescript
-@Get('/resource/:id')
-async getResource(context: Context) {
-  try {
-    const id = Number(context.getParam('id'));
-
-    if (isNaN(id)) {
-      return context.send({
-        error: 'Invalid ID format',
-        code: 'INVALID_ID'
-      }, 400);
-    }
-
-    const resource = await this.service.findById(id);
-
-    if (!resource) {
-      return context.send({
-        error: 'Resource not found',
-        code: 'NOT_FOUND'
-      }, 404);
-    }
-
-    return context.send({ resource });
-  } catch (error) {
-    return context.send({
-      error: 'Internal server error',
-      code: 'INTERNAL_ERROR'
-    }, 500);
   }
 }
 ```

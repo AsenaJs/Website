@@ -170,13 +170,14 @@ async getById(context: Context) {
 ```typescript
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import { CreateUserValidator } from '../validators/CreateUserValidator';
+import type { Context } from '@asenajs/hono-adapter';
 
 @Post({
   path: '/',
   middlewares: [AuthMiddleware],
   validator: CreateUserValidator
 })
-async create(context: Context) {
+public async create(context: Context) {
   const body = await context.getBody();
   return context.send({ created: true, data: body }, 201);
 }
@@ -238,8 +239,8 @@ Access request headers:
 ```typescript
 @Get('/profile')
 async getProfile(context: Context) {
-  const token = context.getHeader('authorization');
-  const userAgent = context.getHeader('user-agent');
+  const token = context.headers["authorization"];
+  const userAgent = context.headers["authorization"];
 
   return context.send({ token, userAgent });
 }
@@ -288,35 +289,58 @@ Both adapters provide a **unified Context API** for common operations.
 
 ### Common Methods (Both Adapters)
 
-```typescript
-import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
+
+::: code-group
+
+```typescript [ergenecore] 
+import type { Context } from '@asenajs/ergenecore';
 ```
+
+
+```typescript [hono] 
+import type { Context } from '@asenajs/hono-adapter'
+```
+:::
 
 | Method | Description | Example |
 |:-------|:------------|:--------|
 | `getParam(key)` | Get route parameter | `context.getParam('id')` |
-| `getQuery(key)` | Get query parameter | `context.getQuery('page')` |
-| `getBody<T>()` | Get parsed request body | `await context.getBody<User>()` |
-| `getHeader(key)` | Get request header | `context.getHeader('authorization')` |
-| `send(data, status?)` | Send JSON response | `context.send({ success: true }, 200)` |
-| `setCookie(name, value, options?)` | Set cookie | `context.setCookie('session', 'abc')` |
-| `getCookie(name)` | Get cookie value | `context.getCookie('session')` |
-| `setValue(key, value)` | Set context state | `context.setValue('userId', 123)` |
-| `getValue(key)` | Get context state | `context.getValue('userId')` |
-| `getRequest()` | Get raw request object | `context.getRequest()` |
+| `getQuery(key)` | Get single query parameter | `await context.getQuery('page')` |
+| `getQueryAll(key)` | Get all values for query parameter | `await context.getQueryAll('colors')` |
+| `getBody<T>()` | Get typed request body | `await context.getBody<User>()` |
+| `getParseBody()` | Get parsed multipart/form-data body | `await context.getParseBody()` |
+| `getArrayBuffer()` | Get body as ArrayBuffer | `await context.getArrayBuffer()` |
+| `getBlob()` | Get body as Blob | `await context.getBlob()` |
+| `getFormData()` | Get body as FormData | `await context.getFormData()` |
+| `getCookie(name, secret?)` | Get cookie value | `await context.getCookie('session')` |
+| `setCookie(name, value, options?)` | Set cookie | `await context.setCookie('token', 'abc123')` |
+| `deleteCookie(name, options?)` | Delete cookie | `await context.deleteCookie('session')` |
+| `setValue(key, value)` | Store value in context state | `context.setValue('userId', 123)` |
+| `getValue<T>(key)` | Get value from context state | `context.getValue<number>('userId')` |
+| `setWebSocketValue(value)` | Store WebSocket-specific value | `context.setWebSocketValue(data)` |
+| `getWebSocketValue<T>()` | Get WebSocket-specific value | `context.getWebSocketValue<WsData>()` |
+| `send(data, status?)` | Send response with auto content-type | `context.send({ success: true }, 200)` |
+| `html(data)` | Send HTML response | `context.html('<h1>Hello</h1>')` |
+| `redirect(url)` | Perform HTTP redirect | `context.redirect('/login')` |
 
-::: tip Advanced Hono Features
-For Hono-specific features (streaming, form data, WebSocket upgrade, etc.), access the native Hono context via `context.req`:
+**Properties:**
+| Property | Type | Description |
+|:---------|:-----|:------------|
+| `req` | `R` | Original request object |
+| `res` | `S` | Original response object |
+| `headers` | `Record<string, string>` | Request headers as key-value pairs |
 
-```typescript
-// Access native Hono request methods
-const contentType = context.req.header('content-type');
-const formData = await context.req.formData();
-```
+::: tip Adapter-Specific APIs Available
+This table shows **unified APIs** that work across all adapters. Each adapter may provide **additional methods** for enhanced functionality.
+
+**Examples:**
+- **Ergenecore**: `context.setResponseHeader(key, value)`
+- **Hono**: Native Hono context via `context.req`
+
+See adapter documentation for complete API reference.
+:::
 
 For more details about Context API methods and advanced usage, see the [Context API Reference](/docs/concepts/context) guide.
-
-:::
 
 ## Service Injection
 
@@ -405,6 +429,24 @@ You can also inject services using their registered name as a string. This is us
 
 First, register your service with a custom name:
 
+::: tip String-Based Injection Requires Named Components
+When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+
+**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+
+**Example:**
+```typescript
+@Service('UserService')
+class UserService { }
+
+@Service('AuthController')
+class AuthController {
+  @Inject('UserService') // ✅ Safe - uses explicit name
+  private userService!: UserService;
+}
+```
+:::
+
 ```typescript
 // src/services/UserService.ts
 import { Service } from '@asenajs/asena/server';
@@ -419,9 +461,9 @@ Then inject using the string name:
 
 ```typescript
 import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
 import { Inject } from '@asenajs/asena/ioc';
-import type { Context } from '@asenajs/ergenecore';
+import { Get, Post } from '@asenajs/asena/web';
+import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
 export class UserController {
@@ -463,8 +505,9 @@ You can apply middleware at three levels: global, controller, and route.
 ```typescript
 import { Controller } from '@asenajs/asena/server';
 import { Get } from '@asenajs/asena/web';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import type { Context } from '@asenajs/ergenecore';
+import { AuthMiddleware } from '../middlewares/AuthMiddleware';
+
 
 @Controller({
   path: '/admin',
@@ -485,8 +528,8 @@ export class AdminController {
 ```typescript
 import { Controller } from '@asenajs/asena/server';
 import { Get, Post } from '@asenajs/asena/web';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import type { Context } from '@asenajs/ergenecore';
+import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
 @Controller('/posts')
 export class PostController {
@@ -545,8 +588,8 @@ export class CreateUserValidator extends ValidationService {
 ```typescript
 import { Controller } from '@asenajs/asena/server';
 import { Post } from '@asenajs/asena/web';
-import { CreateUserValidator } from '../validators/CreateUserValidator';
 import type { Context } from '@asenajs/ergenecore';
+import { CreateUserValidator } from '../validators/CreateUserValidator';
 
 @Controller('/users')
 export class UserController {
@@ -577,8 +620,8 @@ Here's a real-world example combining services, middleware, and validation:
 
 ```typescript
 import { Controller } from '@asenajs/asena/server';
-import { Get, Post, Put, Delete } from '@asenajs/asena/web';
 import { Inject } from '@asenajs/asena/ioc';
+import { Get, Post, Put, Delete } from '@asenajs/asena/web';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import { CreatePostValidator } from '../validators/CreatePostValidator';
 import { UpdatePostValidator } from '../validators/UpdatePostValidator';
@@ -663,71 +706,6 @@ export class PostController {
 }
 ```
 
-## Common Patterns
-
-### Error Handling
-
-```typescript
-@Get('/:id')
-async getById(context: Context) {
-  try {
-    const id = Number(context.getParam('id'));
-    const user = await this.userService.findById(id);
-
-    if (!user) {
-      return context.send({ error: 'User not found' }, 404);
-    }
-
-    return context.send({ user });
-  } catch (error) {
-    return context.send({ error: 'Internal server error' }, 500);
-  }
-}
-```
-
-### Pagination
-
-```typescript
-@Get('/')
-async list(context: Context) {
-  const page = Number(context.getQuery('page')) || 1;
-  const limit = Number(context.getQuery('limit')) || 20;
-  const offset = (page - 1) * limit;
-
-  const users = await this.userService.findAll({ offset, limit });
-  const total = await this.userService.count();
-
-  return context.send({
-    users,
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit)
-    }
-  });
-}
-```
-
-### Search and Filtering
-
-```typescript
-@Get('/search')
-async search(context: Context) {
-  const query = context.getQuery('q');
-  const category = context.getQuery('category');
-  const sortBy = context.getQuery('sort') || 'createdAt';
-
-  const results = await this.postService.search({
-    query,
-    category,
-    sortBy
-  });
-
-  return context.send({ results, query });
-}
-```
-
 ## Best Practices
 
 ::: tip Keep Controllers Thin
@@ -762,6 +740,8 @@ return context.send({
 
 ::: warning Async Handlers
 Always use `async` handlers when working with asynchronous operations like database calls or external APIs.
+
+Do not forget `await` your `Promises`. If not awaited promises throws an error, it will shut down server.
 :::
 
 ## Related Documentation

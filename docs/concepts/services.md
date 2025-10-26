@@ -90,6 +90,11 @@ export class UserController {
 Services can depend on other services:
 
 ```typescript
+// Emailservice.ts
+import { Service } from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/ioc';
+
+
 @Service()
 export class EmailService {
   async sendEmail(to: string, subject: string, body: string) {
@@ -97,6 +102,13 @@ export class EmailService {
     // Email sending logic
   }
 }
+```
+
+```typescript
+// UserService.ts
+import { Service } from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/ioc';
+
 
 @Service()
 export class UserService {
@@ -123,7 +135,9 @@ export class UserService {
 Asena promotes a clean layered architecture:
 
 ```
-Controller → Service → Repository → Database
+Request -> Controller -> Service -> Repository -> Database
+
+Response <- Controller <- Service <- Repository <- Database
 ```
 
 ### Example: Complete Layered Structure
@@ -131,17 +145,10 @@ Controller → Service → Repository → Database
 ```typescript
 // repository.ts
 import { Repository, BaseRepository } from '@asenajs/asena-drizzle';
-import { pgTable, uuid, text } from 'drizzle-orm/pg-core';
 import { eq } from 'drizzle-orm';
 
-const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-});
-
 @Repository({ table: users, databaseService: 'MainDB' })
-export class UserRepository extends BaseRepository<typeof users> {
+export class UserRepository extends BaseRepository<typeof users , BunSQLDatabase> {
   async findByEmail(email: string) {
     return this.findOne(eq(users.email, email));
   }
@@ -350,6 +357,7 @@ export class DatabaseService {
 import { Service } from '@asenajs/asena/server';
 import { Scope } from '@asenajs/asena/ioc';
 
+
 @Service({ scope: Scope.PROTOTYPE })
 export class RequestLoggerService {
   private requestId = crypto.randomUUID();
@@ -465,8 +473,8 @@ export class UserService {
 
 @Controller('/users')
 export class UserController {
-  @Inject('UserService') // ⚠️ No type safety
-  private userService: any; // Manual type annotation needed
+  @Inject('UserService') // Maybe throw runtime error
+  private userService: UserService;
 
   @Get('/:id')
   async getUser(context: Context) {
@@ -492,6 +500,7 @@ Use string-based injection when:
 - Need to swap implementations at runtime
 - Working with dynamically loaded modules
 - Absolute decoupling is required
+- it can improve IDE performance
 
 For most use cases, **class-based injection is recommended**.
 :::
@@ -501,7 +510,8 @@ For most use cases, **class-based injection is recommended**.
 Complete reference for the `@Service` decorator:
 
 ```typescript
-import { Service, Scope } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/server';
+import { Scope } from '@asenajs/asena/ioc';
 
 // 1. Basic service (singleton by default)
 @Service()
@@ -628,8 +638,9 @@ export class UserService {
 Ulak breaks this circular dependency by acting as a centralized message broker:
 
 ```typescript
-import { Service, Inject, ulak } from '@asenajs/asena';
-import type { Ulak } from '@asenajs/asena';
+import { Service} from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/ioc';
+import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('UserService')
 export class UserService {

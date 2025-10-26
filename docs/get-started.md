@@ -77,19 +77,17 @@ bun init -y
 
 ### 2. Install Dependencies
 
-**For Ergenecore adapter (recommended):**
-
-```bash
+::: code-group
+```bash [For ergenecore]
 bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger
 bun add -D @asenajs/asena-cli
 ```
 
-**For Hono adapter:**
-
-```bash
+```bash [For hono]
 bun add @asenajs/asena @asenajs/hono-adapter hono @asenajs/asena-logger
 bun add -D @asenajs/asena-cli
 ```
+:::
 
 ### 3. Configure TypeScript
 
@@ -122,9 +120,9 @@ export const logger = new AsenaLogger();
 
 Create `src/index.ts`:
 
-**For Ergenecore:**
+::: code-group
 
-```typescript
+```typescript [Ergenecore]
 import { AsenaServerFactory } from '@asenajs/asena/server';
 import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
@@ -140,9 +138,7 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 
-**For Hono:**
-
-```typescript
+```typescript [Hono]
 import { AsenaServerFactory } from '@asenajs/asena/server';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
@@ -157,14 +153,14 @@ const server = await AsenaServerFactory.create({
 
 await server.start();
 ```
-
+:::
 ### 6. Create Your First Controller
 
 Create `src/controllers/HelloController.ts`:
 
-**For Ergenecore:**
+::: code-group
 
-```typescript
+```typescript [Ergenecore]
 import { Controller } from '@asenajs/asena/server';
 import { Get } from '@asenajs/asena/web';
 import type { Context } from '@asenajs/ergenecore/types';
@@ -178,9 +174,7 @@ export class HelloController {
 }
 ```
 
-**For Hono:**
-
-```typescript
+```typescript [Hono]
 import { Controller } from '@asenajs/asena/server';
 import { Get } from '@asenajs/asena/web';
 import type { Context } from '@asenajs/hono-adapter/types';
@@ -193,6 +187,7 @@ export class HelloController {
   }
 }
 ```
+:::
 
 ### 7. Initialize CLI Configuration
 
@@ -207,7 +202,8 @@ This creates `asena.config.ts` with default build settings.
 **Development mode:**
 
 ```bash
-asena dev start
+# index.ts must be your root file
+bun run src/index.ts
 ```
 
 **Production build:**
