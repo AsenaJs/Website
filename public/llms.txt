@@ -185,6 +185,80 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
   - Reusable schema patterns (common.ts exports)
   - For Zod schema syntax: https://zod.dev/
 
+- Event System: https://asena.sh/docs/concepts/event-system
+  - Decoupled, event-driven architecture for application components
+  - **Key Features**:
+    - Fire-and-Forget Pattern - Events emitted without waiting for handlers (Spring-like)
+    - Wildcard Pattern Matching - Flexible patterns (*, user.*, *.error, user.*.created)
+    - Error Isolation - Handler errors don't affect other handlers or emitter
+    - Async Support - Both sync and async handlers with smart Promise detection
+    - Full IoC Integration - Dependency injection in event services
+    - Zero Dependencies - Built with native TypeScript and Bun APIs
+  - **Decorators**:
+    - @EventService(params?) - Mark class as event service
+      - prefix?: string - Prefix for all handlers in class
+      - name?: string - Custom component name
+    - @On(params) - Mark method as event handler
+      - event: string - Event pattern to match
+      - skip?: boolean - Skip handler (for debugging)
+  - **Event Patterns**:
+    - Exact match: 'user.created'
+    - Match all: '*'
+    - Prefix wildcard: 'user.*' (matches user.created, user.updated, etc.)
+    - Suffix wildcard: '*.error' (matches user.error, db.error, etc.)
+    - Nested wildcard: 'user.*.created' (matches user.admin.created, etc.)
+  - **EventEmitter API**:
+    - emit(eventName, data?) - Emit event (returns boolean if any handler matched)
+    - Inject with: @Inject(emitter()) or emitter() helper
+  - **Pattern Building with Prefix**:
+    - prefix: 'user', event: 'created' → 'user.created'
+    - prefix: 'user', event: '*.error' → 'user.*.error'
+  - **Event Chaining**: Handlers can emit other events
+  - **Multiple Listeners**: Multiple services can listen to same event
+  - **Dependency Injection**: Full DI support in event services
+  - **Best Practices**:
+    - Use dot-notation for event names (user.created, order.placed)
+    - Organize events by domain with prefixes
+    - Keep handlers lightweight and fast
+    - Use wildcards sparingly (cross-cutting concerns only)
+    - Don't rely on handler execution order
+    - Return values are ignored
+    - Use descriptive event data
+  - **Use Cases**: User registration flow, order processing pipeline, error monitoring, audit logging, real-time notifications
+
+- Static File Serving: https://asena.sh/docs/concepts/static-files
+  - **⚠️ BREAKING CHANGES IN v0.7.0** - API will change significantly
+  - Built-in support via @StaticServe decorator and StaticServeService base class
+  - **Both Adapters Supported** - Ergenecore and Hono
+  - **Setup**:
+    - Create middleware extending StaticServeService
+    - @StaticServe({ root: path }) - Configure root directory
+    - Attach to controller route with staticServe parameter
+  - **Lifecycle Hooks**:
+    - rewriteRequestPath(reqPath) - Transform request path before file lookup
+    - onFound(filePath, context) - Called when file is found
+    - onNotFound(reqPath, context) - Called when file not found
+  - **Configuration**:
+    - root: string - Absolute path to static files directory (required)
+    - Use: path.join(process.cwd(), 'public')
+  - **Examples**:
+    - Basic static server (public directory)
+    - SPA with fallback to index.html
+    - Multiple directories (assets, downloads, images)
+    - Custom headers (Cache-Control, Content-Disposition)
+  - **Best Practices**:
+    - Use absolute paths for root directory
+    - Implement security checks (prevent directory traversal)
+    - Set appropriate cache headers in onFound
+    - Log 404s in onNotFound for monitoring
+    - Keep middleware simple and fast
+    - Prepare for v0.7.0 API changes
+  - **Common Use Cases**:
+    - Serve build output (React/Vue/Svelte dist)
+    - Serve documentation (VitePress, Storybook)
+    - Serve user uploads
+    - Force downloads with Content-Disposition header
+
 ## HTTP Adapters
 
 - Adapters Overview: https://asena.sh/docs/adapters/overview
@@ -414,7 +488,7 @@ Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime 
 ### Adapter-Specific Features
 - **Ergenecore Only**: Validation with Zod, Built-in CORS/RateLimiter, Factory presets
 - **Hono Only**: @Override decorator for native Hono context access
-- **Both**: Unified Context API, Static file serving, WebSocket support
+- **Both**: Unified Context API, Static file serving, WebSocket support, Event System
 
 ### Dependency Injection Patterns
 - @Inject(ClassName) - Class-based (type-safe, recommended)

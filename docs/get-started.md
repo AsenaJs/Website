@@ -50,6 +50,10 @@ cd my-app
 asena dev start
 ```
 
+::: warning
+You shouldn't use `asena dev start` for production. It will be removed in feature releases. Its for quick testings only
+:::
+
 Your server is now running at `http://localhost:3000`!
 
 Test it:
@@ -81,11 +85,15 @@ bun init -y
 ```bash [For ergenecore]
 bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger
 bun add -D @asenajs/asena-cli
+bunx asena init
+✔ Which adapter do you want to use? Ergenecore Adapter
 ```
 
 ```bash [For hono]
 bun add @asenajs/asena @asenajs/hono-adapter hono @asenajs/asena-logger
 bun add -D @asenajs/asena-cli
+bunx asena init
+✔ Which adapter do you want to use? Hono Adapter
 ```
 :::
 
@@ -123,7 +131,7 @@ Create `src/index.ts`:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { AsenaServerFactory } from '@asenajs/asena/server';
+import { AsenaServerFactory } from '@asenajs/asena';
 import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
@@ -139,7 +147,7 @@ await server.start();
 ```
 
 ```typescript [Hono]
-import { AsenaServerFactory } from '@asenajs/asena/server';
+import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
@@ -163,7 +171,7 @@ Create `src/controllers/HelloController.ts`:
 ```typescript [Ergenecore]
 import { Controller } from '@asenajs/asena/server';
 import { Get } from '@asenajs/asena/web';
-import type { Context } from '@asenajs/ergenecore/types';
+import { type Context } from '@asenajs/ergenecore';
 
 @Controller('/')
 export class HelloController {
@@ -177,7 +185,7 @@ export class HelloController {
 ```typescript [Hono]
 import { Controller } from '@asenajs/asena/server';
 import { Get } from '@asenajs/asena/web';
-import type { Context } from '@asenajs/hono-adapter/types';
+import { type Context } from '@asenajs/hono-adapter';
 
 @Controller('/')
 export class HelloController {
@@ -205,6 +213,19 @@ This creates `asena.config.ts` with default build settings.
 # index.ts must be your root file
 bun run src/index.ts
 ```
+
+::: tip Hot Reload for Faster Development
+Enable hot reloading to automatically restart your server on file changes:
+```bash
+bun run --hot src/index.ts
+```
+
+**What hot reload does:**
+- Watches all source files for changes
+- Automatically refreshes the server process
+- Preserves in-memory state when possible
+- Ideal for rapid iteration and testing
+:::
 
 **Production build:**
 

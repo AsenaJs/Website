@@ -134,9 +134,9 @@ export class UniqueEmailValidator extends ValidationService {
 ## Validation Hooks
 
 Use `ValidationSchemaWithHook` to execute custom logic after validation:
-
-```typescript
-import type { ValidationSchemaWithHook } from '@asenajs/ergenecore';
+::: code-group
+```typescript [ergenecore]
+import { type ValidationSchemaWithHook, ValidationService } from '@asenajs/ergenecore';
 
 @Middleware({ validator: true })
 export class UserValidatorWithHook extends ValidationService {
@@ -168,6 +168,39 @@ export class UserValidatorWithHook extends ValidationService {
 }
 ```
 
+```typescript [hono]
+import { type ValidationSchemaWithHook, ValidationService } from '@asenajs/hono-adapter';
+
+@Middleware({ validator: true })
+export class UserValidatorWithHook extends ValidationService {
+  json(): ValidationSchemaWithHook {
+    return {
+      schema: z.object({
+        email: z.string().email(),
+        password: z.string().min(8)
+      }),
+
+      hook: (result, context) => {
+        // result: validated data
+        // context: Ergenecore Context
+
+        // Log validation success
+        console.log('Validated user data:', result);
+
+        // Store in context for later use
+        context.setValue('validatedEmail', result.email);
+
+        // Transform or enrich data
+        return {
+          ...result,
+          emailLowercase: result.email.toLowerCase()
+        };
+      }
+    };
+  }
+}
+```
+:::
 ### Hook Function Signature
 
 ```typescript

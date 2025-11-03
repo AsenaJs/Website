@@ -13,9 +13,8 @@ Asena provides built-in WebSocket support with namespace management, allowing yo
 Create a WebSocket service by extending `AsenaWebSocketService` and decorating it with `@WebSocket`:
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/web-socket';
-import { AsenaWebSocketService } from '@asenajs/asena/web-socket';
-import type { Socket } from '@asenajs/asena/web-socket';
+import { WebSocket } from '@asenajs/asena/server';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
 export class ChatSocket extends AsenaWebSocketService<void> {
@@ -94,8 +93,17 @@ console.log(`Socket ID: ${ws.id}`);
 
 ### ws.data
 
-Custom data attached to the socket (typed).
+Custom data attached to the socket (typed). It holds 3 values.
 
+```typescript
+export interface WebSocketData<T = any> {
+  values: T;
+  id: string;
+  path: string;
+}
+
+```
+Asena automatically assigns the `id` and `path` fields. The `values: T` field is reserved for user-managed data. You can update it through `context.setWebSocketValue`, and it will automatically sync to `socket.data.values`
 ```typescript
 interface UserData {
   userId: string;
@@ -105,7 +113,7 @@ interface UserData {
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
 export class ChatSocket extends AsenaWebSocketService<UserData> {
   protected async onOpen(ws: Socket<UserData>): Promise<void> {
-    console.log(`User connected: ${ws.data?.username}`);
+    console.log(`User connected: ${ws.data.values.username}`);
   }
 }
 ```
@@ -138,8 +146,8 @@ interface ChatData {
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const room = ws.data?.room || 'general';
-    const username = ws.data?.username || 'Anonymous';
+    const room = ws.data.values.room || 'general';
+    const username = ws.data.values.username || 'Anonymous';
 
     // Subscribe to room - Asena tracks this automatically
     ws.subscribe(room);
