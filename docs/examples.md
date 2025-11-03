@@ -72,12 +72,48 @@ import { users } from '../database';
 import { eq } from 'drizzle-orm';
 
 @Repository({ table: users, databaseService: 'MainDB' })
-export class UserRepository extends BaseRepository<typeof users> {
+export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
   async findByEmail(email: string) {
     return this.findOne(eq(users.email, email));
   }
 }
 ```
+
+::: tip Type-Safe Repository Pattern
+Always provide both generic parameters to your repository for full TypeScript support:
+```typescript
+// First parameter: Your table schema
+// Second parameter: Your database connection type
+export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
+  // Now you have full IntelliSense and type checking!
+}
+```
+
+**Why this matters:**
+Without the database type parameter, TypeScript cannot infer the correct query builder methods, and you'll lose IDE autocomplete features.
+
+**Available Database Types:**
+
+| Database | Driver | Type to Use |
+|----------|--------|-------------|
+| PostgreSQL | `pg` | `NodePgDatabase<any>` |
+| MySQL | `mysql2` | `MySql2Database<any>` |
+| SQLite | `bun:sqlite` | `BunSQLDatabase<any>` |
+
+**Complete Example:**
+```typescript
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { users } from './schema';
+
+@Repository(users)
+export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
+  // Type-safe methods with IntelliSense
+  async findByEmail(email: string) {
+    return this.query().where(eq(users.email, email)).limit(1);
+  }
+}
+```
+:::
 
 ### Service
 
@@ -160,7 +196,7 @@ export class UpdateUserValidator extends ValidationService {
 import { Controller } from '@asenajs/asena/server';
 import { Get, Post, Put, Delete } from '@asenajs/asena/web';
 import { Inject } from '@asenajs/asena/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 import { CreateUserValidator } from '../validators/CreateUserValidator';
 import { UpdateUserValidator } from '../validators/UpdateUserValidator';
@@ -225,7 +261,7 @@ export class UserController {
 
 ```typescript
 // src/index.ts
-import { AsenaServerFactory } from '@asenajs/asena/server';
+import { AsenaServerFactory } from '@asenajs/asena';
 import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
@@ -309,150 +345,41 @@ interface ChatData {
 
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
-  private users = new Map<string, { username: string; socket: Socket<ChatData> }>();
-  private rooms = new Map<string, Set<string>>();
 
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data?.username || 'Anonymous';
-    const room = ws.data?.room || 'general';
+    const username = ws.data.value?.username || 'Anonymous';
+    const room = ws.data.value?.room || 'general';
 
-    // Store user
-    this.users.set(ws.id, { username, socket: ws });
+    // Send message to socket
+    ws.send(`Hello ${username}`)
 
-    // Add to room
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Set());
-    }
-    this.rooms.get(room)!.add(ws.id);
+    // Join room
+    ws.subscribe(room);
 
-    // Notify room
-    this.broadcastToRoom(room, JSON.stringify({
-      type: 'user_joined',
-      username,
-      totalUsers: this.rooms.get(room)!.size
-    }), ws.id);
-
-    // Welcome message
-    ws.send(JSON.stringify({
-      type: 'welcome',
-      message: `Welcome to ${room}, ${username}!`
-    }));
+    // send message to all room.
+    this.server.to(room, `User joined: ${username}`)
   }
 
   protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-    const user = this.users.get(ws.id);
-    const room = ws.data?.room || 'general';
+    const username = ws.data.value?.username || 'Anonymous';
+    const room = ws.data.value?.room || 'general';
 
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === 'message') {
-        this.broadcastToRoom(room, JSON.stringify({
-          type: 'message',
-          username: user?.username,
-          message: data.message,
-          timestamp: new Date().toISOString()
-        }));
-      }
-    } catch (error) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-    }
+    // send message to other sockets in room. (except itself)
+    ws.publish(room, message);
   }
 
   protected async onClose(ws: Socket<ChatData>): Promise<void> {
-    const user = this.users.get(ws.id);
-    const room = ws.data?.room || 'general';
+    const username = ws.data.value?.username || 'Anonymous';
+    const room = ws.data.value?.room || 'general';
 
-    this.users.delete(ws.id);
+    // leave room
+    ws.unsubscribe(room);
 
-    if (this.rooms.has(room)) {
-      this.rooms.get(room)!.delete(ws.id);
-
-      this.broadcastToRoom(room, JSON.stringify({
-        type: 'user_left',
-        username: user?.username,
-        totalUsers: this.rooms.get(room)!.size
-      }));
-
-      if (this.rooms.get(room)!.size === 0) {
-        this.rooms.delete(room);
-      }
-    }
-  }
-
-  private broadcastToRoom(room: string, message: string, excludeId?: string) {
-    const socketIds = this.rooms.get(room);
-    if (!socketIds) return;
-
-    for (const socketId of socketIds) {
-      if (excludeId && socketId === excludeId) continue;
-
-      const user = this.users.get(socketId);
-      if (user) {
-        user.socket.send(message);
-      }
-    }
+    // send message to all room.
+    this.server.to(room, `User leaved: ${username}`)
   }
 }
 ```
-
-### Client-Side Code
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Chat</title>
-</head>
-<body>
-  <div id="messages"></div>
-  <input id="messageInput" type="text" placeholder="Type a message...">
-  <button onclick="sendMessage()">Send</button>
-
-  <script>
-    const username = prompt('Enter your username:');
-    const room = prompt('Enter room name:');
-    const ws = new WebSocket(`ws://localhost:3000/chat?username=${username}&room=${room}`);
-
-    ws.addEventListener('open', () => {
-      console.log('Connected to chat!');
-    });
-
-    ws.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      const messagesDiv = document.getElementById('messages');
-
-      if (data.type === 'welcome') {
-        messagesDiv.innerHTML += `<p><strong>${data.message}</strong></p>`;
-      }
-
-      if (data.type === 'message') {
-        messagesDiv.innerHTML += `<p><strong>${data.username}:</strong> ${data.message}</p>`;
-      }
-
-      if (data.type === 'user_joined') {
-        messagesDiv.innerHTML += `<p><em>${data.username} joined (${data.totalUsers} users)</em></p>`;
-      }
-
-      if (data.type === 'user_left') {
-        messagesDiv.innerHTML += `<p><em>${data.username} left (${data.totalUsers} users)</em></p>`;
-      }
-    });
-
-    function sendMessage() {
-      const input = document.getElementById('messageInput');
-      ws.send(JSON.stringify({
-        type: 'message',
-        message: input.value
-      }));
-      input.value = '';
-    }
-  </script>
-</body>
-</html>
-```
-
----
 
 ## Authentication with Middleware
 

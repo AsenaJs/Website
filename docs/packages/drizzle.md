@@ -52,6 +52,16 @@ export const users = pgTable('users', {
 ```
 
 ### 2. Setup Database Service
+```typescript
+// database/schemas/index.ts
+import * as User from '../schemas/user.schema.ts';
+
+export default {
+  ...User,
+};
+```
+
+
 
 ```typescript
 import { Database, AsenaDatabaseService } from '@asenajs/asena-drizzle';
@@ -67,8 +77,33 @@ import { Database, AsenaDatabaseService } from '@asenajs/asena-drizzle';
   },
   name: 'MainDatabase' // Recommended: used for IoC registration
 })
-export class MyDatabase extends AsenaDatabaseService {}
+export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {}
 ```
+::: tip 💡 Schema Export Pattern
+
+We export all schemas as a single object for better TypeScript support:
+```typescript
+// database/schemas/index.ts
+import * as User from './user.schema';
+export default { ...User };
+```
+
+**Why?**
+- ✅ Full IntelliSense in queries
+- ✅ Type-safe column access
+- ✅ Autocomplete for table names
+- ✅ Compile-time error catching
+
+**Usage:**
+```typescript
+export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {
+  // Now you have full type safety! 🎉
+}
+```
+
+This is Drizzle's recommended pattern for optimal developer experience.
+:::
+
 
 ### 3. Create Repository
 
@@ -80,7 +115,7 @@ import { eq } from 'drizzle-orm';
   table: users,
   databaseService: 'MainDatabase',
 })
-export class UserRepository extends BaseRepository<typeof users> {
+export class UserRepository extends BaseRepository<typeof users,BunSQLDatabase<typeof Schemas>> {
   async findByEmail(email: string) {
     return this.findOne(eq(users.email, email));
   }
@@ -90,6 +125,42 @@ export class UserRepository extends BaseRepository<typeof users> {
   }
 }
 ```
+
+::: tip Type-Safe Repository Pattern
+Always provide both generic parameters to your repository for full TypeScript support:
+```typescript
+// First parameter: Your table schema
+// Second parameter: Your database connection type
+export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<typeof Schemas>> {
+  // Now you have full IntelliSense and type checking!
+}
+```
+
+**Why this matters:**
+Without the database type parameter, TypeScript cannot infer the correct query builder methods, and you'll lose IDE autocomplete features.
+
+**Available Database Types:**
+
+| Database | Driver | Type to Use |
+|----------|--------|-------------|
+| PostgreSQL | `pg` | `NodePgDatabase<typeof Schemas>` |
+| MySQL | `mysql2` | `MySql2Database<typeof Schemas>` |
+| SQLite | `bun:sqlite` | `BunSQLDatabase<typeof Schemas>` |
+
+**Complete Example:**
+```typescript
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { users } from './schema';
+
+@Repository(users)
+export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<typeof Schemas>> {
+  // Type-safe methods with IntelliSense
+  async findByEmail(email: string) {
+    return this.query().where(eq(users.email, email)).limit(1);
+  }
+}
+```
+:::
 
 ### 4. Use in Services
 

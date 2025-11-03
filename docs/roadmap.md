@@ -14,7 +14,7 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.4.x)
+## ✅ Current Release (v0.6.x)
 
 These features are **stable and production-ready** in the current release:
 
@@ -28,6 +28,7 @@ These features are **stable and production-ready** in the current release:
 - **Context API** - Unified request context abstraction across adapters
 - **WebSocket Support** - Decorator-based WebSocket services with namespace support
 - **Configuration Management** - `@Config` decorator for server configuration
+- **EventService Support** - Asena have built-in native EventService support with `@EventService` and `@On` 
 
 ### Adapters
 
@@ -45,11 +46,12 @@ These features are **stable and production-ready** in the current release:
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on `asena-config.ts`, significantly improving performance by reducing cold start time and package size
 
----
 
-## 🚧 In Active Development (v0.5.0)
+## 🚧 In Active Development (v0.7.0)
 
 These features are **currently being developed** and will be available soon:
+
+---
 
 ### Official Packages
 
@@ -60,42 +62,58 @@ Redis integration package with connection pooling and caching utilities.
 
 **Status:** In development
 
-#### @asenajs/nats
-NATS messaging integration for microservices communication.
-
-**Features:**
-- NATS client with IoC support
-- Request/reply pattern
-- Publish/subscribe messaging
-- Queue groups and load balancing
-- Microservices communication helpers
-
-**Status:** In development
+---
 
 ### Framework Features
 
-#### AsenaEventRoute
+#### Enhanced Error Handling System
+Asena currently does not provide a robust error handling API. Version 0.7.0 introduces a sophisticated exception handling system inspired by NestJS and Spring Framework, featuring:
 
-Event-based routing system for internal framework events.
-
-**Features:**
-
-- Route-based event handling with decorators
-- Event lifecycle management
-- Event middleware support
-- Type-safe event payloads
-- Event namespaces and filtering
-
-**Use Cases:**
-
-- Application lifecycle hooks
-- Custom framework events
-- Plugin system foundation
-- Inter-service communication
-
-**Status:** Planned for v0.5.0
+- **@ExceptionHandler** decorator for centralized error handling
+- Built-in exception classes.
+- Custom exception filters
 
 ---
+
+#### FrontendController: Monolithic Application Support
+
+Bun runtime natively supports serving frontend applications alongside your backend. We're bringing this capability to Asena with the new `@FrontendController` decorator, enabling true monolithic architecture.
+
+**Why This Matters:**
+- Deploy your entire application as a single unit
+- No need for separate frontend hosting
+- Simplified development workflow
+- Reduced infrastructure complexity
+
+**Proposed Syntax:**
+```typescript
+@FrontendController()
+export class MyFrontendService {
+  // Serve static HTML pages
+  @Route('/')
+  public homepage = './public/index.html';
+
+  @Route('/dashboard')
+  public dashboard = './public/dashboard.html';
+
+  // Serve SPA routes
+  @Route('/app/*')
+  public reactApp = './dist/index.html';
+}
+```
+
+With this syntax, you can serve your React, Vue, Svelte applications or plain HTML projects directly through Asena. The framework will handle:
+- Static file resolution
+- SPA routing (catch-all routes for client-side routing)
+- Content-type detection
+- Efficient file caching
+- Development mode hot-reload integration
+
+**Use Cases:**
+- Full-stack TypeScript applications
+- Admin dashboards with REST API
+- Server-rendered + client-rendered hybrid apps
+- Internal tools with minimal infrastructure
 
 ## 📋 Planned for v1.0
 
@@ -201,8 +219,9 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.4.x | Current | Possible | Yes (with caution) |
-| v0.5.x | Next | Possible | Yes (with caution) |
+| v0.4.x  | Current | Possible | Yes (with caution) |
+| v0.5.x  | Next | Possible | Yes (with caution) |
+| v0.6.x  | Next | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
