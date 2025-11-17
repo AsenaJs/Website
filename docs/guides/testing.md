@@ -6,24 +6,22 @@ outline: deep
 
 # Testing
 
-::: info Coming Soon
-This guide is currently under development. Check back soon for comprehensive testing documentation including:
+::: info Moved to New Location
+The testing documentation has been moved to its own dedicated section.
 
-- Testing Controllers
-- Testing Services
-- Testing Middleware
-- Testing WebSocket
-- Integration Tests
-- Mocking Dependencies
-- Testing with Bun Test
+**Please visit:** [Testing Overview](/docs/testing/overview)
 :::
 
-## Related Documentation
+## Testing Documentation
 
-- [Controllers](/docs/concepts/controllers)
-- [Services](/docs/concepts/services)
-- [Dependency Injection](/docs/concepts/dependency-injection)
+The complete testing documentation is now available in the Testing section:
 
----
+- **[Overview](/docs/testing/overview)** - Introduction to testing in Asena with Bun's test runner
+- **[MockComponent API](/docs/testing/mock-component)** - Complete API reference for automatic dependency mocking
+- **[Examples](/docs/testing/examples)** - Real-world testing patterns for controllers, services, and WebSockets
 
-**Stay Updated:** Follow us on [GitHub](https://github.com/AsenaJs/Asena) for updates.
+## Quick Links
+
+- [Testing Overview](/docs/testing/overview)
+- [MockComponent API](/docs/testing/mock-component)
+- [Testing Examples](/docs/testing/examples)

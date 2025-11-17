@@ -83,6 +83,14 @@ export default defineConfig({
                     {text: "Error Handling", link: "/docs/guides/error-handling"},
                 ],
             },
+            {
+                text: "Testing",
+                items: [
+                    {text: "Overview", link: "/docs/testing/overview"},
+                    {text: "MockComponent API", link: "/docs/testing/mock-component"},
+                    {text: "Examples", link: "/docs/testing/examples"},
+                ],
+            },
         ],
 
         editLink: {
