@@ -43,8 +43,8 @@ The `mockComponent` function automatically discovers and mocks all injected depe
 ```typescript
 import { describe, test, expect } from 'bun:test';
 import { mockComponent } from '@asenajs/asena/test';
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
@@ -94,8 +94,8 @@ import { mockComponent, mockComponentAsync } from '@asenajs/asena/test';
 ### Services with Dependency Injection
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class StripeClient {
@@ -132,9 +132,9 @@ const { instance, mocks } = mockComponent(PaymentService);
 ### Controllers
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Service()
@@ -162,8 +162,8 @@ const { instance, mocks } = mockComponent(UserController);
 ### WebSocket Services
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @Service()
@@ -264,8 +264,8 @@ const { instance, mocks } = mockComponent(AuthService, {
 Supports `@Inject` expression transformations:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {

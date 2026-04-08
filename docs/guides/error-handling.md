@@ -38,8 +38,8 @@ The simplest way to handle errors in Asena is to throw an `HttpException` (Ergen
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { HttpException } from '@asenajs/ergenecore';
 import type { Context } from '@asenajs/ergenecore';
 
@@ -63,8 +63,8 @@ export class UserController {
 
 
 ```typescript [Hono]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { HTTPException } from 'hono/http-exception';
 import type { Context } from '@asenajs/hono-adapter';
 
@@ -141,7 +141,7 @@ Both adapters support the `onError()` hook in your `ServerConfig` class.
 #### Basic Global Error Handler
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
 
 @Config()
@@ -168,8 +168,8 @@ For complex applications, use the **ExceptionMapper pattern** to handle differen
 
 ```typescript
 // src/exceptions/ExceptionMapper.ts
-import { Scope } from '@asenajs/asena/ioc';
-import { Component } from '@asenajs/asena/server';
+import { Scope } from '@asenajs/asena/decorators/ioc';
+import { Component } from '@asenajs/asena/decorators';
 import type { Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
@@ -234,8 +234,8 @@ export class ExceptionMapper {
 
 ```typescript
 // src/config/ServerConfig.ts
-import { Inject } from '@asenajs/asena/ioc';
-import { Config } from '@asenajs/asena/server';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/hono-adapter';
 import type { ExceptionMapper } from '../exceptions/ExceptionMapper';
 
@@ -298,8 +298,8 @@ export class AuthError extends Error {
 #### In Controllers
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 import { AuthError } from '../errors/AuthError';
 
@@ -323,7 +323,7 @@ export class AuthController {
 #### In Middleware
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import type { Context, MiddlewareService } from '@asenajs/hono-adapter';
 import type { Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';

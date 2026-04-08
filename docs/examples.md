@@ -119,8 +119,8 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 
 ```typescript
 // src/services/UserService.ts
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { UserRepository } from '../repositories/UserRepository';
 
 @Service()
@@ -163,7 +163,7 @@ export class UserService {
 
 ```typescript
 // src/validators/CreateUserValidator.ts
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
@@ -193,9 +193,9 @@ export class UpdateUserValidator extends ValidationService {
 
 ```typescript
 // src/controllers/UserController.ts
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post, Put, Delete } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post, Put, Delete } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 import { CreateUserValidator } from '../validators/CreateUserValidator';
@@ -389,7 +389,7 @@ Implementing JWT authentication with middleware.
 
 ```typescript
 // src/services/AuthService.ts
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class AuthService {
@@ -412,9 +412,9 @@ export class AuthService {
 
 ```typescript
 // src/middlewares/AuthMiddleware.ts
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { AuthService } from '../services/AuthService';
 
 @Middleware()
@@ -444,8 +444,8 @@ export class AuthMiddleware extends MiddlewareService {
 
 ```typescript
 // src/controllers/ProfileController.ts
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore/types';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
@@ -469,9 +469,9 @@ export class ProfileController {
 
 ```typescript
 // src/controllers/AuthController.ts
-import { Controller } from '@asenajs/asena/server';
-import { Post } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore/types';
 import { AuthService } from '../services/AuthService';
 
@@ -523,7 +523,7 @@ Using built-in rate limiter middleware.
 
 ```typescript
 // src/middlewares/ApiRateLimiter.ts
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { RateLimiterMiddleware } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -570,7 +570,7 @@ Setting up CORS for cross-origin requests.
 
 ```typescript
 // src/middlewares/GlobalCors.ts
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { CorsMiddleware } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -587,7 +587,7 @@ export class GlobalCors extends CorsMiddleware {
 }
 
 // src/config/ServerConfig.ts
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 import { GlobalCors } from '../middlewares/GlobalCors';
 
@@ -599,6 +599,244 @@ export class ServerConfig extends ConfigService {
 
 ---
 
+## OpenAPI Auto-Documentation
+
+Automatically generate OpenAPI specs from your existing validators — zero extra annotations.
+
+### Setup
+
+```typescript
+// src/openapi/AppOpenApi.ts
+import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
+
+@OpenApi({
+  info: { title: 'My API', version: '1.0.0' },
+  path: '/api/openapi',
+  ui: true,
+})
+export class AppOpenApi extends OpenApiPostProcessor {}
+```
+
+### Validator with Response Schema
+
+```typescript
+// src/validators/CreateUserValidator.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { ValidationService } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+@Middleware({ validator: true })
+export class CreateUserValidator extends ValidationService {
+  json() {
+    return z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+    });
+  }
+
+  response() {
+    return {
+      201: z.object({ id: z.string(), name: z.string() }),
+      400: { schema: z.object({ error: z.string() }), description: 'Validation error' },
+    };
+  }
+}
+```
+
+### Test
+
+```bash
+# Get OpenAPI spec
+curl http://localhost:3000/api/openapi
+
+# Open Swagger UI in browser
+open http://localhost:3000/api/openapi/ui
+```
+
+::: info
+For full documentation, see [OpenAPI Package](/docs/packages/openapi).
+:::
+
+---
+
+## Redis Caching
+
+Add Redis-powered caching with decorator-based setup.
+
+### Redis Service
+
+```typescript
+// src/redis/AppRedis.ts
+import { Redis, AsenaRedisService } from '@asenajs/asena-redis';
+
+@Redis({
+  config: { url: 'redis://localhost:6379' },
+  name: 'AppRedis',
+})
+export class AppRedis extends AsenaRedisService {
+
+  async getOrSet(key: string, factory: () => Promise<string>, ttl?: number): Promise<string> {
+    const cached = await this.get(key);
+    if (cached) return cached;
+
+    const value = await factory();
+    await this.set(key, value, ttl);
+    return value;
+  }
+
+}
+```
+
+### Cache Controller
+
+```typescript
+// src/controllers/CacheController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import type { Context } from '@asenajs/ergenecore';
+
+@Controller('/api/cache')
+export class CacheController {
+
+  @Inject('AppRedis')
+  private redis: AppRedis;
+
+  @Get('/user/:id')
+  async getUser(context: Context) {
+    const id = context.getParam('id');
+    const name = await this.redis.getOrSet(`user:${id}`, async () => {
+      // Simulate DB lookup
+      return `User-${id}`;
+    }, 60);
+
+    return context.send({ id, name, cached: true });
+  }
+
+}
+```
+
+### Test
+
+```bash
+# First call — fetches from "DB" and caches
+curl http://localhost:3000/api/cache/user/42
+
+# Second call — served from Redis cache
+curl http://localhost:3000/api/cache/user/42
+```
+
+::: info
+For full documentation, see [Redis Package](/docs/packages/redis).
+:::
+
+---
+
+## Scheduled Tasks
+
+Run background jobs on a cron schedule using Bun's native cron support.
+
+### Cleanup Task
+
+```typescript
+// src/schedule/SessionCleanup.ts
+import { Schedule } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import type { AsenaSchedule } from '@asenajs/asena/schedule';
+
+@Schedule({ cron: '0 2 * * *' }) // Daily at 2:00 AM
+export class SessionCleanup implements AsenaSchedule {
+
+  @Inject('SessionRepository')
+  private sessionRepo: SessionRepository;
+
+  public async execute() {
+    const count = await this.sessionRepo.deleteExpired();
+    console.log(`Cleaned up ${count} expired sessions`);
+  }
+
+}
+```
+
+### Cron Health Endpoint
+
+```typescript
+// src/controllers/CronController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
+import type { CronRunner } from '@asenajs/asena/schedule';
+import type { Context } from '@asenajs/ergenecore';
+
+@Controller('/api/cron')
+export class CronController {
+
+  @Inject(ICoreServiceNames.CRON_RUNNER)
+  private cronRunner: CronRunner;
+
+  @Get('/status')
+  async status(context: Context) {
+    return context.send({
+      jobs: this.cronRunner.getJobNames(),
+      count: this.cronRunner.jobCount,
+      running: this.cronRunner.hasRunningJobs,
+    });
+  }
+
+}
+```
+
+### Test
+
+```bash
+curl http://localhost:3000/api/cron/status
+# {"jobs":["SessionCleanup"],"count":1,"running":true}
+```
+
+::: info
+For full documentation, see [Scheduled Tasks](/docs/concepts/scheduled-tasks).
+:::
+
+---
+
+## Frontend Controller
+
+Serve HTML pages using Bun's native HTML imports — zero middleware overhead.
+
+```typescript
+// src/frontend/AppFrontendController.ts
+import { FrontendController } from '@asenajs/asena/decorators';
+import { Page } from '@asenajs/asena/decorators/http';
+
+@FrontendController('/ui')
+export class AppFrontendController {
+
+  @Page('/')
+  public home() {
+    return import('./pages/home.html');
+  }
+
+  @Page('/settings')
+  public settings() {
+    return import('./pages/settings.html');
+  }
+
+}
+```
+
+Visit `http://localhost:3000/ui` to see the home page, and `http://localhost:3000/ui/settings` for settings.
+
+::: warning
+FrontendController routes bypass the middleware chain entirely (no CORS, auth, etc.). Use `@Controller` for routes that need middleware.
+:::
+
+::: info
+For full documentation, see [Frontend Controller](/docs/concepts/frontend-controller).
+:::
+
+---
+
 ## Related Documentation
 
 - [Controllers](/docs/concepts/controllers) - HTTP routing
@@ -606,6 +844,11 @@ export class ServerConfig extends ConfigService {
 - [Middleware](/docs/concepts/middleware) - Request interception
 - [Validation](/docs/concepts/validation) - Request validation
 - [WebSocket](/docs/concepts/websocket) - Real-time communication
+- [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling
+- [Frontend Controller](/docs/concepts/frontend-controller) - HTML page serving
+- [PostProcessor](/docs/concepts/post-processor) - Component interception
+- [OpenAPI Package](/docs/packages/openapi) - API documentation
+- [Redis Package](/docs/packages/redis) - Redis integration
 - [Drizzle Package](/docs/packages/drizzle) - Database integration
 - [Logger Package](/docs/packages/logger) - Logging
 

@@ -62,8 +62,8 @@ Ulak acts as a mediator between your services and WebSocket connections:
 Inject a scoped Ulak namespace in your service:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('UserService')
@@ -104,9 +104,9 @@ export class UserService {
 Your WebSocket handlers continue to work as before:
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/server';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @WebSocket('/notifications')
 export class NotificationWebSocket extends AsenaWebSocketService<{ userId: string }> {
@@ -135,8 +135,8 @@ export class NotificationWebSocket extends AsenaWebSocketService<{ userId: strin
 The most ergonomic API - no namespace repetition:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('ChatService')
@@ -161,8 +161,8 @@ export class ChatService {
 For advanced scenarios with transformations:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
 import { ICoreServiceNames } from '@asenajs/asena';
 
@@ -184,8 +184,8 @@ export class NotificationService {
 For working with multiple or dynamic namespaces:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
 import { ICoreServiceNames } from '@asenajs/asena';
 
@@ -209,8 +209,8 @@ export class MultiChannelService {
 When you need to work with multiple namespaces regularly:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('AdminService')
@@ -512,8 +512,8 @@ await this.chat.to('room-3', data);
 Use TypeScript interfaces for message types:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 interface ChatMessage {
@@ -539,8 +539,8 @@ export class ChatService {
 ### Real-Time Notifications System
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('NotificationService')
@@ -580,8 +580,8 @@ export class NotificationService {
 ### Multi-Namespace Dashboard
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('DashboardService')
@@ -613,8 +613,8 @@ export class DashboardService {
 ### Background Job Notifications
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('JobService')

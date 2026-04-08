@@ -15,9 +15,9 @@ This page provides practical testing examples for common Asena components.
 ```typescript
 import { describe, test, expect } from 'bun:test';
 import { mockComponent } from '@asenajs/asena/test';
-import { Controller } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Service()
@@ -97,8 +97,8 @@ describe('UserController', () => {
 ```typescript
 import { describe, test, expect } from 'bun:test';
 import { mockComponent } from '@asenajs/asena/test';
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class DatabaseService {
@@ -212,8 +212,8 @@ describe('UserService - Error Handling', () => {
 ```typescript
 import { describe, test, expect, mock } from 'bun:test';
 import { mockComponent } from '@asenajs/asena/test';
-import { WebSocket } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @Service()
@@ -300,8 +300,8 @@ describe('ChatSocket', () => {
 ```typescript
 import { describe, test, expect, mock } from 'bun:test';
 import { mockComponent } from '@asenajs/asena/test';
-import { Middleware } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Middleware } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Service()

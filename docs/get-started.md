@@ -169,8 +169,8 @@ Create `src/controllers/HelloController.ts`:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { type Context } from '@asenajs/ergenecore';
 
 @Controller('/')
@@ -183,8 +183,8 @@ export class HelloController {
 ```
 
 ```typescript [Hono]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { type Context } from '@asenajs/hono-adapter';
 
 @Controller('/')
@@ -268,7 +268,11 @@ Now that you have a working Asena application:
 - **Add more routes** - Learn about [Controllers](/docs/concepts/controllers)
 - **Add business logic** - Learn about [Services](/docs/concepts/services)
 - **Add middleware** - Learn about [Middleware](/docs/concepts/middleware)
-- **Add validation** - Learn about [Validation](/docs/concepts/validation) (Ergenecore only)
+- **Add validation** - Learn about [Validation](/docs/concepts/validation)
+- **Add cron jobs** - Learn about [Scheduled Tasks](/docs/concepts/scheduled-tasks)
+- **Serve HTML pages** - Learn about [Frontend Controller](/docs/concepts/frontend-controller)
+- **Auto-generate API docs** - Set up [OpenAPI](/docs/packages/openapi)
+- **Add caching** - Integrate [Redis](/docs/packages/redis)
 - **Explore CLI** - Check out [CLI Commands](/docs/cli/commands)
 - **See examples** - Browse [Examples](/docs/examples)
 

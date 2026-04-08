@@ -48,6 +48,9 @@ export default defineConfig({
                     {text: "WebSocket", link: "/docs/concepts/websocket"},
                     {text: "Event System", link: "/docs/concepts/event-system"},
                     {text: "Ulak", link: "/docs/concepts/ulak"},
+                    {text: "Scheduled Tasks", link: "/docs/concepts/scheduled-tasks"},
+                    {text: "Frontend Controller", link: "/docs/concepts/frontend-controller"},
+                    {text: "PostProcessor", link: "/docs/concepts/post-processor"},
                 ],
             },
             {
@@ -63,6 +66,8 @@ export default defineConfig({
                 items: [
                     {text: "Logger", link: "/docs/packages/logger"},
                     {text: "Drizzle ORM", link: "/docs/packages/drizzle"},
+                    {text: "OpenAPI", link: "/docs/packages/openapi"},
+                    {text: "Redis", link: "/docs/packages/redis"},
                 ],
             },
             {

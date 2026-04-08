@@ -15,8 +15,8 @@ Here's a complete controller example with both Ergenecore and Hono adapters:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
@@ -42,8 +42,8 @@ export class UserController {
 ```
 
 ```typescript [Hono]
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
@@ -353,7 +353,7 @@ Controllers can inject services using the `@Inject` decorator for business logic
 
 ```typescript
 // src/services/UserService.ts
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class UserService {
@@ -384,9 +384,9 @@ export class UserService {
 ### Inject Service in Controller
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { UserService } from '../services/UserService';
 import type { Context } from '@asenajs/ergenecore';
 
@@ -449,7 +449,7 @@ class AuthController {
 
 ```typescript
 // src/services/UserService.ts
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service('UserService')  // Register with custom name
 export class UserService {
@@ -460,9 +460,9 @@ export class UserService {
 Then inject using the string name:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
@@ -503,8 +503,8 @@ You can apply middleware at three levels: global, controller, and route.
 ### Controller-Level Middleware
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
@@ -526,8 +526,8 @@ export class AdminController {
 ### Route-Level Middleware
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
@@ -567,7 +567,7 @@ Asena supports automatic request validation using Zod schemas (available with Er
 
 ```typescript
 // src/validators/CreateUserValidator.ts
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
@@ -586,8 +586,8 @@ export class CreateUserValidator extends ValidationService {
 ### Use Validator in Controller
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 import { CreateUserValidator } from '../validators/CreateUserValidator';
 
@@ -619,9 +619,9 @@ See the [Validation](/docs/concepts/validation) guide for advanced schemas and c
 Here's a real-world example combining services, middleware, and validation:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { Get, Post, Put, Delete } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get, Post, Put, Delete } from '@asenajs/asena/decorators/http';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import { CreatePostValidator } from '../validators/CreatePostValidator';
 import { UpdatePostValidator } from '../validators/UpdatePostValidator';

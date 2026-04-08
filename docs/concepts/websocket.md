@@ -13,7 +13,7 @@ Asena provides built-in WebSocket support with namespace management, allowing yo
 Create a WebSocket service by extending `AsenaWebSocketService` and decorating it with `@WebSocket`:
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/server';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @WebSocket({ path: '/chat', name: 'ChatSocket' })
@@ -306,7 +306,7 @@ Just like controllers, WebSocket services support middleware! This is the **reco
 ### Creating WebSocket Middleware
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import type { Context, MiddlewareService } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -351,7 +351,7 @@ This is the key method! Use `context.setWebSocketValue()` in middleware to pass 
 ### Using Middleware in WebSocket
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/server';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 import { WsAuthMiddleware } from '../middlewares/WsAuthMiddleware';
 
@@ -443,8 +443,8 @@ const ws = new WebSocket('ws://localhost:3000/private', {
 You can inject a WebSocket service into other services to send messages from anywhere in your application:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ChatSocket } from './ChatSocket';
 
 @Service('NotificationService')
@@ -482,7 +482,7 @@ Here's a simple notification system showing how to use WebSocket with service in
 ### WebSocket Service
 
 ```typescript
-import { WebSocket } from '@asenajs/asena/server';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 interface NotificationData {
@@ -534,8 +534,8 @@ export class NotificationSocket extends AsenaWebSocketService<NotificationData> 
 Now you can send notifications from any service in your application:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { NotificationSocket } from '../websocket/NotificationSocket';
 
 @Service('UserService')
@@ -570,9 +570,9 @@ export class UserService {
 You can also trigger notifications from HTTP endpoints:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Post } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore/types';
 
 @Controller('/admin')
@@ -636,6 +636,64 @@ export class ChatSocket extends AsenaWebSocketService<void> {
   }
 }
 ```
+
+## Multi-Pod WebSocket
+
+When running multiple server instances (pods), WebSocket messages published on one pod won't reach clients connected to other pods by default. Asena solves this with the **WebSocket Transport** abstraction.
+
+### How Transport Works
+
+By default, Asena uses `BunLocalTransport` which calls `server.publish()` directly — zero overhead for single-pod deployments. For multi-pod setups, you can plug in a transport (like `RedisTransport`) that relays messages across instances via a message broker.
+
+### Setting Up RedisTransport
+
+Configure the transport in your `@Config` class:
+
+```typescript
+import { Config } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ConfigService } from '@asenajs/hono-adapter'; // or '@asenajs/ergenecore'
+import { RedisTransport } from '@asenajs/asena-redis';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  @Inject('AppRedis')
+  private redis: AppRedis;
+
+  public transport() {
+    return new RedisTransport(this.redis);
+  }
+
+}
+```
+
+Or without an existing Redis service:
+
+```typescript
+public transport() {
+  return new RedisTransport({ url: 'redis://localhost:6379' });
+}
+```
+
+### How It Works
+
+Each server instance gets a unique pod ID. When a WebSocket message is published:
+
+1. The message is delivered locally via `server.publish()`
+2. The message is sent to Redis pub/sub with the originating pod ID
+3. Other pods receive the message and deliver it to their local sockets
+4. Messages from the same pod are deduplicated automatically
+
+::: tip No Code Changes
+Your WebSocket services, Ulak messaging, and room management work exactly the same with `RedisTransport`. The transport layer is transparent — just configure it in `@Config` and multi-pod support is enabled.
+:::
+
+::: info Custom Transports
+The `WebSocketTransport` interface (from `@asenajs/asena`) defines `publish()`, `init()`, and `destroy()` methods. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+:::
+
+For full `RedisTransport` reference and Redis service setup, see [Redis Package](/docs/packages/redis).
 
 ## Best Practices
 

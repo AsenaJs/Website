@@ -14,7 +14,7 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.6.x)
+## ✅ Current Release (v0.7.x)
 
 These features are **stable and production-ready** in the current release:
 
@@ -22,98 +22,38 @@ These features are **stable and production-ready** in the current release:
 
 - **Dependency Injection Container** - Full IoC container with constructor, property, and method injection
 - **Decorator-Based API** - TypeScript decorators for controllers, services, middleware, and more
-- **Controller System** - REST API controllers with route decorators (`@Get`, `@Post`, `@Put`, `@Delete`, `@Patch`)
+- **Controller System** - REST API controllers with route decorators (`@Get`, `@Post`, `@Put`, `@Delete`, `@Patch`, `@All`, `@Route`)
 - **Service Layer** - Service components with lifecycle management
-- **Middleware System** - Global and route-level middleware with execution control
+- **Middleware System** - Global, pattern-based, controller, and route-level middleware
 - **Context API** - Unified request context abstraction across adapters
-- **WebSocket Support** - Decorator-based WebSocket services with namespace support
+- **WebSocket Support** - Decorator-based WebSocket with namespace, room management, and [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket)
 - **Configuration Management** - `@Config` decorator for server configuration
-- **EventService Support** - Asena have built-in native EventService support with `@EventService` and `@On` 
+- **EventService Support** - Built-in native EventService support with `@EventService` and `@On`
+- **[Scheduled Tasks](/docs/concepts/scheduled-tasks)** - Cron-based task scheduling with `@Schedule` and `CronRunner`
+- **[FrontendController](/docs/concepts/frontend-controller)** - Serve HTML pages using Bun's native HTML imports with `@FrontendController` and `@Page`
+- **[PostProcessor](/docs/concepts/post-processor)** - Component lifecycle hooks for metadata collection and instance transformation
+- **SSE/Streaming** - Server-Sent Events with `stream()`, `streamSSE()`, `streamText()`
+- **Duplicate Route Detection** - Prevents accidental route conflicts at startup
+- **Graceful Server Shutdown** - `server.stop()` with proper resource cleanup
 
 ### Adapters
 
-- **Ergenecore Adapter** - Native Bun adapter with SIMD-accelerated routing
-- **Hono Adapter** - Hono-based adapter with middleware compatibility
+- **Ergenecore Adapter** - Native Bun adapter with SIMD-accelerated routing, streaming, and unified `HttpException`
+- **Hono Adapter** - Hono-based adapter with [strict mode (trailing slash)](/docs/adapters/hono#trailing-slash-strict-mode), streaming, and middleware compatibility
 
 ### Official Packages
 
-- **@asenajs/logger** - Structured logging with multiple transports (console, file, Loki)
-- **@asenajs/drizzle** - Drizzle ORM integration with repository pattern
+- **[@asenajs/asena-logger](/docs/packages/logger)** - Structured logging with multiple transports (console, file, Loki)
+- **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
+- **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
+- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport via pub/sub
+- **@asenajs/asena-otel** - OpenTelemetry tracing with automatic instrumentation
 
 ### CLI Tools
 
-- **Project Scaffolding** - `asena new` command for project generation
+- **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on `asena-config.ts`, significantly improving performance by reducing cold start time and package size
-
-
-## 🚧 In Active Development (v0.7.0)
-
-These features are **currently being developed** and will be available soon:
-
----
-
-### Official Packages
-
-#### @asenajs/redis
-Redis integration package with connection pooling and caching utilities.
-
-- Bun native Redis client wrapper with IoC integration
-
-**Status:** In development
-
----
-
-### Framework Features
-
-#### Enhanced Error Handling System
-Asena currently does not provide a robust error handling API. Version 0.7.0 introduces a sophisticated exception handling system inspired by NestJS and Spring Framework, featuring:
-
-- **@ExceptionHandler** decorator for centralized error handling
-- Built-in exception classes.
-- Custom exception filters
-
----
-
-#### FrontendController: Monolithic Application Support
-
-Bun runtime natively supports serving frontend applications alongside your backend. We're bringing this capability to Asena with the new `@FrontendController` decorator, enabling true monolithic architecture.
-
-**Why This Matters:**
-- Deploy your entire application as a single unit
-- No need for separate frontend hosting
-- Simplified development workflow
-- Reduced infrastructure complexity
-
-**Proposed Syntax:**
-```typescript
-@FrontendController()
-export class MyFrontendService {
-  // Serve static HTML pages
-  @Route('/')
-  public homepage = './public/index.html';
-
-  @Route('/dashboard')
-  public dashboard = './public/dashboard.html';
-
-  // Serve SPA routes
-  @Route('/app/*')
-  public reactApp = './dist/index.html';
-}
-```
-
-With this syntax, you can serve your React, Vue, Svelte applications or plain HTML projects directly through Asena. The framework will handle:
-- Static file resolution
-- SPA routing (catch-all routes for client-side routing)
-- Content-type detection
-- Efficient file caching
-- Development mode hot-reload integration
-
-**Use Cases:**
-- Full-stack TypeScript applications
-- Admin dashboards with REST API
-- Server-rendered + client-rendered hybrid apps
-- Internal tools with minimal infrastructure
 
 ## 📋 Planned for v1.0
 
@@ -133,40 +73,6 @@ A powerful plugin architecture allowing third-party extensions.
 - Authentication plugins (OAuth, JWT, SAML)
 - Database adapters (PostgreSQL, MySQL, MongoDB)
 - Monitoring and APM integrations
-
-### OpenTelemetry Support
-
-Built-in observability and distributed tracing.
-
-**Features:**
-- Automatic request tracing
-- Custom span creation
-- Metrics collection (HTTP, WebSocket, database)
-- Integration with Jaeger, Zipkin, and other backends
-- Performance profiling
-
-**Benefits:**
-- Production debugging
-- Performance monitoring
-- Distributed system observability
-- SLA compliance tracking
-
-### OpenAPI Support
-
-Automatic OpenAPI/Swagger documentation generation.
-
-**Features:**
-- Auto-generate OpenAPI specs from decorators
-- Swagger UI integration
-- Type-safe API client generation
-- Schema validation sync with Zod
-- API versioning support
-
-**Benefits:**
-- Automatic API documentation
-- Client SDK generation
-- API contract testing
-- Developer experience improvements
 
 ---
 
@@ -219,9 +125,8 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.4.x  | Current | Possible | Yes (with caution) |
-| v0.5.x  | Next | Possible | Yes (with caution) |
-| v0.6.x  | Next | Possible | Yes (with caution) |
+| v0.6.x  | Previous | Possible | Yes (with caution) |
+| v0.7.x  | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -259,8 +164,8 @@ We welcome contributions in many forms:
 
 ### Current Cycle
 
-- **v0.5.0** - Q4 2025 (Redis, NATS, AsenaEventRoute)
-- **v1.0.0** - Q2-Q3 2026 (Plugin system, OpenTelemetry, OpenAPI)
+- **v0.7.0** - Released April 2026 (OpenAPI, Redis, OTel, FrontendController, Schedule, PostProcessor, Streaming)
+- **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress
 Track development progress on our [GitHub repository](https://github.com/AsenaJs/Asena) and join discussions in [GitHub Issues](https://github.com/AsenaJs/Asena/issues).

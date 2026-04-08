@@ -79,6 +79,12 @@ Built-in WebSocket support with decorators makes it easy to build real-time feat
 ### Scalability
 Dependency injection and modular architecture enable easy scaling from small internal tools to large production applications.
 
+### Scheduled Tasks
+Built-in cron scheduling with `@Schedule` lets you run background jobs — database cleanup, cache warming, report generation — without external tools like Bull or Agenda.
+
+### API Documentation
+Automatic OpenAPI 3.1 spec generation from your existing validators with `@asenajs/asena-openapi`. Built-in Swagger UI, zero extra annotations needed.
+
 ### 🚀 Coming Soon
 More projects are being built with Asena! Check back soon or [submit your project](https://github.com/AsenaJs/Asena/issues).
 
@@ -131,6 +137,9 @@ Looking to build your own project with Asena? Check out these resources:
 - [Get Started](/docs/get-started) - Quick start guide
 - [Examples](/docs/examples) - Code examples and tutorials
 - [WebSocket Guide](/docs/concepts/websocket) - Build real-time apps
+- [OpenAPI](/docs/packages/openapi) - Auto-generate API documentation
+- [Redis](/docs/packages/redis) - Caching and multi-pod WebSocket
+- [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Background jobs
 - [CLI Tools](/docs/cli/overview) - Scaffold projects quickly
 
 ---

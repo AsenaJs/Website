@@ -25,7 +25,7 @@ Asena's Event System provides a decoupled, event-driven architecture for your ap
 ### 1. Create an Event Service
 
 ```typescript
-import { EventService, On } from '@asenajs/asena/server';
+import { EventService, On } from '@asenajs/asena/decorators';
 
 @EventService({ prefix: 'user' })
 export class UserEventService {
@@ -50,7 +50,7 @@ export class UserEventService {
 ### 2. Emit Events from Your Services
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/server';
+import { Service, Inject, emitter } from '@asenajs/asena/decorators';
 import type { EventEmitter } from '@asenajs/asena';
 
 @Service()
@@ -309,7 +309,7 @@ class UserEventService {
 Utility function for injecting EventEmitter.
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/server';
+import { Service, Inject, emitter } from '@asenajs/asena/decorators';
 import type { EventEmitter } from '@asenajs/asena';
 
 @Service()

@@ -159,7 +159,7 @@ Migrating between adapters requires updating your Import and maybe some context 
 ### From Hono to Ergenecore
 
 ```typescript
-import { Get } from '@asenajs/asena/web';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 // Before (Hono)
@@ -170,7 +170,7 @@ async getUser(context: Context) {
 }
 
 // After (Ergenecore)
-import { Get } from '@asenajs/asena/web';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Get('/:id')

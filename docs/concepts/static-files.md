@@ -20,7 +20,7 @@ Create a middleware class that extends `StaticServeService` and configure the ro
 
 ::: code-group
 ```typescript [Ergenecore]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/ergenecore';
 import path from 'path';
 
@@ -43,7 +43,7 @@ export class StaticServeMiddleware extends StaticServeService {
 ```
 
 ```typescript [Hono]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 import path from 'path';
 
@@ -72,8 +72,8 @@ Create a controller that uses the middleware:
 
 ::: code-group
 ```typescript [Ergenecore]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { StaticServeMiddleware } from './middlewares/StaticServeMiddleware';
 
 @Controller({ path: '/static' })
@@ -85,8 +85,8 @@ export class StaticController {
 ```
 
 ```typescript [Hono]
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { StaticServeMiddleware } from './middlewares/StaticServeMiddleware';
 
 @Controller({ path: '/static' })
@@ -260,7 +260,7 @@ Serve files from a public directory:
 
 ::: code-group
 ```typescript [Ergenecore]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/ergenecore';
 import path from 'path';
 
@@ -282,7 +282,7 @@ export class StaticServeMiddleware extends StaticServeService {
 ```
 
 ```typescript [Hono]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 import path from 'path';
 
@@ -327,7 +327,7 @@ Serve a Single Page Application with fallback routing:
 
 ::: code-group
 ```typescript [Ergenecore]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/ergenecore';
 import path from 'path';
 import { existsSync } from 'fs';
@@ -361,7 +361,7 @@ export class SPAStaticServe extends StaticServeService {
 ```
 
 ```typescript [Hono]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 import path from 'path';
 import { existsSync } from 'fs';
@@ -424,7 +424,7 @@ Serve different directories from different routes:
 
 ::: code-group
 ```typescript [Ergenecore]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/ergenecore';
 import path from 'path';
 
@@ -465,7 +465,7 @@ export class ImageStaticServe extends StaticServeService {
 ```
 
 ```typescript [Hono]
-import { StaticServe } from '@asenajs/asena/server';
+import { StaticServe } from '@asenajs/asena/decorators';
 import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 import path from 'path';
 

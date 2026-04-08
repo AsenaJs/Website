@@ -12,8 +12,8 @@ Asena's built-in testing utilities provide automated dependency mocking for comp
 
 ```typescript
 import { mockComponent } from '@asenajs/asena/test';
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { mock } from 'bun:test';
 
 @Service()
@@ -96,8 +96,8 @@ async function mockComponentAsync<T extends object>(
 
 **Example:**
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class ConnectionPool {
@@ -213,8 +213,8 @@ interface MockedComponent<T> {
 Mock only specific dependencies while leaving others undefined.
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class StripeClient {
@@ -294,8 +294,8 @@ const { instance, mocks } = mockComponent(AuthService, {
 `mockComponent` supports `@Inject` expression transformations automatically.
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
@@ -321,8 +321,8 @@ mocks.createUserFn.mockResolvedValue({ id: 'user-123' });
 `mockComponent` properly handles prototype chains.
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class LoggerService {

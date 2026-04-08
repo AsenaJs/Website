@@ -88,8 +88,8 @@ await server.start();
 ### Controller Example
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
@@ -114,31 +114,55 @@ For complete Context API documentation, see [Context](/docs/concepts/context).
 
 ## Factory Function
 
-### createHonoAdapter(logger?, options?)
+### createHonoAdapter(loggerOrOptions?)
 
-Creates a new Hono adapter instance.
+Creates a new Hono adapter instance. Supports two calling conventions:
+
+**Legacy: Logger argument**
 
 ```typescript
 import { createHonoAdapter } from '@asenajs/hono-adapter';
-import { AsenaLogger } from '@asenajs/logger';
 
-// With custom logger
-const logger = new AsenaLogger();
-const [adapter, asenaLogger] = createHonoAdapter(logger);
-
-// With default logger
-const [adapter, logger] = createHonoAdapter();
+const [adapter, logger] = createHonoAdapter(myLogger);
 ```
 
-**Parameters:**
+**Options object (recommended)**
 
-| Parameter | Type     | Optional | Description                    |
-|:----------|:---------|:---------|:-------------------------------|
-| `logger`  | `Logger` | Yes      | Logger instance from Asena     |
-| `options` | `object` | Yes      | Hono-specific options          |
+```typescript
+import { createHonoAdapter } from '@asenajs/hono-adapter';
 
-**Returns:**
-- Tuple: `[adapter, logger]`
+const [adapter, logger] = createHonoAdapter({
+  logger: myLogger,
+  strict: false, // '/health' and '/health/' match the same route
+});
+```
+
+### HonoAdapterOptions
+
+| Property | Type | Required | Default | Description |
+|:---------|:-----|:---------|:--------|:------------|
+| `logger` | `ServerLogger` | Yes | — | Logger instance |
+| `app` | `Hono` | No | — | Pre-configured Hono app instance |
+| `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
+| `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
+
+**Returns:** Tuple: `[adapter, logger]`
+
+### Trailing Slash (Strict Mode)
+
+By default, Hono uses strict mode where `/health` and `/health/` are **different** routes. Set `strict: false` to treat them as the same:
+
+```typescript
+// strict: true (default) — /users and /users/ are different routes
+const [adapter, logger] = createHonoAdapter({ logger: myLogger });
+
+// strict: false — /users and /users/ match the same route
+const [adapter, logger] = createHonoAdapter({ logger: myLogger, strict: false });
+```
+
+::: tip Reverse Proxies
+Set `strict: false` when deploying behind reverse proxies (Nginx, Cloudflare, etc.) that may add or remove trailing slashes. This prevents 404 errors from slash mismatches.
+:::
 
 ## Built-in Middleware
 
@@ -151,7 +175,7 @@ High-performance CORS middleware with origin whitelisting and dynamic validation
 #### Basic CORS (Allow All Origins)
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { CorsMiddleware } from '@asenajs/hono-adapter';
 
 @Middleware()
@@ -211,7 +235,7 @@ export class DynamicCors extends CorsMiddleware {
 #### Using CORS Middleware
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/hono-adapter';
 
 // Global CORS
@@ -241,7 +265,7 @@ Token Bucket-based rate limiter for controlling request rates and preventing abu
 #### Basic Rate Limiter
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { RateLimiterMiddleware } from '@asenajs/hono-adapter';
 
 // 100 requests per minute
@@ -329,7 +353,7 @@ The middleware automatically sets these headers:
 #### Using Rate Limiter
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/hono-adapter';
 
 // Global rate limiter
@@ -364,7 +388,7 @@ RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal 
 The `@Override` decorator allows middleware to work directly with Hono's native context without Asena wrappers. This is **unique to Hono Adapter** and enables seamless integration with Hono ecosystem middleware.
 
 ```typescript
-import { Middleware, Override } from '@asenajs/asena/server';
+import { Middleware, Override } from '@asenajs/asena/decorators';
 import { MiddlewareService } from '@asenajs/hono-adapter';
 import type { Context as HonoContext, Next } from 'hono';
 
@@ -392,7 +416,7 @@ export class NativeHonoMiddleware extends MiddlewareService {
 **Example: Using Hono's Built-in Middleware**
 
 ```typescript
-import { Middleware, Override } from '@asenajs/asena/server';
+import { Middleware, Override } from '@asenajs/asena/decorators';
 import { MiddlewareService } from '@asenajs/hono-adapter';
 import { compress } from 'hono/compress';
 import { logger } from 'hono/logger';
@@ -440,7 +464,7 @@ For complete Context API, see [Context](/docs/concepts/context).
 Extend `MiddlewareService` for custom middleware:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 
 @Middleware()
@@ -464,7 +488,7 @@ For middleware patterns, see [Middleware](/docs/concepts/middleware).
 Extend `ValidationService` for request validation:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/hono-adapter';
 import { z } from 'zod';
 
@@ -488,7 +512,7 @@ For validation patterns, see [Validation](/docs/concepts/validation).
 Extend `ConfigService` for server configuration:
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/hono-adapter';
 
 @Config()
@@ -511,8 +535,8 @@ For configuration, see [Configuration](/docs/guides/configuration).
 Extend `StaticServeService` for serving static files:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import { StaticServe, StaticServeService } from '@asenajs/asena/static';
 import type { Context } from '@asenajs/hono-adapter/types';
 
@@ -565,8 +589,8 @@ export default app;
 ### After (Asena with Hono Adapter)
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
@@ -746,7 +770,7 @@ export class MyMiddleware extends MiddlewareService {
 
 ```typescript
 // Solution: Use @Override decorator for native Hono middleware
-import { Override } from '@asenajs/asena/server';
+import { Override } from '@asenajs/asena/decorators';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()

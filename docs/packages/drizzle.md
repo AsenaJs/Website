@@ -165,8 +165,8 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 ### 4. Use in Services
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service('UserService')
 export class UserService {

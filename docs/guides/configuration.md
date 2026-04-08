@@ -15,7 +15,7 @@ The `@Config` decorator provides a centralized way to configure your Asena appli
 ```typescript [Ergenecore]
 import type { ConfigService, Context } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 
 @Config()
 export class AppConfig implements ConfigService {
@@ -46,7 +46,7 @@ export class AppConfig implements ConfigService {
 ```typescript [Hono]
 import type { ConfigService, Context } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 
 @Config()
 export class AppConfig implements ConfigService {
@@ -117,6 +117,11 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
    * Global middleware configuration with pattern-based filtering
    */
   globalMiddlewares?(): Promise<GlobalMiddlewareEntry[]> | GlobalMiddlewareEntry[];
+
+  /**
+   * WebSocket transport for multi-pod messaging
+   */
+  transport?(): WebSocketTransport | Promise<WebSocketTransport>;
 }
 ```
 
@@ -622,6 +627,66 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
+## transport() Method
+
+Configure the WebSocket transport for cross-pod messaging. When not specified, Asena uses `BunLocalTransport` which calls `server.publish()` directly — zero overhead for single-pod deployments.
+
+```typescript
+transport?(): WebSocketTransport | Promise<WebSocketTransport>
+```
+
+**Returns:** A `WebSocketTransport` instance
+
+### Single-Pod (Default)
+
+No configuration needed. Asena uses `BunLocalTransport` automatically.
+
+### Multi-Pod with RedisTransport
+
+For multi-pod deployments, return a `RedisTransport` instance to synchronize WebSocket messages across pods via Redis pub/sub:
+
+::: code-group
+
+```typescript [With Injected Redis]
+import { Config } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ConfigService } from '@asenajs/hono-adapter'; // or '@asenajs/ergenecore'
+import { RedisTransport } from '@asenajs/asena-redis';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  @Inject('AppRedis')
+  private redis: AppRedis;
+
+  public transport() {
+    return new RedisTransport(this.redis);
+  }
+
+}
+```
+
+```typescript [Standalone]
+import { Config } from '@asenajs/asena/decorators';
+import { ConfigService } from '@asenajs/hono-adapter'; // or '@asenajs/ergenecore'
+import { RedisTransport } from '@asenajs/asena-redis';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public transport() {
+    return new RedisTransport({ url: 'redis://localhost:6379' });
+  }
+
+}
+```
+
+:::
+
+::: info
+For details on how transport works with WebSocket pub/sub, see [WebSocket - Multi-Pod](/docs/concepts/websocket#multi-pod-websocket). For RedisTransport setup and configuration, see [Redis Package](/docs/packages/redis#multi-pod-websocket-transport).
+:::
+
 ## Complete Example
 
 A real-world configuration example combining all features:
@@ -629,7 +694,7 @@ A real-world configuration example combining all features:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Config, Inject, Service } from '@asenajs/asena/server';
+import { Config, Inject, Service } from '@asenajs/asena/decorators';
 import type { ConfigService, Context } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 
@@ -715,7 +780,7 @@ export class AppConfig implements ConfigService {
 ```
 
 ```typescript [Hono]
-import { Config, Inject, Service } from '@asenajs/asena/server';
+import { Config, Inject, Service } from '@asenajs/asena/decorators';
 import type { ConfigService, Context } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 

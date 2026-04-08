@@ -77,8 +77,8 @@ export const logger = new AsenaLogger();
 
 ```typescript
 // src/services/UserService.ts
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { logger } from '../logger';
 
 @Service()
@@ -111,8 +111,8 @@ export class UserService {
 You can also inject the logger using the IoC container:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject, ICoreServiceNames } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, ICoreServiceNames } from '@asenajs/asena/decorators/ioc';
 import type { ServerLogger } from '@asenajs/asena/adapter';
 
 @Service()
@@ -235,7 +235,7 @@ Error: Connection timeout
 ### Middleware Logging
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 import { logger } from '../logger';
 
@@ -259,7 +259,7 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 ### Error Handling in Config
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
 import { logger } from '../logger';
 
@@ -281,8 +281,8 @@ export class ServerConfig extends ConfigService {
 ### Performance Profiling
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { logger } from '../logger';
 
 @Service()

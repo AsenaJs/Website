@@ -147,8 +147,8 @@ asena generate controller
 **Generated:** `src/controllers/UserController.ts`
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore/types';
 
 @Controller('/user')
@@ -176,7 +176,7 @@ asena generate service
 **Generated:** `src/services/UserService.ts`
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class UserService {
@@ -203,7 +203,7 @@ asena generate middleware
 **Generated:** `src/middlewares/AuthMiddleware.ts`
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -231,7 +231,7 @@ asena generate config
 **Generated:** `src/config/ServerConfig.ts`
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
 
 @Config()
@@ -259,7 +259,7 @@ asena generate websocket
 **Generated:** `src/namespaces/ChatNamespace.ts`
 
 ```typescript
-import { Websocket } from '@asenajs/asena/server';
+import { Websocket } from '@asenajs/asena/decorators';
 import { WebsocketService, type Context } from '@asenajs/ergenecore';
 
 @Websocket({ namespace: '/chat' })

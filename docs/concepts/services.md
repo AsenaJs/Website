@@ -22,7 +22,7 @@ A service is a class decorated with `@Service()` that contains business logic, d
 ### Basic Service
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class UserService {
@@ -52,9 +52,9 @@ export class UserService {
 Inject services into controllers using the `@Inject` decorator:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post, Delete } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post, Delete } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore/types';
 
 @Controller('/users')
@@ -91,8 +91,8 @@ Services can depend on other services:
 
 ```typescript
 // Emailservice.ts
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 
 @Service()
@@ -106,8 +106,8 @@ export class EmailService {
 
 ```typescript
 // UserService.ts
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 
 @Service()
@@ -323,8 +323,8 @@ Services can have different lifecycle scopes that control how instances are crea
 By default, all services use `Scope.SINGLETON` - a single instance is created and shared across the entire application:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Scope } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Scope } from '@asenajs/asena/decorators/ioc';
 
 @Service() // Default: Scope.SINGLETON
 export class ConfigService {
@@ -354,8 +354,8 @@ export class DatabaseService {
 `Scope.PROTOTYPE` creates a **new instance** for every injection:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Scope } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Scope } from '@asenajs/asena/decorators/ioc';
 
 
 @Service({ scope: Scope.PROTOTYPE })
@@ -510,8 +510,8 @@ For most use cases, **class-based injection is recommended**.
 Complete reference for the `@Service` decorator:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Scope } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Scope } from '@asenajs/asena/decorators/ioc';
 
 // 1. Basic service (singleton by default)
 @Service()
@@ -638,8 +638,8 @@ export class UserService {
 Ulak breaks this circular dependency by acting as a centralized message broker:
 
 ```typescript
-import { Service} from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
+import { Service} from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { ulak, type Ulak } from '@asenajs/asena/messaging';
 
 @Service('UserService')

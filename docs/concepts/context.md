@@ -29,8 +29,8 @@ Here's how to use Context in your controllers with both adapters:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/api')
@@ -59,8 +59,8 @@ export class ApiController {
 ```
 
 ```typescript [Hono]
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/api')
@@ -505,11 +505,10 @@ Store per-request values.
 export class AuthMiddleware extends MiddlewareService {
   async use(context: Context) {
     const token = context.req.headers.get('authorization');
-    const userId = await verifyToken(token);
+    const user = await verifyToken(token);
 
     // Store for later use
-    context.setValue('userId', userId);
-    context.setValue('isAdmin', userId === 'admin');
+    context.setValue('user', user);
   }
 }
 ```
@@ -522,19 +521,59 @@ Retrieve stored values in handlers.
 @Get('/dashboard')
 async dashboard(context: Context) {
   // Retrieve value set by middleware
-  const userId = context.getValue<string>('userId');
-  const isAdmin = context.getValue<boolean>('isAdmin');
+  const user = context.getValue('user');
 
-  return context.send({ userId, isAdmin });
+  return context.send({ user });
 }
 ```
 
-::: tip Type-Safe State
-Use TypeScript generics for type-safe state access:
+### Type-Safe Variables with AsenaVariables
+
+For full type safety and IDE autocomplete, augment the `AsenaVariables` interface using TypeScript module augmentation:
+
 ```typescript
-const userId = context.getValue<string>('userId');
-const count = context.getValue<number>('count');
+// src/types/ContextState.ts
+declare module '@asenajs/asena/adapter' {
+  interface AsenaVariables {
+    user: User;
+    requestId: string;
+  }
+}
+
+interface User {
+  id: string;
+  name: string;
+}
 ```
+
+Now `getValue()` and `setValue()` are fully type-checked:
+
+```typescript
+@Get('/profile')
+async profile(context: Context) {
+  // Type-safe: TypeScript knows this returns User
+  const user = context.getValue('user');
+  //    ^? User
+
+  // Type-safe: TypeScript enforces correct value type
+  context.setValue('requestId', crypto.randomUUID());
+  //                            ^? string (enforced)
+
+  return context.send({ id: user.id, name: user.name });
+}
+```
+
+::: tip IDE Autocomplete
+With `AsenaVariables` augmented, your IDE will:
+- Autocomplete key names in `getValue()` and `setValue()`
+- Show the correct return type for each key
+- Flag type mismatches at compile time
+
+You can still use generic types for dynamic keys: `context.getValue<string>('dynamicKey')`
+:::
+
+::: info Setup
+Create a declaration file (e.g., `src/types/ContextState.ts`) and make sure it's included in your TypeScript compilation. The module path must be exactly `'@asenajs/asena/adapter'`.
 :::
 
 ## WebSocket Support
@@ -546,7 +585,7 @@ Context provides WebSocket-specific methods for upgrade handling.
 Store data before WebSocket upgrade. 
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import type { Context, MiddlewareService } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -569,6 +608,156 @@ export class WsAuthMiddleware implements MiddlewareService {
 
 ::: warning
 Socket data will automaticly injectining in `ws.data.value` by adapter. So you dont need to use this.
+:::
+
+## Streaming
+
+Context provides three streaming methods for sending data progressively to the client. All methods work identically across Ergenecore and Hono adapters.
+
+### Server-Sent Events - `streamSSE()`
+
+Send real-time events to the client using the SSE protocol. Automatically sets `Content-Type: text/event-stream`, `Cache-Control: no-cache`, and `Connection: keep-alive`.
+
+```typescript
+@Get('/events')
+async events(context: Context) {
+  return context.streamSSE(async (stream) => {
+    for (let i = 0; i < 5; i++) {
+      await stream.writeSSE({
+        data: JSON.stringify({ count: i, time: Date.now() }),
+        event: 'update',
+        id: String(i),
+      });
+    }
+  });
+}
+```
+
+#### SSEMessage Format
+
+```typescript
+interface SSEMessage {
+  data: string;    // Event data (multi-line strings auto-split into separate data: lines)
+  event?: string;  // Event type name
+  id?: string;     // Event ID for reconnection
+  retry?: number;  // Reconnection time in milliseconds
+}
+```
+
+#### Error Handling
+
+```typescript
+@Get('/events')
+async events(context: Context) {
+  return context.streamSSE(
+    async (stream) => {
+      // Main stream logic
+      await stream.writeSSE({ data: 'starting', event: 'status' });
+      await doWork();
+      await stream.writeSSE({ data: 'done', event: 'status' });
+    },
+    async (error, stream) => {
+      // Error handler — send error event to client
+      await stream.writeSSE({
+        data: JSON.stringify({ error: error.message }),
+        event: 'error',
+      });
+    },
+  );
+}
+```
+
+#### Client Disconnect Detection
+
+```typescript
+@Get('/live')
+async live(context: Context) {
+  return context.streamSSE(async (stream) => {
+    stream.onAbort(() => {
+      console.log('Client disconnected');
+      // Clean up resources
+    });
+
+    while (!stream.aborted) {
+      await stream.writeSSE({ data: 'heartbeat', event: 'ping' });
+      await Bun.sleep(1000);
+    }
+  });
+}
+```
+
+### Text Stream - `streamText()`
+
+Stream plain text content. Sets `Content-Type: text/plain`.
+
+```typescript
+@Get('/generate')
+async generate(context: Context) {
+  return context.streamText(async (stream) => {
+    const chunks = ['Hello', ' ', 'World', '!'];
+
+    for (const chunk of chunks) {
+      await stream.write(chunk);
+    }
+  });
+}
+```
+
+### Generic Stream - `stream()`
+
+Stream raw data without a predefined content type. Useful for binary data, CSV exports, or custom formats.
+
+```typescript
+@Get('/export')
+async export(context: Context) {
+  return context.stream(async (stream) => {
+    await stream.writeln('name,email,age');
+    await stream.writeln('John,john@example.com,30');
+    await stream.writeln('Jane,jane@example.com,25');
+  });
+}
+```
+
+#### Pipe a ReadableStream
+
+```typescript
+@Get('/pipe')
+async pipe(context: Context) {
+  return context.stream(async (stream) => {
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('piped content'));
+        controller.close();
+      },
+    });
+
+    await stream.pipe(source);
+  });
+}
+```
+
+### StreamWriter API
+
+All streaming methods provide a writer with these methods:
+
+| Method | Parameters | Description |
+|:-------|:-----------|:------------|
+| `write(input)` | `Uint8Array \| string` | Write raw data to the stream |
+| `writeln(input)` | `string` | Write a string followed by a newline |
+| `close()` | — | Close the stream normally |
+| `pipe(body)` | `ReadableStream` | Pipe a ReadableStream through the writer |
+| `onAbort(listener)` | `() => void` | Register a callback for client disconnection |
+| `aborted` | — | `boolean` — whether the client disconnected |
+| `closed` | — | `boolean` — whether the stream was closed normally |
+
+The SSE stream writer (`streamSSE`) additionally provides:
+
+| Method | Parameters | Description |
+|:-------|:-----------|:------------|
+| `writeSSE(message)` | `SSEMessage` | Write a formatted SSE message |
+
+::: tip Auto-Close
+Streams are automatically closed after the callback completes. You don't need to call `stream.close()` manually unless you want to close early.
 :::
 
 ## Advanced Methods
@@ -677,6 +866,50 @@ async uploadFile(context: Context) {
 }
 ```
 
+## Utility Methods
+
+### Get Client IP - `getRequestIp()`
+
+Get the client's IP address. Lazily evaluated and cached — zero cost if never accessed.
+
+```typescript
+@Get('/info')
+async info(context: Context) {
+  const ip = context.getRequestIp();
+
+  return context.send({ ip });
+}
+```
+
+### Get All Queries - `getAllQueries()`
+
+Get all query parameters as a key-value object. Keys with multiple values return arrays.
+
+```typescript
+// GET /search?q=asena&tag=bun&tag=typescript
+@Get('/search')
+async search(context: Context) {
+  const queries = context.getAllQueries();
+  // { q: 'asena', tag: ['bun', 'typescript'] }
+
+  return context.send(queries);
+}
+```
+
+### Set Response Header - `setResponseHeader()`
+
+Set a response header that will be merged into the final response. Useful in middleware for adding headers that carry through to streaming responses.
+
+```typescript
+@Get('/download')
+async download(context: Context) {
+  context.setResponseHeader('Content-Disposition', 'attachment; filename="data.csv"');
+  context.setResponseHeader('X-Request-Id', crypto.randomUUID());
+
+  return context.send({ data: 'example' });
+}
+```
+
 ## Adapter-Specific Features
 
 ### Ergenecore Adapter
@@ -684,6 +917,7 @@ async uploadFile(context: Context) {
 **Performance Optimizations:**
 - Lazy URL parsing (only when query params accessed)
 - Lazy state Map (only when setValue/getValue called)
+- Lazy IP resolution (only when getRequestIp() called)
 - Body caching (allows multiple getBody() calls)
 
 **Native Bun Features:**
@@ -706,7 +940,7 @@ async useNative(context: Context) {
 
 **Rich Ecosystem:**
 - Full access to Hono's middleware ecosystem
-- Streaming response support
+- `@Override` decorator for native Hono middleware
 - WebSocket via Hono's upgrade mechanism
 
 **Native Hono Context:**
@@ -719,9 +953,6 @@ import type { Context } from '@asenajs/hono-adapter';
 async useNative(context: Context) {
   // Access Hono native methods
   const contentType = context.req.header('content-type');
-
-  // Use Hono streaming (if needed)
-  // Note: send() is still recommended for most cases
 
   return context.send({ framework: 'Hono' });
 }
@@ -736,19 +967,30 @@ async useNative(context: Context) {
 | `getParam(name)` | `string` | Get route parameter |
 | `getQuery(name)` | `Promise<string>` | Get single query parameter |
 | `getQueryAll(name)` | `Promise<string[]>` | Get all values of a query parameter |
+| `getAllQueries()` | `Record<string, string \| string[]>` | Get all query parameters as object |
 | `getBody<T>()` | `Promise<T>` | Parse JSON body with type |
 | `getParseBody()` | `Promise<any>` | Auto-parse body by content-type |
 | `getFormData()` | `Promise<FormData>` | Parse form data |
 | `getArrayBuffer()` | `Promise<ArrayBuffer>` | Get binary body |
 | `getBlob()` | `Promise<Blob>` | Get body as Blob |
+| `getRequestIp()` | `string \| null` | Get client IP address (lazy, cached) |
 
 ### Response Methods
 
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
-| `send(data, status?)` | `Response \| Promise<Response>` | Send JSON response |
-| `html(html, status?)` | `Response \| Promise<Response>` | Send HTML response |
-| `redirect(url)` | `void` | Redirect to URL |
+| `send(data, statusOrOptions?)` | `Response` | Send JSON/text response |
+| `html(data, statusOrOptions?)` | `Response` | Send HTML response |
+| `redirect(url)` | `Response` | Redirect to URL |
+| `setResponseHeader(key, value)` | `void` | Set a response header for middleware merging |
+
+### Streaming Methods
+
+| Method | Return Type | Description |
+|:-------|:------------|:------------|
+| `stream(cb, onError?)` | `Response` | Generic binary/text stream |
+| `streamSSE(cb, onError?)` | `Response` | Server-Sent Events stream (`text/event-stream`) |
+| `streamText(cb, onError?)` | `Response` | Text stream (`text/plain`) |
 
 ### Cookie Methods
 
@@ -762,8 +1004,8 @@ async useNative(context: Context) {
 
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
-| `getValue<T>(key)` | `T` | Get context value |
-| `setValue(key, value)` | `void` | Set context value |
+| `getValue<K>(key)` | `AsenaVariables[K]` | Get context value (type-safe with [AsenaVariables](#type-safe-variables-with-asenavariables)) |
+| `setValue<K>(key, value)` | `void` | Set context value (type-safe with [AsenaVariables](#type-safe-variables-with-asenavariables)) |
 | `getWebSocketValue<T>()` | `T` | Get WebSocket data |
 | `setWebSocketValue(value)` | `void` | Set WebSocket data |
 
@@ -822,3 +1064,4 @@ const query = await context.getQuery('q');
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Hono Adapter](/docs/adapters/hono) - Hono-specific features
 - [WebSocket](/docs/concepts/websocket) - WebSocket integration with Context
+- [Error Handling](/docs/guides/error-handling) - HttpException and error responses

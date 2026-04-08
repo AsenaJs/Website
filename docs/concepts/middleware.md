@@ -40,7 +40,7 @@ This guide shows both approaches using code-groups where applicable.
 Create middleware by extending `MiddlewareService` and implementing the `handle` method:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -71,7 +71,7 @@ Always call `await next()` to pass control to the next middleware or route handl
 Applied to **all routes** in your application:
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
@@ -160,7 +160,7 @@ export class UserController {
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -190,7 +190,7 @@ export class AuthMiddleware extends MiddlewareService {
 ```
 
 ```typescript [Hono]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
 
@@ -227,7 +227,7 @@ export class AuthMiddleware extends MiddlewareService {
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -245,7 +245,7 @@ export class AdminRoleMiddleware extends MiddlewareService {
 ```
 
 ```typescript [Hono]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
 import type { Next } from 'hono';
@@ -296,7 +296,7 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 ### CORS Middleware
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { CorsMiddleware } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -380,9 +380,9 @@ Middleware can use dependency injection just like services:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
@@ -413,9 +413,9 @@ export class AuthMiddleware extends MiddlewareService {
 ```
 
 ```typescript [Hono]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { HTTPException } from 'hono/http-exception';
 
 @Middleware()
@@ -503,7 +503,7 @@ Don't call `next()` to stop the middleware chain:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -524,7 +524,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
 ```
 
 ```typescript [Hono]
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
 

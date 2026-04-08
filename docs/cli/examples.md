@@ -129,8 +129,8 @@ This creates `src/controllers/UserController.ts`. Let's modify it:
 ### For Ergenecore Adapter
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore/types';
 
 @Controller('/users')
@@ -160,8 +160,8 @@ export class UserController {
 ### For Hono Adapter
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter/types';
 
 @Controller('/users')
@@ -234,7 +234,7 @@ Enter the service name:
 Edit `src/services/UserService.ts`:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 interface User {
   id: number;
@@ -272,9 +272,9 @@ export class UserService {
 Update your controller to use the service:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
-import { Inject } from '@asenajs/asena/ioc';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore/types';
 import { UserService } from '../services/UserService';
 
@@ -369,7 +369,7 @@ Enter the middleware name:
 Edit `src/middlewares/LoggerMiddleware.ts`:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()

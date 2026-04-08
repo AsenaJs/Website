@@ -89,8 +89,8 @@ await server.start();
 ### Controller Example
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Get, Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore/types';
 
 @Controller('/users')
@@ -185,7 +185,7 @@ Ergenecore provides a high-performance CORS middleware with support for origin w
 #### Basic CORS (Allow All Origins)
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { CorsMiddleware } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -245,7 +245,7 @@ export class DynamicCors extends CorsMiddleware {
 #### Using CORS Middleware
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 
 // Global CORS
@@ -275,7 +275,7 @@ Ergenecore includes a Token Bucket-based rate limiter for controlling request ra
 #### Basic Rate Limiter
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { RateLimiterMiddleware } from '@asenajs/ergenecore';
 
 // 100 requests per minute
@@ -363,7 +363,7 @@ The middleware automatically sets these headers:
 #### Using Rate Limiter
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 
 // Global rate limiter
@@ -428,7 +428,7 @@ For complete Context API, see [Context](/docs/concepts/context).
 Extend `MiddlewareService` for custom middleware:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -452,7 +452,7 @@ For middleware patterns, see [Middleware](/docs/concepts/middleware).
 Extend `ValidationService` for request validation:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
@@ -476,7 +476,7 @@ For validation patterns, see [Validation](/docs/concepts/validation).
 Extend `ConfigService` for server configuration:
 
 ```typescript
-import { Config } from '@asenajs/asena/server';
+import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
 
 @Config()

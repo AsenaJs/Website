@@ -27,7 +27,7 @@ Validation is currently supported only in the **Ergenecore adapter**. The Hono a
 Extend `ValidationService` and implement the `json()` method:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
@@ -48,8 +48,8 @@ export class CreateUserValidator extends ValidationService {
 Use the `validator` option in route decorators:
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Post } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
@@ -365,7 +365,7 @@ export const paginationSchema = z.object({
 Then use them in your validators:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService } from '@asenajs/ergenecore';
 import { emailSchema, passwordSchema, addressSchema } from '../schemas/common';
 import { z } from 'zod';
@@ -475,9 +475,9 @@ interface ValidationSchemaWithHook {
 Here's a real-world validator with hooks and service injection:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/server';
+import { Middleware } from '@asenajs/asena/decorators';
 import { ValidationService, type ValidationSchemaWithHook } from '@asenajs/ergenecore';
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { z } from 'zod';
 
 @Middleware({ validator: true })

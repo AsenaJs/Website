@@ -24,9 +24,9 @@ The `@Inject` decorator is used to inject dependencies into your classes.
 ### Simple Class Injection
 
 ```typescript
-import { Controller } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { Delete, Get, Post, Put } from '@asenajs/asena/web';
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Delete, Get, Post, Put } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 
@@ -58,7 +58,7 @@ When using **string-based injection**, you must explicitly provide a `name` to y
 Inject services by their registered name:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service('UserService')
 export class UserService {
@@ -93,7 +93,7 @@ Expressions allow you to transform the injected dependency or extract specific p
 ### Extract Property from Service
 
 ```typescript
-import { Inject } from '@asenajs/asena/ioc';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { DatabaseService } from '../services/DatabaseService';
 import type { BunSQLDatabase } from 'drizzle-orm/bun-sqlite';
 
@@ -182,7 +182,7 @@ Mark implementations with `@Implements`:
 
 ```typescript
 // src/services/EmailNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/server';
+import { Service, Implements } from '@asenajs/asena/decorators';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -197,7 +197,7 @@ export class EmailNotificationService implements NotificationService {
 
 ```typescript
 // src/services/SmsNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/server';
+import { Service, Implements } from '@asenajs/asena/decorators';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -212,7 +212,7 @@ export class SmsNotificationService implements NotificationService {
 
 ```typescript
 // src/services/PushNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/server';
+import { Service, Implements } from '@asenajs/asena/decorators';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -228,7 +228,7 @@ export class PushNotificationService implements NotificationService {
 ### 3. Inject All Implementations
 
 ```typescript
-import { Strategy } from '@asenajs/asena/ioc';
+import { Strategy } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from '../services/NotificationService';
 
 @Service()
@@ -288,9 +288,9 @@ The `@PostConstruct` decorator marks a method to be called **after** all depende
 ### Basic Usage
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
-import { Inject } from '@asenajs/asena/ioc';
-import { PostConstruct } from '@asenajs/asena/ioc';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { PostConstruct } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 export class UserService {
@@ -441,7 +441,7 @@ Control the lifecycle of injected services with scopes.
 One instance shared across the entire application:
 
 ```typescript
-import { Service } from '@asenajs/asena/server';
+import { Service } from '@asenajs/asena/decorators';
 
 @Service() // Default: Scope.SINGLETON
 export class ConfigService {
@@ -458,8 +458,8 @@ export class ConfigService {
 New instance created for every injection:
 
 ```typescript
-import { Service, Scope } from '@asenajs/asena/server';
-import { Scope } from '@asenajs/asena/ioc';
+import { Service, Scope } from '@asenajs/asena/decorators';
+import { Scope } from '@asenajs/asena/decorators/ioc';
 
 @Service({ scope: Scope.PROTOTYPE })
 export class RequestLogger {
