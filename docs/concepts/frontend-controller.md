@@ -160,6 +160,71 @@ Bun automatically bundles linked CSS, JavaScript, and TypeScript files.
 | **Performance** | Zero overhead | Adapter overhead |
 | **Use case** | Static pages, SPAs | REST APIs, dynamic content |
 
+## Production Build
+
+When you run `asena build`, HTML import paths are automatically rewritten so they resolve correctly from the output directory. However, you must configure `include` in your `asena.config.ts` to copy the HTML files to the build output.
+
+### Required Configuration
+
+```typescript
+import { defineConfig } from '@asenajs/asena-cli';
+
+export default defineConfig({
+  sourceFolder: 'src',
+  rootFile: 'src/index.ts',
+  include: ['src/frontend/pages'], // [!code highlight]
+  buildOptions: {
+    outdir: 'dist',
+  },
+});
+```
+
+The `include` option copies files and directories into the output directory during build. Without it, your HTML files won't exist in the production build and imports will fail at runtime.
+
+::: warning Don't add *.html to external
+Do **not** add `'*.html'` to `buildOptions.external`. The CLI handles HTML imports automatically — marking them as external yourself will prevent the path rewriting from working.
+
+```typescript
+// ❌ Bad: Breaks HTML import path rewriting
+buildOptions: {
+  external: ['*.html'],
+}
+
+// ✅ Good: Let the CLI handle HTML imports
+buildOptions: {
+  // No *.html in external
+}
+```
+:::
+
+### How It Works
+
+1. `asena build` bundles your code into a single output file (e.g., `dist/index.asena.js`)
+2. The HTML build plugin detects `.html` imports and rewrites paths relative to the project root
+3. `include` copies the HTML files to the output directory preserving their structure
+4. At runtime, `import('./src/frontend/pages/home.html')` resolves correctly from `dist/`
+
+### Example Project Structure
+
+```
+my-app/
+├── src/
+│   ├── frontend/
+│   │   ├── AppFrontendController.ts
+│   │   └── pages/
+│   │       ├── home.html
+│   │       ├── settings.html
+│   │       └── app.ts
+│   └── index.ts
+├── asena.config.ts          # include: ['src/frontend/pages']
+└── dist/                    # After build:
+    ├── index.asena.js
+    └── src/frontend/pages/  # Copied by include
+        ├── home.html
+        ├── settings.html
+        └── app.ts
+```
+
 ## Best Practices
 
 ### 1. Use for Static Pages

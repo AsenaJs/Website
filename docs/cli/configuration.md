@@ -28,6 +28,7 @@ export default defineConfig({
 interface AsenaConfig {
   sourceFolder: string;           // Source code directory
   rootFile: string;                // Application entry point
+  include?: string[];              // Files/directories to copy to output
   buildOptions?: BuildOptions;     // Optional Bun bundler options
 }
 
@@ -120,6 +121,46 @@ const server = await AsenaServerFactory.create({
 
 await server.start();
 ```
+
+### include
+
+**Type:** `string[]` (optional)
+**Default:** `[]` (empty array)
+
+Specifies files and directories that should be copied into the output directory during build. Paths are relative to the project root. Directory structure is preserved.
+
+```typescript
+export default defineConfig({
+  include: ['public', 'src/frontend/pages'],
+});
+```
+
+This is essential when using [`@FrontendController`](/docs/concepts/frontend-controller) — the HTML files referenced by `@Page` methods must be available in the build output.
+
+**Example:** If your frontend controller imports `../../public/home.html`, you must include the `public` directory:
+
+```typescript
+export default defineConfig({
+  sourceFolder: 'src',
+  rootFile: 'src/index.ts',
+  include: ['public'], // [!code highlight]
+  buildOptions: {
+    outdir: 'dist',
+  },
+});
+```
+
+After build, `public/` is copied to `dist/public/`, and HTML import paths are automatically rewritten to resolve correctly.
+
+::: tip
+You can include both files and directories. Directories are copied recursively.
+```typescript
+include: [
+  'public',              // Entire directory
+  'config/app.json',     // Single file
+]
+```
+:::
 
 ### buildOptions
 

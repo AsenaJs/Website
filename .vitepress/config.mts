@@ -67,6 +67,7 @@ export default defineConfig({
                     {text: "Logger", link: "/docs/packages/logger"},
                     {text: "Drizzle ORM", link: "/docs/packages/drizzle"},
                     {text: "OpenAPI", link: "/docs/packages/openapi"},
+                    {text: "OpenTelemetry", link: "/docs/packages/opentelemetry"},
                     {text: "Redis", link: "/docs/packages/redis"},
                 ],
             },
