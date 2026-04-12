@@ -1,510 +1,71 @@
-# Asena Framework Documentation
+# Asena
 
-Asena is a high-performance, NestJS-like IoC web framework built on Bun runtime with full dependency injection support. Designed for speed with decorator-based architecture, achieving 200k-300k requests/sec.
-
-> **Note**: This file is available at https://asena.sh/llms.txt - A comprehensive reference optimized for LLMS consumption.
-
-## Quick Links
+> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection, achieving 200k-300k requests/sec.
 
 - Documentation: https://asena.sh
-- LLM Reference: https://asena.sh/llms.txt
 - GitHub: https://github.com/AsenaJs/Asena
 - Examples: https://github.com/LibirSoft/AsenaExample
-- Bun Runtime: https://bun.sh
 
-## Installation
+## Docs
 
-- Getting Started: https://asena.sh/docs/get-started
-  - Prerequisites (Bun v1.2.8+)
-  - Installation & Setup
-  - TypeScript Configuration (experimentalDecorators required)
-  - Quick Start Guide
-  - First Project
+- [Philosophy](https://asena.sh/raw/philosophy.md): Why Asena exists - bringing Spring Boot patterns to TypeScript with automatic component discovery and field-based DI
+- [Getting Started](https://asena.sh/raw/get-started.md): Installation, prerequisites, TypeScript configuration, and creating your first Asena project
+- [Examples](https://asena.sh/raw/examples.md): Real-world examples including REST APIs, WebSocket chat, authentication, and database integration
+- [Showcase](https://asena.sh/raw/showcase.md): Production applications built with Asena Framework
+- [Roadmap](https://asena.sh/raw/roadmap.md): Development roadmap - completed features, active development, and future plans
 
-## Core Concepts
+## Concepts
 
-- Controllers: https://asena.sh/docs/concepts/controllers
-  - @Controller decorator with path prefix
-  - HTTP Method Decorators (@Get, @Post, @Put, @Delete, @Patch, @Options, @Head)
-  - Route Parameters (context.getParam())
-  - Query Parameters (context.getQuery())
-  - Request Body Handling (context.getBody())
-  - Dependency Injection with @Inject decorator
-    - Class-based injection (type-safe, recommended)
-    - String-based injection (no type safety)
-  - Controller-level middleware configuration
+- [Controllers](https://asena.sh/raw/concepts/controllers.md): HTTP route controllers with @Controller decorator, method decorators (@Get, @Post, etc.), and route parameters
+- [Services](https://asena.sh/raw/concepts/services.md): Business logic services with @Service decorator, singleton and prototype scopes
+- [Dependency Injection](https://asena.sh/raw/concepts/dependency-injection.md): Field-based dependency injection with @Inject decorator, class-based and string-based injection
+- [Middleware](https://asena.sh/raw/concepts/middleware.md): Custom middleware with @Middleware decorator, global/pattern-based/route-level middleware
+- [Context](https://asena.sh/raw/concepts/context.md): Unified request/response API - getParam, getQuery, getBody, send, json, html across all adapters
+- [Validation](https://asena.sh/raw/concepts/validation.md): Zod-based request validation with @Validation decorator (Ergenecore adapter only)
+- [Static File Serving](https://asena.sh/raw/concepts/static-files.md): Serve static files with @StaticServe decorator and lifecycle hooks
+- [WebSocket](https://asena.sh/raw/concepts/websocket.md): WebSocket services with @WebSocket decorator, built-in room management, and middleware support
+- [Ulak](https://asena.sh/raw/concepts/ulak.md): Centralized WebSocket message broker for breaking circular dependencies between services and WebSocket handlers
+- [Event System](https://asena.sh/raw/concepts/event-system.md): Decoupled event-driven architecture with @EventService, @On decorators, and wildcard pattern matching
+- [Scheduled Tasks](https://asena.sh/raw/concepts/scheduled-tasks.md): Cron-based task scheduling with @Schedule decorator using Bun's native cron support
+- [Frontend Controller](https://asena.sh/raw/concepts/frontend-controller.md): Serve HTML pages with @FrontendController and @Page decorators using Bun's native HTML imports
+- [PostProcessor](https://asena.sh/raw/concepts/post-processor.md): Component interception system for transforming instances during IoC bootstrap
 
-- Services: https://asena.sh/docs/concepts/services
-  - @Service decorator for business logic classes
-  - Service Scopes:
-    - Scope.SINGLETON (default) - Single instance shared across app
-    - Scope.PROTOTYPE - New instance per injection
-  - ComponentParams interface:
-    - name?: string - Custom service name
-    - scope?: Scope - Service lifecycle scope
-  - Field-based dependency injection
-  - Service composition and separation of concerns
+## Adapters
 
-- Dependency Injection: https://asena.sh/docs/concepts/dependency-injection
-  - @Inject decorator for field injection
-  - Class-based vs String-based injection
-  - Service resolution from IoC container
-  - Automatic component registration
-  - Scope management (SINGLETON/PROTOTYPE)
+- [Overview](https://asena.sh/raw/adapters/overview.md): Comparison between Ergenecore and Hono adapters - performance, features, and use cases
+- [Ergenecore](https://asena.sh/raw/adapters/ergenecore.md): Bun-native adapter with zero dependencies, built-in CORS and rate limiting, ~295k req/sec
+- [Hono](https://asena.sh/raw/adapters/hono.md): Hono framework-based adapter with @Override decorator for native Hono context access, ~233k req/sec
 
-- Middleware: https://asena.sh/docs/concepts/middleware
-  - @Middleware decorator
-  - Custom middleware extending MiddlewareService
-  - Global middleware (via @Config)
-  - Pattern-based middleware (include/exclude routes)
-  - Controller-level middleware
-  - Route-level middleware
-  - Middleware execution order
-  - Next function for middleware chaining
+## Packages
 
-- Context API: https://asena.sh/docs/concepts/context
-  - **Unified API** - Same interface for both Ergenecore and Hono adapters
-  - Request Methods:
-    - getRequest() - Raw request object
-    - getParam(key) - Route parameter
-    - getQuery(key) - Query parameter
-    - getBody() - Parsed request body
-    - getHeader(key) - Request header
-    - getCookie(key) - Cookie value
-  - Response Methods:
-    - send(data, status?) - Send response
-    - json(data, status?) - Send JSON
-    - html(content, status?) - Send HTML
-    - text(content, status?) - Send text
-    - redirect(url, status?) - Redirect
-    - status(code) - Set status code
-  - State Management:
-    - setValue(key, value) - Store request-scoped data
-    - getValue(key) - Retrieve stored data
-  - Cookie Management:
-    - setCookie(name, value, options?) - Set cookie
-
-- WebSocket: https://asena.sh/docs/concepts/websocket
-  - @WebSocket decorator for WebSocket services
-  - AsenaWebSocketService base class with built-in room management
-  - **Middleware Support** (Just like controllers):
-    - middlewares array in @WebSocket decorator
-    - Executes BEFORE WebSocket connection is established
-    - context.setWebSocketValue(data) - Pass data from middleware to WebSocket
-    - Access middleware data via ws.data.values in lifecycle methods
-    - Multiple middleware support with execution order
-    - Recommended for authentication, logging, rate limiting
-  - **Built-in Features** (Do NOT manually manage rooms with Map):
-    - this.sockets - Auto-managed Map of all connected sockets
-    - this.rooms - Auto-managed Map of room subscribers
-    - this.to(room, data) - Broadcast to specific room from service
-    - this.in(data) - Broadcast to all connected clients
-    - getSocketsByRoom(room) - Get all sockets in a room
-  - Socket API (ws parameter in lifecycle methods):
-    - ws.subscribe(room) - Join room (auto-tracked by Asena)
-    - ws.unsubscribe(room) - Leave room (auto-cleanup)
-    - ws.publish(room, data) - Broadcast to room from socket level
-    - ws.send(data) - Send to specific client
-    - ws.id - Unique socket identifier
-    - ws.data.values - Data passed from middleware via setWebSocketValue()
-  - Lifecycle Methods:
-    - onOpen(ws) - Connection established (after middleware)
-    - onMessage(ws, message) - Message received
-    - onClose(ws) - Connection closed (auto-cleanup by Asena)
-    - onDrain(ws), onPing(ws), onPong(ws) - Optional handlers
-  - Service Injection Pattern:
-    - Inject WebSocket service into other services
-    - Send messages from controllers/services/background jobs
-    - Example: @Inject(ChatSocket) private chatSocket: ChatSocket
-  - Pub/Sub pattern with automatic room tracking
-  - **IMPORTANT**:
-    - Asena handles room/socket tracking automatically - avoid manual Map management
-    - Use middleware for authentication, NOT inside onOpen()
-  - **For breaking circular dependencies, use Ulak** - See below
-
-- Ulak (WebSocket Messaging System): https://asena.sh/docs/concepts/ulak
-  - **Problem Solved**: Breaks circular dependencies between services and WebSocket handlers
-    - Services need WebSocket to send messages
-    - WebSocket handlers need services for business logic
-    - Direct injection creates circular dependency
-  - **Solution**: Ulak acts as centralized message broker/mediator
-  - **Three Ways to Use Ulak**:
-    1. Scoped Namespace (Recommended - Most Ergonomic):
-       - @Inject(ulak('/namespace')) private ns: Ulak.NameSpace<'/namespace'>
-       - No namespace repetition in method calls
-       - Clean, type-safe API
-    2. Expression-Based Injection:
-       - @Inject(ICoreServiceNames.__ULAK__, (ulak) => ulak.namespace('/ns'))
-       - For advanced transformations
-    3. Direct Ulak Injection:
-       - @Inject(ICoreServiceNames.__ULAK__) private ulak: Ulak
-       - Useful for multiple or dynamic namespaces
-  - **Ulak Core API** (when injecting Ulak directly):
-    - broadcast(namespace, data) - Broadcast to all clients in namespace
-    - to(namespace, room, data) - Send to specific room
-    - toSocket(namespace, socketId, data) - Send to specific socket
-    - toMany(namespace, rooms[], data) - Send to multiple rooms (parallel)
-    - broadcastAll(data) - Broadcast to all namespaces
-    - bulkSend(operations[]) - Execute multiple operations in bulk
-    - namespace(path) - Get scoped namespace interface
-    - getNamespaces() - Get all registered namespace paths
-    - hasNamespace(namespace) - Check if namespace exists
-    - getSocketCount(namespace) - Get active socket count
-  - **Scoped Namespace API** (when using ulak() helper):
-    - broadcast(data) - Broadcast to namespace
-    - to(room, data) - Send to room
-    - toSocket(socketId, data) - Send to socket
-    - toMany(rooms[], data) - Send to multiple rooms
-    - getSocketCount() - Get socket count
-    - path - Namespace path (readonly)
-  - **Error Handling**:
-    - UlakError class with structured error codes
-    - Error codes: NAMESPACE_NOT_FOUND, NAMESPACE_ALREADY_EXISTS, INVALID_NAMESPACE, INVALID_MESSAGE, SEND_FAILED, BROADCAST_FAILED, SOCKET_NOT_FOUND, SERVICE_NOT_INITIALIZED
-    - Access error.code, error.namespace, error.cause
-  - **Best Practices**:
-    - Prefer scoped namespaces with ulak() helper
-    - Subscribe to rooms in WebSocket's onOpen()
-    - Handle errors gracefully with try-catch
-    - Use batch operations (toMany) for multiple rooms
-    - Type your messages with TypeScript interfaces
-  - **Usage Pattern**:
-    - WebSocket handlers subscribe sockets to rooms
-    - Services inject Ulak to send messages
-    - No circular dependency between them
-    - Example: Service uses ulak.to(room, data) to notify WebSocket clients
-
-- Validation: https://asena.sh/docs/concepts/validation
-  - **Ergenecore Adapter Only** - Not available in Hono adapter
-  - Zod integration via ValidationService
-  - @Validation() decorator for route-level validation
-  - ValidationSchemaWithHook interface:
-    - schema: ZodSchema - Zod validation schema
-    - hook?: (result, context) => any - Post-validation hook
-  - Automatic error responses (400) on validation failure
-  - Async validation support
-  - Reusable schema patterns (common.ts exports)
-  - For Zod schema syntax: https://zod.dev/
-
-- Event System: https://asena.sh/docs/concepts/event-system
-  - Decoupled, event-driven architecture for application components
-  - **Key Features**:
-    - Fire-and-Forget Pattern - Events emitted without waiting for handlers (Spring-like)
-    - Wildcard Pattern Matching - Flexible patterns (*, user.*, *.error, user.*.created)
-    - Error Isolation - Handler errors don't affect other handlers or emitter
-    - Async Support - Both sync and async handlers with smart Promise detection
-    - Full IoC Integration - Dependency injection in event services
-    - Zero Dependencies - Built with native TypeScript and Bun APIs
-  - **Decorators**:
-    - @EventService(params?) - Mark class as event service
-      - prefix?: string - Prefix for all handlers in class
-      - name?: string - Custom component name
-    - @On(params) - Mark method as event handler
-      - event: string - Event pattern to match
-      - skip?: boolean - Skip handler (for debugging)
-  - **Event Patterns**:
-    - Exact match: 'user.created'
-    - Match all: '*'
-    - Prefix wildcard: 'user.*' (matches user.created, user.updated, etc.)
-    - Suffix wildcard: '*.error' (matches user.error, db.error, etc.)
-    - Nested wildcard: 'user.*.created' (matches user.admin.created, etc.)
-  - **EventEmitter API**:
-    - emit(eventName, data?) - Emit event (returns boolean if any handler matched)
-    - Inject with: @Inject(emitter()) or emitter() helper
-  - **Pattern Building with Prefix**:
-    - prefix: 'user', event: 'created' → 'user.created'
-    - prefix: 'user', event: '*.error' → 'user.*.error'
-  - **Event Chaining**: Handlers can emit other events
-  - **Multiple Listeners**: Multiple services can listen to same event
-  - **Dependency Injection**: Full DI support in event services
-  - **Best Practices**:
-    - Use dot-notation for event names (user.created, order.placed)
-    - Organize events by domain with prefixes
-    - Keep handlers lightweight and fast
-    - Use wildcards sparingly (cross-cutting concerns only)
-    - Don't rely on handler execution order
-    - Return values are ignored
-    - Use descriptive event data
-  - **Use Cases**: User registration flow, order processing pipeline, error monitoring, audit logging, real-time notifications
-
-- Static File Serving: https://asena.sh/docs/concepts/static-files
-  - **⚠️ BREAKING CHANGES IN v0.7.0** - API will change significantly
-  - Built-in support via @StaticServe decorator and StaticServeService base class
-  - **Both Adapters Supported** - Ergenecore and Hono
-  - **Setup**:
-    - Create middleware extending StaticServeService
-    - @StaticServe({ root: path }) - Configure root directory
-    - Attach to controller route with staticServe parameter
-  - **Lifecycle Hooks**:
-    - rewriteRequestPath(reqPath) - Transform request path before file lookup
-    - onFound(filePath, context) - Called when file is found
-    - onNotFound(reqPath, context) - Called when file not found
-  - **Configuration**:
-    - root: string - Absolute path to static files directory (required)
-    - Use: path.join(process.cwd(), 'public')
-  - **Examples**:
-    - Basic static server (public directory)
-    - SPA with fallback to index.html
-    - Multiple directories (assets, downloads, images)
-    - Custom headers (Cache-Control, Content-Disposition)
-  - **Best Practices**:
-    - Use absolute paths for root directory
-    - Implement security checks (prevent directory traversal)
-    - Set appropriate cache headers in onFound
-    - Log 404s in onNotFound for monitoring
-    - Keep middleware simple and fast
-    - Prepare for v0.7.0 API changes
-  - **Common Use Cases**:
-    - Serve build output (React/Vue/Svelte dist)
-    - Serve documentation (VitePress, Storybook)
-    - Serve user uploads
-    - Force downloads with Content-Disposition header
-
-## HTTP Adapters
-
-- Adapters Overview: https://asena.sh/docs/adapters/overview
-  - Adapter Comparison (Performance, Features, Use Cases)
-  - When to Use Ergenecore (Bun-native, fastest, built-in features)
-  - When to Use Hono (Hono ecosystem compatibility)
-
-- Ergenecore Adapter (Fastest - 295k req/sec): https://asena.sh/docs/adapters/ergenecore
-  - Bun-native adapter with zero dependencies
-  - Factory Functions:
-    - createErgenecoreAdapter(options) - Full configuration
-    - createProductionAdapter(port, hostname?) - Production preset
-    - createDevelopmentAdapter(port, hostname?) - Development preset
-  - Built-in Middleware:
-    - CorsMiddleware - CORS handling (origin, methods, credentials, maxAge)
-    - RateLimiterMiddleware - Token bucket algorithm (tokensPerInterval, interval, fireImmediately)
-  - Context API (ErgenecoreContextWrapper implements AsenaContext)
-  - Validation with Zod (ValidationService)
-  - Static File Serving (StaticServeService)
-  - WebSocket support (enableWebSocket option)
-  - Error Handling
-
-- Hono Adapter (233k req/sec): https://asena.sh/docs/adapters/hono
-  - Hono framework-based adapter
-  - Setup & Configuration via createHonoAdapter()
-  - Context API (HonoContextWrapper implements AsenaContext)
-  - **@Override Decorator** - Unique to Hono Adapter:
-    - Allows direct access to native Hono context
-    - Bypasses AsenaContext wrapper
-    - Use in middleware for Hono-specific features
-  - Static File Serving (StaticServeService)
-  - Testing with AsenaServerFactory.create():
-    - components parameter for isolated testing
-    - Register specific controllers/services for tests
-  - Migration from standalone Hono
-  - Hono ecosystem compatibility
-
-## Official Packages
-
-- AsenaLogger (Winston-based): https://asena.sh/docs/packages/logger
-  - Installation: bun add @asenajs/asena-logger
-  - **Recommended Pattern**: Global Export
-    - export const logger = new AsenaLogger()
-    - Import and use directly in components
-  - Alternative: IoC Injection
-    - @Inject(ICoreServiceNames.SERVER_LOGGER)
-    - Access server logger instance
-  - Log Levels: error, warn, info, debug, verbose
-  - API Methods:
-    - error(message, meta?)
-    - warn(message, meta?)
-    - info(message, meta?)
-    - debug(message, meta?)
-    - verbose(message, meta?)
-  - Custom Configuration:
-    - Log format (JSON, simple, colorize)
-    - Transports (console, file, custom)
-    - Log rotation
-  - Performance Profiling with startTimer()
-
-- Asena Drizzle (Database & Repository): https://asena.sh/docs/packages/drizzle
-  - Installation: bun add @asenajs/asena-drizzle
-  - @Database Decorator:
-    - type: 'postgresql' | 'mysql' | 'bun-sql'
-    - config: { host, port, database, user, password, connectionString? }
-    - name?: string - Optional database name
-    - drizzleConfig?: { logger?, schema? }
-  - @Repository Decorator:
-    - Links repository to table schema
-    - Automatic BaseRepository injection
-  - BaseRepository Methods:
-    - findAll() - Get all records
-    - findById(id) - Find by primary key
-    - findOne(where) - Find single record
-    - create(data) - Insert record
-    - update(id, data) - Update record
-    - delete(id) - Delete record
-    - query() - Direct Drizzle query builder access
-  - Transaction Support:
-    - db.transaction((tx) => { ... })
-  - Multiple Databases:
-    - Define multiple @Database classes
-    - Inject specific database by name
-  - Advanced Queries with Drizzle query builder
-  - For Drizzle syntax: https://orm.drizzle.team/
+- [Logger](https://asena.sh/raw/packages/logger.md): Winston-based logging with AsenaLogger - log levels, custom transports, and performance profiling
+- [Drizzle ORM](https://asena.sh/raw/packages/drizzle.md): Database integration with @Database and @Repository decorators, BaseRepository CRUD, and transaction support
+- [OpenAPI](https://asena.sh/raw/packages/openapi.md): Automatic OpenAPI 3.1 spec generation with built-in Swagger UI, zero-config setup
+- [OpenTelemetry](https://asena.sh/raw/packages/opentelemetry.md): Automatic HTTP tracing, method-level auto-tracing, metrics, and W3C distributed tracing
+- [Redis](https://asena.sh/raw/packages/redis.md): Redis integration with @Redis decorator, multi-pod WebSocket transport, and full Redis operations
 
 ## CLI
 
-- CLI Overview: https://asena.sh/docs/cli/overview
-  - Quick project scaffolding
-  - Code generation (controllers, services, middleware, etc.)
-  - Development mode with hot reload
-  - Production builds with Bun bundler
-  - Multi-adapter support (Ergenecore/Hono)
-
-- Installation: https://asena.sh/docs/cli/installation
-  - Prerequisites: Bun v1.2.8+
-  - Install: bun install -g @asenajs/asena-cli
-  - Verify: asena --version
-  - Update: bun install -g @asenajs/asena-cli@latest
-  - Uninstall: bun remove -g @asenajs/asena-cli
-  - Troubleshooting (PATH, permissions, version mismatch)
-
-- Commands: https://asena.sh/docs/cli/commands
-  - asena create - Bootstrap new project
-    - Interactive mode (default) - Prompts for all options
-    - Non-interactive mode - For SSH/CI/CD environments with CLI arguments
-    - CLI Options:
-      - [project-name] - Project name (use '.' for current directory)
-      - --adapter <adapter> - hono or ergenecore
-      - --logger / --no-logger - Setup logger (default: true)
-      - --eslint / --no-eslint - Setup ESLint (default: true)
-      - --prettier / --no-prettier - Setup Prettier (default: true)
-    - Example: asena create my-app --adapter=ergenecore --logger --eslint --prettier
-  - asena generate (g) - Generate components:
-    - asena g c [name] - Generate controller
-    - asena g s [name] - Generate service
-    - asena g m [name] - Generate middleware
-    - asena g ws [name] - Generate WebSocket namespace
-    - asena g config [name] - Generate config class
-  - asena dev start - Start development server with auto-rebuild
-  - asena build - Bundle for production
-  - asena init - Initialize asena.config.ts
-  - All commands support both full and shortcut forms
-
-- Configuration: https://asena.sh/docs/cli/configuration
-  - asena.config.ts - CLI configuration file
-  - defineConfig() helper for type safety
-  - Configuration Structure:
-    - sourceFolder: string - Source directory (default: 'src')
-    - rootFile: string - Entry point (default: 'src/index.ts')
-    - buildOptions?: BuildOptions - Optional Bun bundler options
-  - BuildOptions (All optional - Partial<Pick<Bun.BuildConfig>>):
-    - outdir?: string - Build output directory (default: './out')
-    - sourcemap?: 'none' | 'inline' | 'external' | 'linked' - Source map generation
-    - minify?: boolean | MinifyOptions - Minification options:
-      - whitespace: boolean (default: true)
-      - syntax: boolean (default: true)
-      - identifiers: boolean (default: false - preserves names in logs)
-      - keepNames: boolean (default: true - preserves function/class names)
-    - external?: string[] - Dependencies to exclude from bundling (e.g., ['pg', 'mysql2'])
-    - format?: 'esm' | 'cjs' - Output module format (default: 'esm')
-    - drop?: string[] - Remove function calls from bundle (e.g., ['console', 'debugger'])
-  - Managed Internally (NOT configurable):
-    - entrypoints - Managed by Asena CLI based on rootFile
-    - target - Always 'bun' (Asena is Bun-native)
-  - Unsupported Options: splitting, define, loader (not relevant for backend builds)
-  - Environment-specific configuration (dev/prod configs)
-  - TypeScript Requirements (experimentalDecorators, emitDecoratorMetadata)
-  - Bun Bundler Reference: https://bun.com/docs/bundler
-
-- Examples: https://asena.sh/docs/cli/examples
-  - Step-by-step tutorial from project creation to production
-  - Adapter selection (Ergenecore vs Hono)
-  - Creating controllers, services, middleware
-  - Building and deploying
-  - Complete project structure examples
-
-- Suffixes: https://asena.sh/docs/cli/suffix-configuration
-  - for how to configure suffixes in asena cli
-
+- [Overview](https://asena.sh/raw/cli/overview.md): Asena CLI for project scaffolding, code generation, dev server, and production builds
+- [Installation](https://asena.sh/raw/cli/installation.md): Install @asenajs/asena-cli globally with Bun, prerequisites, and troubleshooting
+- [Commands](https://asena.sh/raw/cli/commands.md): CLI commands - create, generate (controller/service/middleware/websocket/config), dev start, build, init
+- [Configuration](https://asena.sh/raw/cli/configuration.md): asena.config.ts with defineConfig - sourceFolder, rootFile, buildOptions (minify, sourcemap, external)
+- [Suffix Configuration](https://asena.sh/raw/cli/suffix-configuration.md): Configure file name suffixes for generated components
+- [Examples](https://asena.sh/raw/cli/examples.md): Step-by-step tutorial from project creation to production deployment
 
 ## Guides
 
-- Configuration: https://asena.sh/docs/guides/configuration
-  - @Config Decorator for server configuration
-  - **Single @Config Class** - Only ONE @Config class supported per app
-  - ConfigService base class
-  - Global Middleware Configuration:
-    - middlewares array
-    - Pattern-based middleware (include/exclude routes)
-  - Error Handling:
-    - onError(error, context) method
-    - Custom error types
-    - Environment-based error responses
-  - Environment Variables for configuration
-  - CLI Configuration (asena.config.ts) for build process
+- [Configuration](https://asena.sh/raw/guides/configuration.md): Server configuration with @Config decorator - global middleware, error handling, environment variables
+- [Error Handling](https://asena.sh/raw/guides/error-handling.md): Error handling patterns - throwing exceptions, global error handlers, custom error classes
 
-## Examples
+## Testing
 
-- Examples Overview: https://asena.sh/docs/examples
-  - REST API Examples:
-    - Complete CRUD operations
-    - Request/response handling
-    - Validation with Zod
-  - WebSocket Chat Application:
-    - Room management
-    - Broadcasting
-    - User state management
-  - Authentication & Authorization:
-    - JWT tokens
-    - Auth middleware
-    - Protected routes
-  - Database Integration:
-    - Drizzle ORM setup
-    - Repository pattern
-    - Transactions
-  - File Upload:
-    - Multipart form data
-    - File validation
-    - Static file serving
-  - Testing Examples:
-    - Controller tests
-    - Service tests
-    - Integration tests
+- [Overview](https://asena.sh/raw/testing/overview.md): Built-in testing utilities with Bun's native test runner and automatic dependency mocking
+- [MockComponent API](https://asena.sh/raw/testing/mock-component.md): API reference for mockComponent and mockComponentAsync - automatic discovery and mocking of injected dependencies
+- [Examples](https://asena.sh/raw/testing/examples.md): Real-world testing patterns for controllers, services, WebSockets, and middleware
 
-## Key Technical Details
+## Optional
 
-### Architecture
-- NestJS-like decorator-based architecture
-- IoC container with automatic dependency injection
-- Field-based injection (no constructor injection)
-- Service lifecycle management (Scopes)
-- Adapter pattern for HTTP server abstraction
-
-### Performance
-- Built on Bun runtime for maximum speed
-- Ergenecore: 295k req/sec (Bun-native, zero dependencies)
-- Hono: 233k req/sec (Hono framework-based)
-- Optimized for production with minification and bundling
-
-### TypeScript Requirements
-- experimentalDecorators: true (required)
-- emitDecoratorMetadata: true (required)
-- TypeScript 5.8.2+ recommended
-
-### Adapter-Specific Features
-- **Ergenecore Only**: Validation with Zod, Built-in CORS/RateLimiter, Factory presets
-- **Hono Only**: @Override decorator for native Hono context access
-- **Both**: Unified Context API, Static file serving, WebSocket support, Event System
-
-### Dependency Injection Patterns
-- @Inject(ClassName) - Class-based (type-safe, recommended)
-- @Inject('string-name') - String-based (no type safety)
-- Scope.SINGLETON - Default, single instance
-- Scope.PROTOTYPE - New instance per injection
-
-### Configuration Constraints
-- **Only ONE @Config class** per application
-- Multiple middleware supported via array
-- Pattern-based middleware with include/exclude
-- Environment-based configuration recommended
-
-### CLI Capabilities
-- Automatic component discovery (no manual imports)
-- Hot reload in development mode
-- Production bundling with Bun's fast bundler
-- Interactive project creation with adapter selection
-- Code generation with full boilerplate
+- [GitHub](https://github.com/AsenaJs/Asena)
+- [npm](https://www.npmjs.com/package/@asenajs/asena)
+- [Bun Runtime](https://bun.sh/docs)

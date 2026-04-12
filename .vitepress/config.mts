@@ -7,6 +7,29 @@ export default defineConfig({
     lastUpdated: true,
     cleanUrls: true,
 
+    async buildEnd(siteConfig) {
+        const {resolve, join} = await import('path');
+        const {cpSync, mkdirSync, readdirSync, statSync} = await import('fs');
+
+        const srcDir = resolve(siteConfig.srcDir, 'docs');
+        const outDir = resolve(siteConfig.outDir, 'raw');
+
+        function copyMdFiles(src: string, dest: string) {
+            mkdirSync(dest, {recursive: true});
+            for (const entry of readdirSync(src)) {
+                const srcPath = join(src, entry);
+                const destPath = join(dest, entry);
+                if (statSync(srcPath).isDirectory()) {
+                    copyMdFiles(srcPath, destPath);
+                } else if (entry.endsWith('.md')) {
+                    cpSync(srcPath, destPath);
+                }
+            }
+        }
+
+        copyMdFiles(srcDir, outDir);
+    },
+
     head: [
         ['link', { rel: 'icon', type: 'image/png', href: '/asena-logo-256.png' }],
         ['meta', { name: 'theme-color', content: '#646cff' }],
