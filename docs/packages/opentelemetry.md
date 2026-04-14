@@ -76,17 +76,34 @@ export class AppOtel extends OtelTracingPostProcessor {}
 ```
 
 ::: tip Zero Config Discovery
-Asena's IoC container automatically discovers your `@Otel` class, `OtelService`, and `OtelTracingMiddleware`. No manual component registration needed.
+Asena's IoC container automatically discovers your `@Otel` class and `OtelService`. No manual component registration needed — except for `OtelTracingMiddleware`, which requires a local wrapper class (see Step 2).
 :::
 
-### 2. Register OtelTracingMiddleware in Your Config
+### 2. Create a Local Middleware Class
 
-Add `OtelTracingMiddleware` to your config's `globalMiddlewares()`. This is required so that all HTTP requests are traced automatically.
+Create a class in your `src` folder that extends `OtelTracingMiddleware` and apply the `@Middleware()` decorator. This registers the middleware in Asena's IoC container.
+
+```typescript
+// src/middlewares/AppOtelMiddleware.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { OtelTracingMiddleware } from '@asenajs/asena-otel';
+
+@Middleware()
+export class AppOtelMiddleware extends OtelTracingMiddleware {}
+```
+
+::: warning Important
+Asena's IoC container only scans the `src` folder defined in your `asena.config.ts`. Since `OtelTracingMiddleware` lives in `node_modules`, the container cannot discover it automatically. You **must** create a local class extending it with `@Middleware()` so that Asena can register and use it. Without this step, the container will throw an error because it cannot find the middleware.
+:::
+
+### 3. Register the Middleware in Your Config
+
+Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required so that all HTTP requests are traced automatically.
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context, HttpException } from '@asenajs/ergenecore';
-import { OtelTracingMiddleware } from '@asenajs/asena-otel';
+import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
 @Config()
@@ -94,7 +111,7 @@ export class AppConfig extends ConfigService {
 
   public globalMiddlewares() {
     return [
-      OtelTracingMiddleware,  // traces all HTTP requests automatically
+      AppOtelMiddleware,  // traces all HTTP requests automatically
       AppCorsMiddleware,
     ];
   }
