@@ -1,6 +1,6 @@
 ---
 title: Static File Serving
-description: Serve static files from your Asena application
+description: Serve static files with @StaticServe, including lifecycle hooks and path configuration
 outline: deep
 ---
 

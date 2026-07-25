@@ -1,6 +1,6 @@
 ---
 title: CLI Overview
-description: Overview of Asena CLI features and capabilities
+description: Asena CLI for project scaffolding, code generation, dev server, and production bundling
 outline: deep
 ---
 
@@ -71,7 +71,7 @@ asena dev start
 
 ## Requirements
 
-- **Bun Runtime** - v1.2.8 or higher
+- **Bun Runtime** - v1.3.12 or higher
 - **TypeScript** - v5.8.2 or higher (installed automatically)
 
 ## Related Resources

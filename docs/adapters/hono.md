@@ -61,7 +61,7 @@ bun add @asenajs/hono-adapter
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) runtime
+- [Bun](https://bun.sh) runtime v1.3.12 or higher
 - TypeScript v5.8.2 or higher
 
 ## Quick Start
@@ -679,6 +679,7 @@ describe("UserController", () => {
 | Option       | Type       | Description                               |
 |:-------------|:-----------|:------------------------------------------|
 | `adapter`    | `Adapter`  | Hono adapter instance                     |
+| `headless`   | `boolean`  | Explicit opt-in to boot without an adapter ([headless mode](/docs/concepts/microservices#headless-mode)) |
 | `logger`     | `Logger`   | Logger instance                           |
 | `port`       | `number`   | Server port (optional)                    |
 | `components` | `Class[]`  | Controllers/services to register (for testing) |

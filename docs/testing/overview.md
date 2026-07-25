@@ -83,10 +83,42 @@ describe('AuthService', () => {
 });
 ```
 
+## Two Levels of Testing
+
+Asena ships utilities for both ends of the spectrum, all from `@asenajs/asena/test`:
+
+| | Use it when | Container | Adapter |
+|---|---|---|---|
+| **[`mockComponent`](/docs/testing/mock-component)** | Testing one class's logic in isolation | Bypassed | None |
+| **[`createWebTest`](/docs/testing/web-test)** | Testing a controller's routing, middlewares and validation | Real, non-web deps auto-mocked | Real |
+| **[`createTestApp`](/docs/testing/test-app)** | Testing the whole application end to end | Real | Real |
+
+`mockComponent` is the fastest and covers most service-level tests. Reach for the harness when the thing you want to assert on *is* the framework's behaviour — a route matching, a middleware short-circuiting, a validator rejecting a bad payload.
+
+```typescript
+// Unit: no framework involved
+const { instance, mocks } = mockComponent(AuthService);
+
+// Slice: real routing and validation, mocked services
+const { app, mocks } = await createWebTest({ adapter, controllers: [UserController] });
+await app.get('/api/users/1').expectStatus(200);
+
+// Full: everything real, swap what you need
+await using app = await createTestApp({
+  adapter,
+  components: [UserController, UserService],
+  overrides: { UserService: myDouble },
+});
+```
+
 ## Import Path
 
 ```typescript
-import { mockComponent, mockComponentAsync } from '@asenajs/asena/test';
+// Unit-level mocking
+import { mockComponent, mockComponentAsync, createDeepMock, createTestUlakStub } from '@asenajs/asena/test';
+
+// Integration harness
+import { createTestApp, createWebTest, silentLogger } from '@asenajs/asena/test';
 ```
 
 ## What You Can Test

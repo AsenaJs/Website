@@ -1,6 +1,6 @@
 ---
 title: Scheduled Tasks
-description: Cron-based task scheduling with decorator support
+description: Cron-based background jobs with @Schedule and CronRunner, powered by Bun's native cron
 outline: deep
 ---
 

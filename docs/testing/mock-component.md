@@ -174,6 +174,11 @@ const { instance, mocks } = mockComponent(AuthService, {
 expect(mocks.userService).toBe(customMock);
 ```
 
+An override is the **final** value injected into the field:
+
+- For expression-based injections (e.g. `@Inject(ulak('/chat'))` or `@Inject(UserService, (s) => s.createUser)`), the expression is **skipped entirely** — your override is used as-is.
+- Presence is checked with `Object.hasOwn`, so falsy values (`0`, `''`, `null`, `undefined`) are injected as-is rather than ignored.
+
 #### `postConstruct`
 
 Lifecycle hook executed after dependencies are injected.
@@ -291,7 +296,7 @@ const { instance, mocks } = mockComponent(AuthService, {
 
 ### Expression Transformations
 
-`mockComponent` supports `@Inject` expression transformations automatically.
+`mockComponent` supports `@Inject` expression transformations automatically. When an expression field is not overridden, the expression is evaluated against a **deep mock**: every property access yields a Bun mock function and every call returns another chainable deep mock, so any expression works without a running application.
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
@@ -312,9 +317,77 @@ class AuthService {
 
 const { instance, mocks } = mockComponent(AuthService);
 
-// The expression is applied automatically
+// The expression is applied automatically - createUserFn is a real Bun mock
 mocks.createUserFn.mockResolvedValue({ id: 'user-123' });
+
+expect(mocks.createUserFn).toHaveBeenCalledWith('John', 'john@example.com');
 ```
+
+If the field is provided via `overrides`, the expression is skipped and your override is injected as-is.
+
+### Testing Services with Ulak Injections
+
+Services that inject scoped namespaces with the [`ulak()` helper](/docs/concepts/ulak) are testable without a running WebSocket broker.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ulak, type Ulak } from '@asenajs/asena/messaging';
+
+@Service('UserService')
+export class UserService {
+  @Inject(ulak('/ws/public/stats'))
+  private statsChannel: Ulak.NameSpace<'/ws/public/stats'>;
+
+  async createAnonUser(name: string) {
+    // ...create the user...
+    await this.statsChannel.broadcast({ action: 'update', data: { newUser: 1 } });
+  }
+}
+```
+
+**Variant A — automatic deep mock.** No configuration needed; the namespace methods are assertable Bun mocks:
+
+```typescript
+import { describe, expect, test } from 'bun:test';
+import { mockComponent } from '@asenajs/asena/test';
+
+test('broadcasts stats on user creation', async () => {
+  const { instance, mocks } = mockComponent(UserService);
+
+  await instance.createAnonUser('John');
+
+  expect(mocks.statsChannel.broadcast).toHaveBeenCalledWith({
+    action: 'update',
+    data: { newUser: 1 }
+  });
+});
+```
+
+**Variant B — typed stub via `createTestUlakStub`.** Use an explicit override when you want a fully typed `Ulak.NameSpace` mock:
+
+```typescript
+import { createTestUlakStub, mockComponent } from '@asenajs/asena/test';
+
+test('broadcasts stats on user creation', async () => {
+  const statsChannel = createTestUlakStub('/ws/public/stats');
+
+  const { instance } = mockComponent(UserService, {
+    overrides: { statsChannel }
+  });
+
+  await instance.createAnonUser('John');
+
+  expect(statsChannel.broadcast).toHaveBeenCalledWith({
+    action: 'update',
+    data: { newUser: 1 }
+  });
+});
+```
+
+::: tip
+`createTestUlakStub` implements the full `Ulak.NameSpace` interface (`broadcast`, `to`, `toSocket`, `toMany`, `getSocketCount`) with Bun mocks, so it stays in sync with the framework at compile time.
+:::
 
 ### Testing Components with Inheritance
 
@@ -361,12 +434,32 @@ expect(mocks.database).toBeDefined();
 
 ### How It Works
 
-1. **Metadata Discovery** - Reads the same metadata that Asena's IoC Container uses (`ComponentConstants.DependencyKey` and `ComponentConstants.ExpressionKey`)
+1. **Metadata Discovery** - Reads the same metadata that Asena's IoC Container uses (`ComponentConstants.DependencyKey`, `ComponentConstants.DependencyClassKey` and `ComponentConstants.ExpressionKey`)
 2. **Mock Generation** - Uses Bun's native `mock()` function to create mocks
    - Automatically detects async methods and creates `mock(async () => null)`
    - Sync methods get `mock(() => undefined)`
 3. **Injection** - Injects mocks into the component instance
-4. **Expression Support** - Applies expression transformations if defined
+4. **Expression Support** - Evaluates expression transformations against a deep mock (unless the field is overridden, in which case the override is injected as-is)
+
+### What each field receives
+
+The mock a field gets depends on how it was injected:
+
+| Injection | Mock |
+|---|---|
+| `@Inject(UserService)` | An object shaped like the class — every method is a `bun:test` mock |
+| `@Inject(ulak('/chat'))` and other expression injections | The expression evaluated against a deep mock, so any call chain works and stays assertable |
+| `@Inject('UserService')` | A plain `{}` — a string carries no class reference, so no method shape can be derived |
+
+::: warning String injections need overrides
+Only class-based injections can be auto-shaped. For `@Inject('UserService')` pass the double yourself:
+
+```typescript
+mockComponent(LegacyService, {
+  overrides: { userService: { findById: mock(async () => ({ id: '1' })) } },
+});
+```
+:::
 
 ### Zero Dependencies
 
@@ -378,7 +471,13 @@ This feature follows Asena's zero-dependency philosophy:
 ### Import Path
 
 ```typescript
-import { mockComponent, mockComponentAsync } from '@asenajs/asena/test';
+import {
+  mockComponent,
+  mockComponentAsync,
+  createMockFromClass,
+  createDeepMock,
+  createTestUlakStub
+} from '@asenajs/asena/test';
 ```
 
 Package export configuration:
@@ -396,6 +495,8 @@ Package export configuration:
 ## Related
 
 - **[Testing Overview](/docs/testing/overview)** - Introduction to testing in Asena
+- **[createTestApp](/docs/testing/test-app)** - Full-application testing with real HTTP
+- **[createWebTest](/docs/testing/web-test)** - Controller-slice testing (note: `mocks` there is keyed by *service* name, not field name)
 - **[Examples](/docs/testing/examples)** - Real-world testing patterns
 - **[Dependency Injection](/docs/concepts/dependency-injection)** - Understanding DI in Asena
 - **[Bun Test Documentation](https://bun.sh/docs/cli/test)** - Learn more about Bun's test runner

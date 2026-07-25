@@ -7,6 +7,9 @@ export default defineConfig({
     lastUpdated: true,
     cleanUrls: true,
 
+    // Internal authoring guide - must never be published as a page
+    srcExclude: ['CLAUDE.md'],
+
     async buildEnd(siteConfig) {
         const {resolve, join} = await import('path');
         const {cpSync, mkdirSync, readdirSync, statSync} = await import('fs');
@@ -70,6 +73,7 @@ export default defineConfig({
                     {text: "Static File Serving", link: "/docs/concepts/static-files"},
                     {text: "WebSocket", link: "/docs/concepts/websocket"},
                     {text: "Event System", link: "/docs/concepts/event-system"},
+                    {text: "Microservices", link: "/docs/concepts/microservices"},
                     {text: "Ulak", link: "/docs/concepts/ulak"},
                     {text: "Scheduled Tasks", link: "/docs/concepts/scheduled-tasks"},
                     {text: "Frontend Controller", link: "/docs/concepts/frontend-controller"},
@@ -92,6 +96,7 @@ export default defineConfig({
                     {text: "OpenAPI", link: "/docs/packages/openapi"},
                     {text: "OpenTelemetry", link: "/docs/packages/opentelemetry"},
                     {text: "Redis", link: "/docs/packages/redis"},
+                    {text: "Kafka", link: "/docs/packages/kafka"},
                 ],
             },
             {
@@ -110,6 +115,7 @@ export default defineConfig({
                 items: [
                     {text: "Configuration", link: "/docs/guides/configuration"},
                     {text: "Error Handling", link: "/docs/guides/error-handling"},
+                    {text: "Deployment", link: "/docs/guides/deployment"},
                 ],
             },
             {
@@ -117,6 +123,8 @@ export default defineConfig({
                 items: [
                     {text: "Overview", link: "/docs/testing/overview"},
                     {text: "MockComponent API", link: "/docs/testing/mock-component"},
+                    {text: "createTestApp", link: "/docs/testing/test-app"},
+                    {text: "createWebTest", link: "/docs/testing/web-test"},
                     {text: "Examples", link: "/docs/testing/examples"},
                 ],
             },

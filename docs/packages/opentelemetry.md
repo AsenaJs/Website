@@ -39,8 +39,8 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 ```
 
 ::: info Requirements
-- [Bun](https://bun.sh) v1.3.11 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
+- [Bun](https://bun.sh) v1.3.12 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
 :::
 
 ## Quick Start
@@ -388,6 +388,36 @@ async charge(payload: ChargeRequest) {
 ```
 
 This writes a `traceparent` header in the format `00-{traceId}-{spanId}-{traceFlags}`. The downstream service extracts this header to continue the same trace, enabling end-to-end distributed tracing across microservices.
+
+## Microservice Messaging Instrumentation
+
+For Asena's [microservice layer](/docs/concepts/microservices), trace propagation is fully automatic — register the `otelMessaging()` interceptor in your `transport()` config:
+
+```typescript
+import { otelMessaging } from '@asenajs/asena-otel';
+import { RedisMicroserviceTransport } from '@asenajs/asena-redis';
+
+@Config()
+export class AppConfig extends ConfigService {
+  public transport() {
+    return {
+      microservice: new RedisMicroserviceTransport({
+        url: 'redis://localhost:6379',
+        serviceName: 'order-service',
+      }),
+      interceptors: [otelMessaging({ system: 'redis' })],
+    };
+  }
+}
+```
+
+What it does:
+
+- **Outgoing `send`/`emit`**: opens a `PRODUCER` span (`send order.create` / `publish order.created`) and injects `traceparent`/`tracestate` into the message headers. Because the interceptor wraps the whole operation, RPC spans carry the full round-trip duration and error state.
+- **Incoming handlers**: extracts the upstream context from the message headers and runs the handler inside a `CONSUMER` span (`process order.create`) — services join into **one distributed trace** with no manual propagation.
+- **Attributes**: `messaging.system`, `messaging.destination.name`, `messaging.operation.type`, `messaging.message.id`; redeliveries set `messaging.redelivery_count`.
+
+Register the interceptor in **every** service (producers and consumers alike) so the chain stays unbroken end-to-end.
 
 ## Testing
 

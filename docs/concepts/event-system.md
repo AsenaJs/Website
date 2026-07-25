@@ -301,6 +301,22 @@ class UserEventService {
 | `user` | `created` | `user.created` |
 | `user` | `*.updated` | `user.*.updated` |
 | `user` | `*` | `user.*` |
+| `user` | `payment.done` + `prefix: false` | `payment.done` |
+
+> **Same rule as microservices:** the prefix is joined onto every `@On` pattern, and a handler opts out with `prefix: false`. Microservice [`@MessageController`](/docs/concepts/microservices) works identically for both `@MessagePattern` and `@EventPattern`, so the intuition carries over in both directions.
+
+Use `prefix: false` to listen on an absolute name from inside a prefixed service:
+
+```typescript
+@EventService({ prefix: 'user' })
+export class UserEventService {
+  @On('created') // handles 'user.created'
+  handleCreated(eventName: string, data: any) {}
+
+  @On({ event: 'payment.completed', prefix: false }) // absolute
+  handlePayment(eventName: string, data: any) {}
+}
+```
 
 ---
 

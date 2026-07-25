@@ -1,6 +1,6 @@
 ---
 title: CLI Installation
-description: Install and verify Asena CLI
+description: Install @asenajs/asena-cli globally with Bun, verify the installation, and troubleshoot common issues
 outline: deep
 ---
 
@@ -11,7 +11,7 @@ Install the Asena CLI globally to access the `asena` command from anywhere on yo
 ## Prerequisites
 
 **Required:**
-- [Bun runtime](https://bun.sh) v1.2.8 or higher
+- [Bun runtime](https://bun.sh) v1.3.12 or higher
 
 **Verify Bun installation:**
 

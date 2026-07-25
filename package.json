@@ -5,7 +5,8 @@
   },
   "scripts": {
     "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
+    "docs:build": "bun run docs:llms && vitepress build",
+    "docs:llms": "bun scripts/generate-llms.ts",
     "docs:preview": "vitepress preview"
   }
 }

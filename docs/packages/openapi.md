@@ -1,6 +1,6 @@
 ---
 title: Asena OpenAPI
-description: Automatic OpenAPI 3.1 spec generation for Asena
+description: Zero-config OpenAPI 3.1 spec generation from your existing validators, with built-in Swagger UI
 outline: deep
 ---
 
@@ -26,7 +26,7 @@ bun add @asenajs/asena-openapi
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.11 or higher
+- [Bun](https://bun.sh) v1.3.12 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
 - [Zod](https://zod.dev) v4.3 or higher
 

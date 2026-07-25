@@ -8,61 +8,66 @@
 
 ## Docs
 
-- [Philosophy](https://asena.sh/raw/philosophy.md): Why Asena exists - bringing Spring Boot patterns to TypeScript with automatic component discovery and field-based DI
-- [Getting Started](https://asena.sh/raw/get-started.md): Installation, prerequisites, TypeScript configuration, and creating your first Asena project
-- [Examples](https://asena.sh/raw/examples.md): Real-world examples including REST APIs, WebSocket chat, authentication, and database integration
-- [Showcase](https://asena.sh/raw/showcase.md): Production applications built with Asena Framework
-- [Roadmap](https://asena.sh/raw/roadmap.md): Development roadmap - completed features, active development, and future plans
+- [Philosophy](https://asena.sh/raw/philosophy.md): Why Asena exists, the principles behind its design, and the trade-offs it deliberately makes
+- [Get Started](https://asena.sh/raw/get-started.md): Install Asena, configure TypeScript decorators, and build your first controller and service on Bun
+- [Examples](https://asena.sh/raw/examples.md): Complete worked examples - REST APIs, WebSocket chat, authentication, and database integration
+- [Showcase](https://asena.sh/raw/showcase.md): Real-world applications built with Asena Framework - production-ready projects using Asena's features
+- [Roadmap](https://asena.sh/raw/roadmap.md): Asena Framework development roadmap - completed features, active development, and future plans
 
 ## Concepts
 
-- [Controllers](https://asena.sh/raw/concepts/controllers.md): HTTP route controllers with @Controller decorator, method decorators (@Get, @Post, etc.), and route parameters
-- [Services](https://asena.sh/raw/concepts/services.md): Business logic services with @Service decorator, singleton and prototype scopes
-- [Dependency Injection](https://asena.sh/raw/concepts/dependency-injection.md): Field-based dependency injection with @Inject decorator, class-based and string-based injection
-- [Middleware](https://asena.sh/raw/concepts/middleware.md): Custom middleware with @Middleware decorator, global/pattern-based/route-level middleware
-- [Context](https://asena.sh/raw/concepts/context.md): Unified request/response API - getParam, getQuery, getBody, send, json, html across all adapters
-- [Validation](https://asena.sh/raw/concepts/validation.md): Zod-based request validation with @Validation decorator (Ergenecore adapter only)
-- [Static File Serving](https://asena.sh/raw/concepts/static-files.md): Serve static files with @StaticServe decorator and lifecycle hooks
-- [WebSocket](https://asena.sh/raw/concepts/websocket.md): WebSocket services with @WebSocket decorator, built-in room management, and middleware support
-- [Ulak](https://asena.sh/raw/concepts/ulak.md): Centralized WebSocket message broker for breaking circular dependencies between services and WebSocket handlers
-- [Event System](https://asena.sh/raw/concepts/event-system.md): Decoupled event-driven architecture with @EventService, @On decorators, and wildcard pattern matching
-- [Scheduled Tasks](https://asena.sh/raw/concepts/scheduled-tasks.md): Cron-based task scheduling with @Schedule decorator using Bun's native cron support
-- [Frontend Controller](https://asena.sh/raw/concepts/frontend-controller.md): Serve HTML pages with @FrontendController and @Page decorators using Bun's native HTML imports
-- [PostProcessor](https://asena.sh/raw/concepts/post-processor.md): Component interception system for transforming instances during IoC bootstrap
+- [Controllers](https://asena.sh/raw/concepts/controllers.md): Handle HTTP requests with decorator-based routing and dependency injection
+- [Services](https://asena.sh/raw/concepts/services.md): Business logic components with @Service, singleton and prototype scopes, and lifecycle hooks
+- [Dependency Injection](https://asena.sh/raw/concepts/dependency-injection.md): IoC container and field-based dependency injection in Asena
+- [Middleware](https://asena.sh/raw/concepts/middleware.md): Global, pattern-based, controller-level and route-level middleware with @Middleware
+- [Context API](https://asena.sh/raw/concepts/context.md): Unified request/response handling across all Asena adapters
+- [Validation](https://asena.sh/raw/concepts/validation.md): Type-safe request validation with Zod integration in Asena
+- [Static File Serving](https://asena.sh/raw/concepts/static-files.md): Serve static files with @StaticServe, including lifecycle hooks and path configuration
+- [WebSocket](https://asena.sh/raw/concepts/websocket.md): Real-time bidirectional communication with namespace support
+- [Event System](https://asena.sh/raw/concepts/event-system.md): Decoupled, event-driven architecture with fire-and-forget pattern and wildcard matching
+- [Microservices](https://asena.sh/raw/concepts/microservices.md): Broker-agnostic microservice messaging with request/response, events, headless mode and production-grade delivery semantics
+- [Ulak - WebSocket Messaging System](https://asena.sh/raw/concepts/ulak.md): Centralized WebSocket message broker for breaking circular dependencies
+- [Scheduled Tasks](https://asena.sh/raw/concepts/scheduled-tasks.md): Cron-based background jobs with @Schedule and CronRunner, powered by Bun's native cron
+- [Frontend Controller](https://asena.sh/raw/concepts/frontend-controller.md): Serve HTML pages with @FrontendController and @Page using Bun's native HTML imports
+- [PostProcessor](https://asena.sh/raw/concepts/post-processor.md): Intercept and transform every component during IoC bootstrap with @PostProcessor
 
 ## Adapters
 
-- [Overview](https://asena.sh/raw/adapters/overview.md): Comparison between Ergenecore and Hono adapters - performance, features, and use cases
-- [Ergenecore](https://asena.sh/raw/adapters/ergenecore.md): Bun-native adapter with zero dependencies, built-in CORS and rate limiting, ~295k req/sec
-- [Hono](https://asena.sh/raw/adapters/hono.md): Hono framework-based adapter with @Override decorator for native Hono context access, ~233k req/sec
+- [Adapters Overview](https://asena.sh/raw/adapters/overview.md): Understanding Asena's adapter system and choosing the right adapter for your project
+- [Ergenecore Adapter](https://asena.sh/raw/adapters/ergenecore.md): Blazing-fast native Bun adapter with zero dependencies and built-in middleware
+- [Hono Adapter](https://asena.sh/raw/adapters/hono.md): Battle-tested adapter based on the popular Hono web framework
 
-## Packages
+## Official Packages
 
-- [Logger](https://asena.sh/raw/packages/logger.md): Winston-based logging with AsenaLogger - log levels, custom transports, and performance profiling
-- [Drizzle ORM](https://asena.sh/raw/packages/drizzle.md): Database integration with @Database and @Repository decorators, BaseRepository CRUD, and transaction support
-- [OpenAPI](https://asena.sh/raw/packages/openapi.md): Automatic OpenAPI 3.1 spec generation with built-in Swagger UI, zero-config setup
-- [OpenTelemetry](https://asena.sh/raw/packages/opentelemetry.md): Automatic HTTP tracing, method-level auto-tracing, metrics, and W3C distributed tracing
-- [Redis](https://asena.sh/raw/packages/redis.md): Redis integration with @Redis decorator, multi-pod WebSocket transport, and full Redis operations
+- [AsenaLogger](https://asena.sh/raw/packages/logger.md): Winston-based structured logging with AsenaLogger - log levels, transports (console, file, Loki), and profiling
+- [Asena Drizzle](https://asena.sh/raw/packages/drizzle.md): Type-safe database integration with Repository pattern for Asena
+- [Asena OpenAPI](https://asena.sh/raw/packages/openapi.md): Zero-config OpenAPI 3.1 spec generation from your existing validators, with built-in Swagger UI
+- [Asena OpenTelemetry](https://asena.sh/raw/packages/opentelemetry.md): Automatic HTTP tracing, method-level auto-tracing, metrics, and distributed tracing for Asena
+- [Asena Redis](https://asena.sh/raw/packages/redis.md): Redis integration with @Redis - multi-pod WebSocket transport and a Redis Streams microservice transport with consumer groups, retry and DLQ
+- [Asena Kafka](https://asena.sh/raw/packages/kafka.md): Kafka for AsenaJS - a decorator-based produce/consume client, plus a microservice transport with broker-tracked delivery attempts
 
-## CLI
+## Asena CLI
 
-- [Overview](https://asena.sh/raw/cli/overview.md): Asena CLI for project scaffolding, code generation, dev server, and production builds
-- [Installation](https://asena.sh/raw/cli/installation.md): Install @asenajs/asena-cli globally with Bun, prerequisites, and troubleshooting
-- [Commands](https://asena.sh/raw/cli/commands.md): CLI commands - create, generate (controller/service/middleware/websocket/config), dev start, build, init
-- [Configuration](https://asena.sh/raw/cli/configuration.md): asena.config.ts with defineConfig - sourceFolder, rootFile, buildOptions (minify, sourcemap, external)
-- [Suffix Configuration](https://asena.sh/raw/cli/suffix-configuration.md): Configure file name suffixes for generated components
-- [Examples](https://asena.sh/raw/cli/examples.md): Step-by-step tutorial from project creation to production deployment
+- [CLI Overview](https://asena.sh/raw/cli/overview.md): Asena CLI for project scaffolding, code generation, dev server, and production bundling
+- [CLI Installation](https://asena.sh/raw/cli/installation.md): Install @asenajs/asena-cli globally with Bun, verify the installation, and troubleshoot common issues
+- [CLI Commands](https://asena.sh/raw/cli/commands.md): Reference for every CLI command - create, generate, dev start, build and init, including shortcuts
+- [CLI Configuration](https://asena.sh/raw/cli/configuration.md): Complete reference for asena.config.ts configuration file
+- [Suffix Configuration](https://asena.sh/raw/cli/suffix-configuration.md): Customize component naming conventions with flexible suffix configuration
+- [CLI Examples](https://asena.sh/raw/cli/examples.md): Step-by-step tutorial for creating and running an Asena project
 
 ## Guides
 
-- [Configuration](https://asena.sh/raw/guides/configuration.md): Server configuration with @Config decorator - global middleware, error handling, environment variables
-- [Error Handling](https://asena.sh/raw/guides/error-handling.md): Error handling patterns - throwing exceptions, global error handlers, custom error classes
+- [Configuration](https://asena.sh/raw/guides/configuration.md): Configure the server with @Config - global middleware, error handling, environment variables, and microservice transports
+- [Error Handling](https://asena.sh/raw/guides/error-handling.md): Comprehensive guide to error handling in Asena - throwing exceptions, global error handlers, custom errors, and best practices
+- [Deployment](https://asena.sh/raw/guides/deployment.md): Deployment guide for Asena applications
 
 ## Testing
 
-- [Overview](https://asena.sh/raw/testing/overview.md): Built-in testing utilities with Bun's native test runner and automatic dependency mocking
-- [MockComponent API](https://asena.sh/raw/testing/mock-component.md): API reference for mockComponent and mockComponentAsync - automatic discovery and mocking of injected dependencies
-- [Examples](https://asena.sh/raw/testing/examples.md): Real-world testing patterns for controllers, services, WebSockets, and middleware
+- [Testing](https://asena.sh/raw/testing/overview.md): Asena's built-in testing utilities for automatic dependency mocking with Bun's test runner
+- [MockComponent API](https://asena.sh/raw/testing/mock-component.md): Complete API reference for Asena's automatic dependency mocking utilities
+- [createTestApp](https://asena.sh/raw/testing/test-app.md): Boot a full Asena application in a test, swap any component for a mock, and assert on real HTTP responses
+- [createWebTest](https://asena.sh/raw/testing/web-test.md): Boot only the web layer of an Asena application - controllers, middlewares and validators are real, everything else is auto-mocked
+- [Testing Examples](https://asena.sh/raw/testing/examples.md): Real-world testing patterns for controllers, services, WebSockets, and middleware in Asena
 
 ## Optional
 

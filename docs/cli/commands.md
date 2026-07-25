@@ -1,6 +1,6 @@
 ---
 title: CLI Commands
-description: Complete reference for Asena CLI commands
+description: Reference for every CLI command - create, generate, dev start, build and init, including shortcuts
 outline: deep
 ---
 
@@ -10,7 +10,7 @@ Asena CLI provides command-line utilities to help you manage your Asena applicat
 
 ## Installation
 
-**Prerequisite:** [Bun runtime](https://bun.sh) (v1.2.8 or higher)
+**Prerequisite:** [Bun runtime](https://bun.sh) (v1.3.12 or higher)
 
 ```bash
 bun install -g @asenajs/asena-cli
