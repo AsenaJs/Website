@@ -1,6 +1,6 @@
 ---
 title: Middleware
-description: Multi-level middleware system for cross-cutting concerns
+description: Global, pattern-based, controller-level and route-level middleware with @Middleware
 outline: deep
 ---
 

@@ -293,6 +293,59 @@ describe('ChatSocket', () => {
 });
 ```
 
+### Testing Ulak Messaging
+
+Services that inject scoped namespaces via the [`ulak()` helper](/docs/concepts/ulak) work with `mockComponent` out of the box — no running WebSocket broker needed. The injected namespace becomes a deep mock whose methods are assertable Bun mocks.
+
+```typescript
+import { describe, test, expect, mock } from 'bun:test';
+import { createTestUlakStub, mockComponent } from '@asenajs/asena/test';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ulak, type Ulak } from '@asenajs/asena/messaging';
+
+@Service('ChatService')
+class ChatService {
+  @Inject(ulak('/chat'))
+  private chat: Ulak.NameSpace<'/chat'>;
+
+  async sendMessage(roomId: string, message: string) {
+    await this.chat.to(roomId, { message });
+  }
+
+  async broadcastAnnouncement(text: string) {
+    await this.chat.broadcast({ type: 'announcement', text });
+  }
+}
+
+describe('ChatService', () => {
+  test('sendMessage should target the room', async () => {
+    // Automatic deep mock - no setup required
+    const { instance, mocks } = mockComponent(ChatService);
+
+    await instance.sendMessage('room-1', 'Hello!');
+
+    expect(mocks.chat.to).toHaveBeenCalledWith('room-1', { message: 'Hello!' });
+  });
+
+  test('broadcastAnnouncement should reach everyone', async () => {
+    // Typed stub override - full Ulak.NameSpace interface with Bun mocks
+    const chat = createTestUlakStub('/chat');
+
+    const { instance } = mockComponent(ChatService, {
+      overrides: { chat }
+    });
+
+    await instance.broadcastAnnouncement('Server maintenance at 22:00');
+
+    expect(chat.broadcast).toHaveBeenCalledWith({
+      type: 'announcement',
+      text: 'Server maintenance at 22:00'
+    });
+  });
+});
+```
+
 ## Testing Middleware
 
 ### Custom Middleware Testing
@@ -395,14 +448,101 @@ describe('AuthMiddleware', () => {
 
 ## Integration Testing Patterns
 
-::: info Coming Soon
-Integration testing patterns and examples will be added in future updates.
-:::
+`mockComponent` stops at the class boundary. When you need the framework itself in the loop — routing, middlewares, validators, real HTTP — use the harness.
+
+### Full application
+
+[`createTestApp`](/docs/testing/test-app) boots everything and gives you a fluent HTTP client:
+
+```typescript
+import { createTestApp, silentLogger } from '@asenajs/asena/test';
+import { createHonoAdapter } from '@asenajs/hono-adapter';
+import { describe, test, expect, mock } from 'bun:test';
+
+describe('User API', () => {
+  test('creates a user', async () => {
+    const [adapter] = createHonoAdapter({ logger: silentLogger });
+
+    await using app = await createTestApp({
+      adapter,
+      components: [AppConfig, UserController, UserService, CreateUserValidator],
+    });
+
+    await app
+      .post('/api/users', { body: JSON.stringify({ name: 'Ada', email: 'ada@example.com' }) })
+      .expectStatus(201)
+      .expectJsonContains({ name: 'Ada' });
+  });
+});
+```
+
+### Replacing a dependency with a mock
+
+`overrides` swaps a registered service for a double, the way Spring's `@MockBean` does. The real class is never constructed:
+
+```typescript
+test('surfaces repository failures as 500', async () => {
+  const [adapter] = createHonoAdapter({ logger: silentLogger });
+
+  await using app = await createTestApp({
+    adapter,
+    components: [AppConfig, UserController, UserService],
+    overrides: {
+      UserService: {
+        getAll: mock(async () => {
+          throw new Error('database is down');
+        }),
+      },
+    },
+  });
+
+  await app.get('/api/users').expectStatus(500);
+});
+```
+
+### Controller slice
+
+[`createWebTest`](/docs/testing/web-test) keeps the controller, its middlewares and its validators real, and auto-mocks everything else:
+
+```typescript
+test('returns 404 for an unknown user', async () => {
+  const [adapter] = createHonoAdapter({ logger: silentLogger });
+
+  const { app, mocks } = await createWebTest({ adapter, controllers: [UserController] });
+
+  mocks.UserService.getById.mockResolvedValue(null);
+
+  await app.get('/api/users/3f1a9c7e-9b5d-4c2a-8f6e-1d2b3c4d5e6f').expectStatus(404);
+
+  await app.stop();
+});
+```
+
+Remember that validators are real here — an id that fails validation returns **400** before the controller runs, which is exactly the behaviour worth testing.
+
+### Testing without occupying a port
+
+`dispatch: 'socket'` runs the same adapter pipeline over a unix domain socket, so parallel suites cannot collide on ports:
+
+```typescript
+await using app = await createTestApp({
+  adapter,
+  components: [AppConfig, UserController, UserService],
+  dispatch: 'socket',
+});
+
+await app.get('/api/users').expectStatus(200);
+
+// WebSocket URLs differ per mode - let the harness build them
+const socket = new WebSocket(app.wsUrl('/ws/chat'));
+```
 
 ## Related
 
 - **[Testing Overview](/docs/testing/overview)** - Introduction to testing in Asena
 - **[MockComponent API](/docs/testing/mock-component)** - Complete API reference
+- **[createTestApp](/docs/testing/test-app)** - Full-application testing
+- **[createWebTest](/docs/testing/web-test)** - Controller-slice testing
 - **[Dependency Injection](/docs/concepts/dependency-injection)** - Understanding DI in Asena
 - **[Controllers](/docs/concepts/controllers)** - Controller documentation
 - **[Services](/docs/concepts/services)** - Service documentation

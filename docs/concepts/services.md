@@ -1,6 +1,6 @@
 ---
 title: Services
-description: Business logic layer with dependency injection
+description: Business logic components with @Service, singleton and prototype scopes, and lifecycle hooks
 outline: deep
 ---
 

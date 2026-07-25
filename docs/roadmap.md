@@ -14,7 +14,7 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.7.x)
+## ✅ Current Release (v0.8.x)
 
 These features are **stable and production-ready** in the current release:
 
@@ -26,7 +26,10 @@ These features are **stable and production-ready** in the current release:
 - **Service Layer** - Service components with lifecycle management
 - **Middleware System** - Global, pattern-based, controller, and route-level middleware
 - **Context API** - Unified request context abstraction across adapters
+- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Validation`
+- **[Static File Serving](/docs/concepts/static-files)** - `@StaticServe` with lifecycle hooks
 - **WebSocket Support** - Decorator-based WebSocket with namespace, room management, and [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket)
+- **[Ulak](/docs/concepts/ulak)** - Central message hub that breaks circular dependencies between services, WebSocket namespaces, and microservice transports
 - **Configuration Management** - `@Config` decorator for server configuration
 - **EventService Support** - Built-in native EventService support with `@EventService` and `@On`
 - **[Scheduled Tasks](/docs/concepts/scheduled-tasks)** - Cron-based task scheduling with `@Schedule` and `CronRunner`
@@ -35,6 +38,15 @@ These features are **stable and production-ready** in the current release:
 - **SSE/Streaming** - Server-Sent Events with `stream()`, `streamSSE()`, `streamText()`
 - **Duplicate Route Detection** - Prevents accidental route conflicts at startup
 - **Graceful Server Shutdown** - `server.stop()` with proper resource cleanup
+- **[Microservices](/docs/concepts/microservices)** - Broker-agnostic messaging with `@MessageController`, `@MessagePattern` (RPC), `@EventPattern` (events), Ulak client API, and multiple named transports
+- **Headless Mode** - Start without an HTTP adapter for message-driven internal services, with optional health endpoint
+
+### Testing
+
+- **[mockComponent](/docs/testing/mock-component)** - Unit-level testing that auto-mocks every `@Inject` dependency of a component, including expression injections such as `ulak()`
+- **[createTestApp](/docs/testing/test-app)** - Boot a full application in a test, replace any registered component with a mock, and assert on real HTTP responses with a fluent chain
+- **[createWebTest](/docs/testing/web-test)** - Controller-slice testing: routing, middlewares and validators stay real while every other dependency is auto-mocked
+- **Unix Socket Dispatch** - Run the adapter's real routing pipeline without occupying a TCP port, so parallel suites never collide
 
 ### Adapters
 
@@ -46,14 +58,19 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-logger](/docs/packages/logger)** - Structured logging with multiple transports (console, file, Loki)
 - **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
 - **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
-- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport via pub/sub
-- **@asenajs/asena-otel** - OpenTelemetry tracing with automatic instrumentation
+- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
+- **[@asenajs/asena-kafka](/docs/packages/kafka)** - Kafka microservice transport with deterministic topic management, broker-tracked retry attempts, DLQ, and external-topic interop
+- **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
+
+::: info Independent Versioning
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.8.x is the baseline they all target — check each package page for its own current version.
+:::
 
 ### CLI Tools
 
 - **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
-- **Project Bundling** - `asena build` command bundles your project based on `asena-config.ts`, significantly improving performance by reducing cold start time and package size
+- **Project Bundling** - `asena build` command bundles your project based on [`asena.config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 
 ## 📋 Planned for v1.0
 
@@ -125,8 +142,8 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.6.x  | Previous | Possible | Yes (with caution) |
-| v0.7.x  | Current | Possible | Yes (with caution) |
+| v0.7.x  | Previous | Possible | Yes (with caution) |
+| v0.8.x  | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -165,6 +182,8 @@ We welcome contributions in many forms:
 ### Current Cycle
 
 - **v0.7.0** - Released April 2026 (OpenAPI, Redis, OTel, FrontendController, Schedule, PostProcessor, Streaming)
+- **v0.7.1** - Released April 2026 (`routePattern` on Context, FrontendController registration refinements)
+- **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress

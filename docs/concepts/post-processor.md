@@ -1,6 +1,6 @@
 ---
 title: PostProcessor
-description: Intercept and transform components during IoC bootstrap
+description: Intercept and transform every component during IoC bootstrap with @PostProcessor
 outline: deep
 ---
 

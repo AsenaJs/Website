@@ -12,7 +12,8 @@ Drizzle ORM utilities for AsenaJS - A powerful and type-safe database integratio
 
 - 🚀 **Generic Database Service** - Support for multiple database types
 - 🎯 **Type-Safe Repository Pattern** - Full TypeScript type inference
-- 🏷️ **Decorator-Based Configuration** - Easy setup with `@Database` and `@Repository`
+- 🏷️ **Decorator-Based Configuration** - Easy setup with `@Database`, `@Repository`, `@Transaction`, and `@Drizzle`
+- 🔄 **Declarative Transactions** - `@Transaction` with `REQUIRED` / `NESTED` / `REQUIRES_NEW` propagation, propagated through `AsyncLocalStorage`
 - 🔧 **AsenaJS Integration** - Seamless IoC container integration
 - 📦 **Multiple Database Support** - Connect to different databases simultaneously
 - ⚡ **Performance Optimized** - Connection pooling and efficient queries
@@ -27,6 +28,11 @@ bun add @asenajs/asena-drizzle drizzle-orm
 bun add pg              # For PostgreSQL
 bun add mysql2          # For MySQL
 ```
+
+**Requirements:**
+- [Bun](https://bun.sh) v1.3.12 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
+- [drizzle-orm](https://orm.drizzle.team) v0.44 or higher
 
 ## Supported Databases
 
@@ -162,7 +168,25 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 ```
 :::
 
-### 4. Use in Services
+### 4. Activate the Transaction Post-Processor (optional)
+
+If you plan to use `@Transaction` (see [Transactions](#transactions) below), drop a `@Drizzle`-decorated class somewhere in your source folder — `src/config/` is the convention. AsenaJS only scans your source files, never `node_modules`, so the transaction post-processor must be subclassed inside your project to be discovered.
+
+```typescript
+// src/config/AppDrizzle.ts
+import { Drizzle, TransactionPostProcessor } from '@asenajs/asena-drizzle';
+
+@Drizzle({ defaultDb: 'MainDatabase' })
+export class AppDrizzle extends TransactionPostProcessor {}
+```
+
+The body is intentionally empty — this class exists only so AsenaJS's component scanner picks it up. Setting `defaultDb` lets every `@Transaction()` call site omit the `database` option in single-database projects.
+
+::: tip Skip this step if you don't need transactions
+The package works fine without `@Drizzle` — you'll still get repositories, the typed query builder, pagination, and `BaseRepository#transaction(cb)`. You only need this step to enable the `@Transaction` decorator.
+:::
+
+### 5. Use in Services
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
@@ -225,6 +249,19 @@ The `@Repository` decorator configures a repository:
   name?: string               // Optional: service name (defaults to class name)
 })
 ```
+
+## @Drizzle Decorator API
+
+`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#4-activate-the-transaction-post-processor-optional)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
+
+```typescript
+@Drizzle({
+  defaultDb?: string;  // Optional: name of the @Database service used when
+                       //           @Transaction() omits the `database` option
+})
+```
+
+The decorator chains `@PostProcessor()` onto your subclass and writes the options as metadata, which `TransactionPostProcessor` reads at bootstrap. You can also apply it with no arguments (`@Drizzle()`) when you'd rather always specify `database` explicitly on each `@Transaction`.
 
 ## Database Configuration
 
@@ -440,12 +477,16 @@ import { desc } from 'drizzle-orm';
 
 const result = await userRepository.paginate(1, 10, undefined, desc(users.createdAt));
 
-// result.data - array of records
-// result.meta.total - total count
-// result.meta.page - current page
-// result.meta.limit - items per page
-// result.meta.totalPages - total pages
+// result.data       - array of records
+// result.total      - total count
+// result.page       - current page
+// result.limit      - items per page
+// result.totalPages - total pages
 ```
+
+::: tip Deterministic by default
+When you do not provide `orderBy`, the repository falls back to `asc(table.id)` so rows do not interleave across pages. Pass an explicit `orderBy` whenever you need a different sort.
+:::
 
 ### Existence Check
 
@@ -458,6 +499,61 @@ import { eq } from 'drizzle-orm';
 
 const exists = await userRepository.exists(eq(users.email, 'john@example.com'));
 ```
+
+### Field Shortcuts
+
+These two helpers wrap the most common `eq(column, value)` lookups so you don't have to import `eq` from `drizzle-orm` for one-off checks. Both are fully type-safe — `field` must be a key of the row type, and `value` is constrained to that column's inferred type.
+
+#### findBy(field, value)
+
+Equivalent to `findAll(eq(table[field], value))`.
+
+```typescript
+const activeUsers = await userRepository.findBy('status', 'active');
+```
+
+#### existsBy(field, value)
+
+Equivalent to `exists(eq(table[field], value))`.
+
+```typescript
+const taken = await userRepository.existsBy('email', 'john@example.com');
+```
+
+### Bulk Aliases
+
+`updateMany` / `deleteMany` are semantic aliases of `update` / `delete` that respect the documented public API surface. They behave identically to their counterparts.
+
+#### updateMany(where, data)
+
+```typescript
+import { eq } from 'drizzle-orm';
+
+await userRepository.updateMany(eq(users.isActive, false), { isActive: true });
+```
+
+#### deleteMany(where)
+
+```typescript
+import { eq } from 'drizzle-orm';
+
+const removedCount = await userRepository.deleteMany(eq(users.isActive, false));
+```
+
+### Programmatic Transaction
+
+#### transaction(callback, options?)
+
+Run `callback` inside a Drizzle transaction. When called from within an active `@Transaction` scope (see [Transactions](#transactions) below), it opens a `SAVEPOINT`; otherwise it starts a brand-new top-level transaction.
+
+```typescript
+await userRepository.transaction(async () => {
+  await userRepository.create({ name: 'Ada', email: 'ada@example.com' });
+  await profileRepository.create({ userId: 'ada-id', bio: '…' });
+}, { isolationLevel: 'serializable' });
+```
+
+The optional second argument forwards `isolationLevel` and `accessMode` to Drizzle's `db.transaction(cb, config)`.
 
 ## Advanced Queries
 
@@ -575,26 +671,121 @@ export class EventRepository extends BaseRepository<typeof events> {}
 
 ## Transactions
 
+asena-drizzle ships a Spring-style `@Transaction` decorator backed by Bun's native `AsyncLocalStorage`. Repository calls made inside a `@Transaction`-wrapped method automatically pick up the active transaction — you do not have to thread a `tx` parameter through your code.
+
+::: warning Setup required
+`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#4-activate-the-transaction-post-processor-optional). Without it the decorator silently does nothing because AsenaJS never sees the post-processor.
+:::
+
+### `@Transaction` Decorator
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Transaction } from '@asenajs/asena-drizzle';
+
+@Service('AccountService')
+export class AccountService {
+  @Inject('UserRepository') 
+  private userRepo: UserRepository;
+    
+  @Inject('AuditRepository') 
+  private auditRepo: AuditRepository;
+
+  // Uses defaultDb from @Drizzle({ defaultDb: 'MainDatabase' })
+  @Transaction()
+  async register(payload: { email: string; name: string }) {
+    const user = await this.userRepo.create(payload);
+    await this.auditRepo.create({ userId: user.id, event: 'register' });
+    // Either both rows commit, or both roll back atomically.
+    return user;
+  }
+}
+```
+
+When you have multiple `@Database` services, pass the target name explicitly — it overrides any `defaultDb`:
+
+```typescript
+@Transaction({ database: 'AnalyticsDB' })
+async trackEvent(...) { ... }
+```
+
+If neither `@Drizzle.defaultDb` nor `@Transaction.database` is set, the post-processor fails fast at registration time with a descriptive error.
+
+### Propagation Modes
+
+| Mode | If a transaction is active | If no transaction is active |
+|---|---|---|
+| `REQUIRED` *(default)* | Joins the existing transaction (no new one is started). | Starts a new top-level transaction. |
+| `NESTED` | Opens a `SAVEPOINT` inside the existing transaction. Inner failures roll back to the savepoint without aborting the outer transaction. | Starts a new top-level transaction. |
+| `REQUIRES_NEW` | Suspends the outer transaction and runs in an independent top-level transaction (a fresh connection is taken from the pool). | Starts a new top-level transaction. |
+
+```typescript
+@Transaction({
+  database: 'MainDatabase',
+  propagation: 'NESTED',
+  isolationLevel: 'serializable',
+})
+async bestEffortAudit(userId: string) {
+  // Inner failure rolls back to a savepoint; the outer caller can keep going.
+}
+
+@Transaction({
+  database: 'MainDatabase',
+  propagation: 'REQUIRES_NEW',
+})
+async writeAuditLog(event: AuditEvent) {
+  // Survives even if the surrounding transaction rolls back — useful for
+  // audit/telemetry writes that must persist independently.
+}
+```
+
+### Isolation & Access Mode
+
+`isolationLevel` and `accessMode` are forwarded straight to Drizzle's `db.transaction(cb, config)`:
+
+```typescript
+@Transaction({
+  database: 'MainDatabase',
+  isolationLevel: 'repeatable read',
+  accessMode: 'read only',
+})
+async snapshot() {
+  // …
+}
+```
+
+Supported values:
+
+- `isolationLevel`: `'read uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`
+- `accessMode`: `'read only' | 'read write'`
+
+Dialects that don't recognize a given value silently ignore it (e.g. SQLite vs PostgreSQL).
+
+### Programmatic Boundary
+
+Use [`BaseRepository#transaction(callback, options?)`](#programmatic-transaction) when you need a transaction inside a single method without lifting the boundary up to a service-level decorator. It is ALS-aware: inside an active `@Transaction` scope it opens a `SAVEPOINT`, otherwise it starts a new top-level transaction.
+
+### Raw Drizzle Escape Hatch
+
+If you need access to Drizzle's full query builder inside a transaction (joins, raw SQL, dialect-specific helpers), reach for the underlying `db.transaction(...)`:
+
 ```typescript
 @Service()
 export class OrderService {
-  @Inject('OrderRepository')
+  @Inject('OrderRepository') 
   private orderRepo: OrderRepository;
-
-  @Inject('InventoryRepository')
+  
+  @Inject('InventoryRepository') 
   private inventoryRepo: InventoryRepository;
 
   async createOrder(items: Array<{ productId: string; quantity: number }>) {
-    const db = this.orderRepo.getDatabase();
-
-    return db.transaction(async (tx) => {
-      // Create order
+    return this.orderRepo.db.transaction(async (tx) => {
       const order = await tx.insert(orders).values({
         total: 100,
-        status: 'pending'
+        status: 'pending',
       }).returning();
 
-      // Update inventory
       for (const item of items) {
         await tx.update(inventory)
           .set({ stock: sql`stock - ${item.quantity}` })
@@ -606,6 +797,14 @@ export class OrderService {
   }
 }
 ```
+
+::: warning Self-invocation
+`@Transaction` only wraps actual class methods. Arrow-function class properties (`run = async () => …`) live on the instance, not the prototype, and are not intercepted. Use the standard `async method() { … }` syntax.
+:::
+
+::: tip Roadmap — full auto-resolution
+Today, single-database projects can use `@Drizzle({ defaultDb })` once and call `@Transaction()` with no arguments thereafter. Multi-database projects still need to name the target explicitly. Once AsenaJS core ships an `afterAllComponentsRegistered` post-processor hook (see [`docs/asena-core-feature-request-afterAllComponentsRegistered.md`](https://github.com/AsenaJs/asena-drizzle/blob/master/docs/asena-core-feature-request-afterAllComponentsRegistered.md) in the asena-drizzle repository), v1.3.0 will skip even the `defaultDb` step when exactly one `@Database` service is registered, mirroring Spring Boot's auto-wired repositories.
+:::
 
 ## Best Practices
 

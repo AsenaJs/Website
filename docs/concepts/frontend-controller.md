@@ -1,6 +1,6 @@
 ---
 title: Frontend Controller
-description: Serve HTML pages using Bun's native HTML import feature
+description: Serve HTML pages with @FrontendController and @Page using Bun's native HTML imports
 outline: deep
 ---
 

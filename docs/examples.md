@@ -1,6 +1,6 @@
 ---
 title: Examples
-description: Real-world examples and complete applications with Asena
+description: Complete worked examples - REST APIs, WebSocket chat, authentication, and database integration
 outline: deep
 ---
 

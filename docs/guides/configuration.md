@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Server configuration with @Config decorator
+description: Configure the server with @Config - global middleware, error handling, environment variables, and microservice transports
 outline: deep
 ---
 
@@ -629,13 +629,22 @@ class AppConfig implements AsenaConfig {
 
 ## transport() Method
 
-Configure the WebSocket transport for cross-pod messaging. When not specified, Asena uses `BunLocalTransport` which calls `server.publish()` directly — zero overhead for single-pod deployments.
+Configure the transport layer: cross-pod **WebSocket** messaging and/or **microservice** messaging. Two return forms are supported:
 
 ```typescript
-transport?(): WebSocketTransport | Promise<WebSocketTransport>
+transport?(): WebSocketTransport | AsenaTransportConfig | Promise<WebSocketTransport | AsenaTransportConfig>
 ```
 
-**Returns:** A `WebSocketTransport` instance
+1. **Bare `WebSocketTransport`** (backward compatible) — configures only the WebSocket transport. When not specified, Asena uses `BunLocalTransport` which calls `server.publish()` directly — zero overhead for single-pod deployments.
+2. **`AsenaTransportConfig` object** — configures WebSocket and microservice transports separately, plus messaging interceptors:
+
+```typescript
+interface AsenaTransportConfig {
+  websocket?: WebSocketTransport;                                       // cross-pod WS
+  microservice?: MicroserviceTransport | Record<string, MicroserviceTransport>; // single or named map
+  interceptors?: MessagingInterceptor[];                                // e.g. otelMessaging()
+}
+```
 
 ### Single-Pod (Default)
 
@@ -683,8 +692,36 @@ export class AppConfig extends ConfigService {
 
 :::
 
+### Microservice Messaging (Object Form)
+
+Use the object form to add a microservice transport — with or without a WebSocket transport:
+
+```typescript
+import { Config } from '@asenajs/asena/decorators';
+import { RedisTransport, RedisMicroserviceTransport } from '@asenajs/asena-redis';
+import { otelMessaging } from '@asenajs/asena-otel';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public transport() {
+    return {
+      websocket: new RedisTransport({ url: 'redis://localhost:6379' }),      // optional
+      microservice: new RedisMicroserviceTransport({
+        url: 'redis://localhost:6379',
+        serviceName: 'order-service',
+      }),
+      interceptors: [otelMessaging({ system: 'redis' })],                    // optional
+    };
+  }
+
+}
+```
+
+A single microservice transport is registered under the name `default`. Multi-broker projects can pass a named map instead and bind controllers per transport — see [Microservices - Multiple Named Transports](/docs/concepts/microservices#multiple-named-transports).
+
 ::: info
-For details on how transport works with WebSocket pub/sub, see [WebSocket - Multi-Pod](/docs/concepts/websocket#multi-pod-websocket). For RedisTransport setup and configuration, see [Redis Package](/docs/packages/redis#multi-pod-websocket-transport).
+For details on how transport works with WebSocket pub/sub, see [WebSocket - Multi-Pod](/docs/concepts/websocket#multi-pod-websocket). For RedisTransport setup and configuration, see [Redis Package](/docs/packages/redis#multi-pod-websocket-transport). For microservice messaging concepts, see [Microservices](/docs/concepts/microservices).
 :::
 
 ## Complete Example

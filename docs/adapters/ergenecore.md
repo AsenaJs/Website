@@ -61,7 +61,7 @@ bun add @asenajs/ergenecore
 ```
 
 **Requirements:**
-- Bun v1.3 or higher
+- Bun v1.3.12 or higher
 - TypeScript v5.8.2 or higher
 
 ## Quick Start

@@ -1,6 +1,6 @@
 ---
 title: AsenaLogger
-description: Winston-based logging solution for Asena framework
+description: Winston-based structured logging with AsenaLogger - log levels, transports (console, file, Loki), and profiling
 outline: deep
 ---
 
@@ -13,6 +13,10 @@ outline: deep
 ```bash
 bun add @asenajs/asena-logger
 ```
+
+**Requirements:**
+- [Bun](https://bun.sh) v1.3.12 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
 
 ## Quick Start
 

@@ -1,6 +1,6 @@
 ---
 title: Get Started
-description: Quick start guide for Asena framework
+description: Install Asena, configure TypeScript decorators, and build your first controller and service on Bun
 outline: deep
 ---
 
@@ -10,7 +10,7 @@ Get up and running with Asena in minutes. This guide shows you how to create you
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.2.8 or higher
+- [Bun](https://bun.sh) v1.3.12 or higher
 
 **Verify Bun installation:**
 
