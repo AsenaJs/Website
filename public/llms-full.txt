@@ -254,6 +254,16 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 :::
+
+::: tip Components in the entry file
+Asena never forces you to split everything into separate files - a small app can declare a
+`@Controller` or `@Service` directly in `src/index.ts` and it will be registered as usual.
+
+Declare it **above** the `AsenaServerFactory.create()` call. Anything below that line has
+not been evaluated yet when components are collected, so it cannot be registered; Asena
+logs a warning naming any component it finds in that position.
+:::
+
 ### 6. Create Your First Controller
 
 Create `src/controllers/HelloController.ts`:
@@ -5591,10 +5601,12 @@ Source: https://asena.sh/raw/concepts/validation.md
 
 # Validation
 
-Asena provides built-in validation support for the **Ergenecore adapter** using [Zod](https://zod.dev). Validation ensures that incoming request data meets your requirements before reaching your route handlers.
+Asena provides built-in validation support using [Zod](https://zod.dev). Validation ensures that incoming request data meets your requirements before reaching your route handlers.
 
 ::: info Adapter Support
-Validation is currently supported only in the **Ergenecore adapter**. The Hono adapter can use Zod directly with Hono's validation middleware.
+Both the **Ergenecore** and the **Hono** adapter ship validation. Each exports its own `ValidationService` and `ValidationSchemaWithHook`, so import them from the adapter you use.
+
+One behavioural difference remains: Ergenecore runs the `hook` **only when validation fails**, while the Hono adapter runs it on **every** validation attempt. Write hooks that check `result.success` and they behave the same on both.
 :::
 
 ## Why Use Validation?
@@ -5733,20 +5745,18 @@ export class UserValidatorWithHook extends ValidationService {
       }),
 
       hook: (result, context) => {
-        // result: validated data
-        // context: Ergenecore Context
+        // result: Zod SafeParseResult - { success, data } or { success, error }
+        // context: adapter Context
 
-        // Log validation success
-        console.log('Validated user data:', result);
+        if (!result.success) {
+          // Return nothing to let the framework report the failure through onError
+          return;
+        }
+
+        console.log('Validated user data:', result.data);
 
         // Store in context for later use
-        context.setValue('validatedEmail', result.email);
-
-        // Transform or enrich data
-        return {
-          ...result,
-          emailLowercase: result.email.toLowerCase()
-        };
+        context.setValue('validatedEmail', result.data.email);
       }
     };
   }
@@ -5766,20 +5776,18 @@ export class UserValidatorWithHook extends ValidationService {
       }),
 
       hook: (result, context) => {
-        // result: validated data
-        // context: Ergenecore Context
+        // result: Zod SafeParseResult - { success, data } or { success, error }
+        // context: adapter Context
 
-        // Log validation success
-        console.log('Validated user data:', result);
+        if (!result.success) {
+          // Return nothing to let the framework report the failure through onError
+          return;
+        }
+
+        console.log('Validated user data:', result.data);
 
         // Store in context for later use
-        context.setValue('validatedEmail', result.email);
-
-        // Transform or enrich data
-        return {
-          ...result,
-          emailLowercase: result.email.toLowerCase()
-        };
+        context.setValue('validatedEmail', result.data.email);
       }
     };
   }
@@ -5789,14 +5797,25 @@ export class UserValidatorWithHook extends ValidationService {
 ### Hook Function Signature
 
 ```typescript
-hook: (result: any, context: Context) => any
+hook: (
+  result: z.ZodSafeParseResult<T>,
+  context: Context
+) => Response | void | Promise<Response | void>
 ```
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `result` | `any` | The validated and parsed data from Zod |
-| `context` | `Context` | Ergenecore Context object |
-| **Returns** | `any` | Transformed data (optional) |
+| `result` | `z.ZodSafeParseResult<T>` | Zod's safe-parse result: `{ success: true, data }` or `{ success: false, error }` |
+| `context` | `Context` | The adapter's Context object |
+| **Returns** | `Response \| void` | Return a `Response` to answer the request yourself; return nothing to continue |
+
+::: warning The hook receives the parse result, not the parsed data
+`result` is **not** the validated object - the data lives at `result.data`, and only when
+`result.success` is `true`. Always branch on `result.success` first.
+
+The return value is **not** a way to transform the payload. Returning a plain object does
+nothing; only a `Response` is honoured, and it short-circuits the request.
+:::
 
 ### Hook Use Cases
 
@@ -5804,34 +5823,37 @@ hook: (result: any, context: Context) => any
 
 ```typescript
 hook: (result, context) => {
-  console.log('Validation passed:', {
+  console.log('Validation attempted:', {
     endpoint: context.req.url,
-    data: result
+    ok: result.success
   });
 }
 ```
+
+Returning nothing leaves the error contract untouched - a failure is still reported the
+normal way.
 
 **2. Storing Validated Data in Context**
 
 ```typescript
 hook: (result, context) => {
+  if (!result.success) return;
+
   // Make validated data available to middlewares/handlers
-  context.setValue('validatedUser', result);
-  context.setValue('userEmail', result.email);
+  context.setValue('validatedUser', result.data);
+  context.setValue('userEmail', result.data.email);
 }
 ```
 
-**3. Data Transformation**
+**3. Answering the Request Yourself**
 
 ```typescript
 hook: (result, context) => {
-  // Transform validated data
-  return {
-    ...result,
-    email: result.email.toLowerCase(),
-    createdAt: new Date(),
-    ipAddress: context.req.headers.get('x-forwarded-for')
-  };
+  if (result.success) return;
+
+  // A Response short-circuits everything - the handler never runs and
+  // onError is never called for this request
+  return context.send({ error: 'Invalid signup payload' }, 422);
 }
 ```
 
@@ -5839,33 +5861,82 @@ hook: (result, context) => {
 
 ```typescript
 hook: async (result, context) => {
+  if (!result.success) return;
+
   // Send notification, update cache, etc.
-  await this.notificationService.sendAlert('New signup', result.email);
+  await this.notificationService.sendAlert('New signup', result.data.email);
 }
 ```
 
 ## Validation Error Responses
 
-When validation fails, Asena automatically returns **400 Bad Request** with detailed error information:
+When validation fails, Asena answers with **400 Bad Request**.
+
+### Default response
+
+If your application defines no global error handler, the adapter answers directly with
+Zod's flattened error:
 
 ```json
 {
   "error": "Validation failed",
-  "details": [
-    {
-      "path": ["email"],
-      "message": "Invalid email"
-    },
-    {
-      "path": ["age"],
-      "message": "Must be at least 18"
+  "details": {
+    "formErrors": [],
+    "fieldErrors": {
+      "email": ["Invalid email"],
+      "age": ["Must be at least 18"]
     }
-  ]
+  },
+  "target": "json"
 }
 ```
 
-::: tip Custom Error Handling
-You cannot customize the error response format directly. For custom error handling, use a global error handler in your `@Config` class.
+`target` names the part of the request that failed - `json`, `query`, `form`, `param` or
+`header`. The Hono adapter includes it; Ergenecore omits it.
+
+### Customizing the response
+
+Define `onError` in your `@Config` class and validation failures arrive there like any
+other error, so they can share your application's response envelope:
+
+```typescript
+import { Config } from '@asenajs/asena/decorators';
+import { isValidationError } from '@asenajs/asena/adapter';
+import { ConfigService, type Context } from '@asenajs/hono-adapter';
+
+@Config()
+export class ServerConfig extends ConfigService {
+  public onError(error: Error, context: Context): Response {
+    if (isValidationError(error)) {
+      return context.send(
+        {
+          success: false,
+          message: 'Validation failed',
+          errors: error.issues // [{ path, message, code }]
+        },
+        400
+      );
+    }
+
+    return context.send({ success: false, message: 'Internal Server Error' }, 500);
+  }
+}
+```
+
+`isValidationError()` is exported from `@asenajs/asena/adapter` and works with both
+adapters. The error it narrows to also carries `target` and `cause` (the original
+`ZodError`) if you need more than `issues`.
+
+::: tip Existing error handlers keep working
+The thrown error extends the adapter's HTTP exception type (`HTTPException` for Hono,
+`HttpException` for Ergenecore) and carries status **400**. An existing handler that
+branches on `instanceof HTTPException` and replies with `error.status` therefore keeps
+answering 400 - adopting this does not silently turn validation failures into 500s.
+:::
+
+::: warning A hook that returns a Response wins
+If the validator's `hook` returns a `Response`, that response is sent as-is and `onError`
+is never reached for that request. See [Validation Hooks](#validation-hooks).
 :::
 
 ## Integration with Controllers
@@ -16418,6 +16489,16 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 
+::: info Why `rootFile` matters at runtime
+The component scan reads `rootFile` to keep the entry out of its own sweep. Importing the
+entry while it is suspended on its top-level `await` is a cyclic import that never
+settles, which would hang startup.
+
+Components declared inside the entry file are still registered - Asena picks them up from
+the decorator registry rather than by importing the file - as long as they are declared
+above the `AsenaServerFactory.create()` call.
+:::
+
 ### include
 
 **Type:** `string[]` (optional)
@@ -18953,7 +19034,7 @@ import { Scope } from '@asenajs/asena/decorators/ioc';
 import { Component } from '@asenajs/asena/decorators';
 import type { Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
-import { ZodError } from 'zod';
+import { isValidationError } from '@asenajs/asena/adapter';
 import { ClientErrorStatusCode, ServerErrorStatusCode } from '@asenajs/asena/web-types';
 
 @Component({ name: 'ExceptionMapper', scope: Scope.SINGLETON })
@@ -18961,6 +19042,22 @@ export class ExceptionMapper {
   public map(error: Error, context: Context): Response | Promise<Response> {
     const requestPath = context.req.path;
     const requestMethod = context.req.method;
+
+    // Handle request validation errors.
+    // Checked BEFORE HTTPException on purpose: ValidationError extends HTTPException,
+    // so the generic branch below would otherwise swallow it
+    if (isValidationError(error)) {
+      const errors = error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message
+      }));
+
+      return context.send({
+        success: false,
+        message: 'Validation error',
+        errors
+      }, ClientErrorStatusCode.BadRequest);
+    }
 
     // Handle HTTPException (from Hono or middleware)
     if (error instanceof HTTPException) {
@@ -18971,20 +19068,6 @@ export class ExceptionMapper {
       });
 
       return context.send(error.message, error.status);
-    }
-
-    // Handle Zod validation errors
-    if (error instanceof ZodError) {
-      const errors = error.errors.map((err) => ({
-        field: err.path.join('.'),
-        message: err.message
-      }));
-
-      return context.send({
-        success: false,
-        message: 'Validation error',
-        errors
-      }, ClientErrorStatusCode.BadRequest);
     }
 
     // Handle custom domain errors
@@ -19158,20 +19241,25 @@ public map(error: Error, context: Context): Response {
 
 ## Validation Errors
 
-### Zod Validation Errors
+### Request Validation Errors
 
-When using Zod for validation, validation errors are automatically caught by the adapter. You can customize the response in your error handler.
+A failed request validation reaches your error handler like any other error, so it can
+share the same response envelope as the rest of your API.
+
+Match it with `isValidationError()` rather than `instanceof ZodError`: the framework wraps
+the failure in an adapter-specific `ValidationError` that carries HTTP status 400, and the
+guard works with both adapters.
 
 ```typescript
-import { ZodError } from 'zod';
+import { isValidationError } from '@asenajs/asena/adapter';
 
 public map(error: Error, context: Context): Response {
-  if (error instanceof ZodError) {
-    // Transform Zod errors to user-friendly format
-    const errors = error.errors.map((err) => ({
-      field: err.path.join('.'),
-      message: err.message,
-      code: err.code
+  if (isValidationError(error)) {
+    // error.issues is adapter-agnostic: { path, message, code }
+    const errors = error.issues.map((issue) => ({
+      field: issue.path.join('.'),
+      message: issue.message,
+      code: issue.code
     }));
 
     return context.send({
@@ -19184,6 +19272,17 @@ public map(error: Error, context: Context): Response {
   // ... other handlers
 }
 ```
+
+::: tip Reaching the original ZodError
+`error.cause` holds the underlying `ZodError` if you need something `issues` does not
+carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
+`ZodError.errors`; the field is now `issues`.
+:::
+
+::: warning Only when a handler exists
+If your application defines no `onError`, the adapter answers validation failures itself
+with its default 400 envelope. See [Validation](/concepts/validation#validation-error-responses).
+:::
 
 ### Custom Validation Error Response
 

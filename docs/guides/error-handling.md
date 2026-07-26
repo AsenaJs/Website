@@ -172,7 +172,7 @@ import { Scope } from '@asenajs/asena/decorators/ioc';
 import { Component } from '@asenajs/asena/decorators';
 import type { Context } from '@asenajs/hono-adapter';
 import { HTTPException } from 'hono/http-exception';
-import { ZodError } from 'zod';
+import { isValidationError } from '@asenajs/asena/adapter';
 import { ClientErrorStatusCode, ServerErrorStatusCode } from '@asenajs/asena/web-types';
 
 @Component({ name: 'ExceptionMapper', scope: Scope.SINGLETON })
@@ -180,6 +180,22 @@ export class ExceptionMapper {
   public map(error: Error, context: Context): Response | Promise<Response> {
     const requestPath = context.req.path;
     const requestMethod = context.req.method;
+
+    // Handle request validation errors.
+    // Checked BEFORE HTTPException on purpose: ValidationError extends HTTPException,
+    // so the generic branch below would otherwise swallow it
+    if (isValidationError(error)) {
+      const errors = error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message
+      }));
+
+      return context.send({
+        success: false,
+        message: 'Validation error',
+        errors
+      }, ClientErrorStatusCode.BadRequest);
+    }
 
     // Handle HTTPException (from Hono or middleware)
     if (error instanceof HTTPException) {
@@ -190,20 +206,6 @@ export class ExceptionMapper {
       });
 
       return context.send(error.message, error.status);
-    }
-
-    // Handle Zod validation errors
-    if (error instanceof ZodError) {
-      const errors = error.errors.map((err) => ({
-        field: err.path.join('.'),
-        message: err.message
-      }));
-
-      return context.send({
-        success: false,
-        message: 'Validation error',
-        errors
-      }, ClientErrorStatusCode.BadRequest);
     }
 
     // Handle custom domain errors
@@ -377,20 +379,25 @@ public map(error: Error, context: Context): Response {
 
 ## Validation Errors
 
-### Zod Validation Errors
+### Request Validation Errors
 
-When using Zod for validation, validation errors are automatically caught by the adapter. You can customize the response in your error handler.
+A failed request validation reaches your error handler like any other error, so it can
+share the same response envelope as the rest of your API.
+
+Match it with `isValidationError()` rather than `instanceof ZodError`: the framework wraps
+the failure in an adapter-specific `ValidationError` that carries HTTP status 400, and the
+guard works with both adapters.
 
 ```typescript
-import { ZodError } from 'zod';
+import { isValidationError } from '@asenajs/asena/adapter';
 
 public map(error: Error, context: Context): Response {
-  if (error instanceof ZodError) {
-    // Transform Zod errors to user-friendly format
-    const errors = error.errors.map((err) => ({
-      field: err.path.join('.'),
-      message: err.message,
-      code: err.code
+  if (isValidationError(error)) {
+    // error.issues is adapter-agnostic: { path, message, code }
+    const errors = error.issues.map((issue) => ({
+      field: issue.path.join('.'),
+      message: issue.message,
+      code: issue.code
     }));
 
     return context.send({
@@ -403,6 +410,17 @@ public map(error: Error, context: Context): Response {
   // ... other handlers
 }
 ```
+
+::: tip Reaching the original ZodError
+`error.cause` holds the underlying `ZodError` if you need something `issues` does not
+carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
+`ZodError.errors`; the field is now `issues`.
+:::
+
+::: warning Only when a handler exists
+If your application defines no `onError`, the adapter answers validation failures itself
+with its default 400 envelope. See [Validation](/concepts/validation#validation-error-responses).
+:::
 
 ### Custom Validation Error Response
 

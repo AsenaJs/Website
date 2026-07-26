@@ -122,6 +122,16 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 
+::: info Why `rootFile` matters at runtime
+The component scan reads `rootFile` to keep the entry out of its own sweep. Importing the
+entry while it is suspended on its top-level `await` is a cyclic import that never
+settles, which would hang startup.
+
+Components declared inside the entry file are still registered - Asena picks them up from
+the decorator registry rather than by importing the file - as long as they are declared
+above the `AsenaServerFactory.create()` call.
+:::
+
 ### include
 
 **Type:** `string[]` (optional)
