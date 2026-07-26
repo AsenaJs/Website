@@ -419,7 +419,7 @@ carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
 
 ::: warning Only when a handler exists
 If your application defines no `onError`, the adapter answers validation failures itself
-with its default 400 envelope. See [Validation](/concepts/validation#validation-error-responses).
+with its default 400 envelope. See [Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
 ### Custom Validation Error Response
