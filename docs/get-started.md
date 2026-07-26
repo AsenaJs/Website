@@ -162,6 +162,16 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 :::
+
+::: tip Components in the entry file
+Asena never forces you to split everything into separate files - a small app can declare a
+`@Controller` or `@Service` directly in `src/index.ts` and it will be registered as usual.
+
+Declare it **above** the `AsenaServerFactory.create()` call. Anything below that line has
+not been evaluated yet when components are collected, so it cannot be registered; Asena
+logs a warning naming any component it finds in that position.
+:::
+
 ### 6. Create Your First Controller
 
 Create `src/controllers/HelloController.ts`:
