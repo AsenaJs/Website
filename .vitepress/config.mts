@@ -52,6 +52,7 @@ export default defineConfig({
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
             {text: "LLMS.txt", link: "/llms.txt"},
+            {text: "LLMS-full.txt", link: "/llms-full.txt"},
         ],
 
         sidebar: [
@@ -61,6 +62,7 @@ export default defineConfig({
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
             {text: "📄 LLMS.txt", link: "/llms.txt"},
+            {text: "📄 LLMS-full.txt", link: "/llms-full.txt"},
             {
                 text: "Concepts",
                 items: [
