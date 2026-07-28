@@ -75,7 +75,13 @@ Uses 5-field cron format:
 | `0 0 * * 0` | Every Sunday at midnight |
 
 ::: tip Cron Validation
-Asena validates cron expressions at startup using Bun's native `Bun.cron.parse()`. Invalid expressions will throw an error during bootstrap, preventing the server from starting with misconfigured schedules.
+Asena validates cron expressions with Bun's native `Bun.cron.parse()` **inside the
+`@Schedule` decorator**, i.e. when the module is imported - before
+`AsenaServerFactory.create()` is ever reached. An invalid expression throws immediately,
+so the server can never start with a misconfigured schedule.
+
+`Bun.cron.parse()` also accepts the usual nicknames (`@hourly`, `@daily`, `@weekly`,
+`@monthly`, `@yearly`) in place of the 5-field form.
 :::
 
 ## AsenaSchedule Interface
@@ -179,8 +185,11 @@ export class CronController {
 | Property/Method | Type | Description |
 |:-----------------|:-----|:------------|
 | `getJobNames()` | `string[]` | Get all registered job names |
+| `registerJob(name, cron, fn)` | `void` | Register a job programmatically |
+| `startAll()` / `stopAll()` | `void` | Start or stop every registered job |
+| `clearJobs()` | `void` | Stop and drop all registered jobs |
 | `jobCount` | `number` | Number of registered jobs |
-| `hasRunningJobs` | `boolean` | Whether any jobs are currently running |
+| `hasRunningJobs` | `boolean` | Whether any job is **scheduled** (started and not stopped) - not whether one is executing right now |
 
 ::: info Lifecycle
 CronRunner starts all registered jobs when the server is ready and stops them during graceful shutdown. You don't need to manage the start/stop lifecycle manually.

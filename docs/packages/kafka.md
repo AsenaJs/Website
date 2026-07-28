@@ -30,7 +30,7 @@ bun add @asenajs/asena-kafka kafkajs
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 - [kafkajs](https://kafka.js.org) v2.2 or higher
 
 ::: warning Broker compatibility
@@ -413,7 +413,7 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 | `maxWaitTimeInMs` | `1000` | Idle fetch long-poll (boot readiness / shutdown responsiveness) |
 | `eventPartitions` / `requestPartitions` / `replyPartitions` | `4` | Partition counts for transport-created topics |
 | `replicationFactor` | `-1` | Broker default |
-| `healthCheckIntervalMs` | `5000` | Active broker probe driving `isConnected` — health endpoint reports 503 while a probe fails |
+| `healthCheckIntervalMs` | `5000` | Interval of the active broker probe. A failed probe is **one** of the inputs to `isConnected` — the reply consumer's fetch loop is the other (see [Delivery Guarantees](#delivery-guarantees)) |
 | `external` | — | Foreign-topic interop: `{ topics: (string \| { name, keyHeader? })[], fromBeginning? }` — see [External Topics](#external-topics-interop) |
 
 ### Delivery Guarantees
@@ -421,7 +421,9 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 - **Events: at-least-once.** Messages survive restarts and deploys. Duplicate delivery is possible — [write idempotent handlers](/docs/concepts/microservices#idempotent-handlers) keyed on `context.messageId` (one id per emit, identical for every group and every redelivery).
 - **RPC: at-most-once per attempt.** Handler errors are final. Requests older than the caller's own timeout are **dropped without execution** — a restarting service never burns through a backlog of dead RPCs.
 - **First boot starts at latest.** A brand-new consumer group ignores messages produced before the service ever existed — deploy consumers before producers. The start position is pinned to a committed offset immediately, so later crash-restarts can never skip records.
-- **Reconnect:** on broker loss the transport reports `isConnected: false` (health endpoint 503) via an active metadata probe, kafkajs reconnects with its built-in retry, and consumption resumes from committed offsets.
+- **Reconnect:** on broker loss the transport reports `isConnected: false` (health endpoint 503), kafkajs reconnects with its built-in retry, and consumption resumes from committed offsets.
+- **Readiness means "can serve", not "a broker answers".** `isConnected` requires **both** a passing metadata probe **and** a reply consumer that has rejoined its group and is fetching. The probe alone goes green within about a second of a broker coming back, while the ephemeral reply group can still be rejoining ~20 seconds later — and until it fetches, nothing consumes replies, so every `send()` on that instance times out. Expect an instance to stay 503 for as long as its reply consumer takes to rejoin after an outage; that is the honest signal, and it is what keeps an orchestrator from routing RPC traffic at an instance that cannot complete it. A stall is detected from the fetch loop going quiet for 5 s, so readiness can lag a fresh stall by up to that much — kafkajs's own `CRASH` takes ~7.5 s.
+- **Replies survive a rejoin.** The reply consumer's start position is committed as an offset, so a rejoin resumes where it left off instead of re-resolving `latest`. A reply produced while the consumer was away is delivered late, never skipped.
 - **Ordering:** with the default multi-partition event topic, publish order is not preserved end-to-end. Use `eventPartitions: 1` for strict ordering at the cost of parallelism.
 - **Rolling deploys:** kafkajs uses eager rebalancing — every membership change briefly pauses the group. Graceful shutdown leaves the group cleanly (short pause); SIGKILL costs a full `sessionTimeout`.
 
@@ -541,7 +543,7 @@ Kafka guarantees order within a partition, not across a topic. Give related mess
 
 ### 4. Watch the Health Endpoint
 
-The transport's `isConnected` feeds Asena's health endpoint — `503` means the broker probe is failing. Wire it into your orchestrator's readiness checks.
+The transport's `isConnected` feeds Asena's health endpoint — `503` means either the broker probe is failing **or** the reply consumer is not fetching, i.e. this instance cannot complete a `send()`. Wire it into your orchestrator's readiness checks. After a broker outage an instance stays 503 until its reply consumer has rejoined, which can take tens of seconds; a liveness probe must be more forgiving than the readiness probe, or the orchestrator will restart pods that were about to recover on their own.
 
 ## Troubleshooting
 
@@ -569,7 +571,12 @@ Thrown at construction, on purpose. kafkajs cannot heartbeat while your handler 
 
 ### Health endpoint returns 503
 
-The active metadata probe is failing — the broker is unreachable, credentials are wrong, or TLS is misconfigured. `isConnected` recovers automatically once probes succeed again.
+Two independent causes, both recovering on their own:
+
+1. **The active metadata probe is failing** — the broker is unreachable, credentials are wrong, or TLS is misconfigured.
+2. **The reply consumer is not fetching** — normal for tens of seconds after a broker outage, while kafkajs works through its retry backoff and the ephemeral reply group rejoins. Until it does, this instance cannot complete a `send()`, so 503 is the correct answer.
+
+If 503 persists past a rejoin, check the logs for `reply consumer recreate failed`.
 
 ### Connecting to Kafka 4.0 fails
 

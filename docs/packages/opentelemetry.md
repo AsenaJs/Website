@@ -24,7 +24,7 @@ GET /api/users (SERVER)
 - **W3C Context Propagation** — Extract incoming `traceparent`, inject outgoing context
 - **Route Exclusion** — `ignoreRoutes` with exact and wildcard matching
 - **Custom Sampling** — `ratioBasedSampler` helper for production
-- **Zero Runtime Dependencies** — Only peer deps (asena, reflect-metadata, OpenTelemetry)
+- **Minimal Dependencies** — One runtime dependency (`@opentelemetry/context-async-hooks`); everything else is a peer dep
 
 ## Installation
 
@@ -40,7 +40,7 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 
 ::: info Requirements
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 :::
 
 ## Quick Start
@@ -93,7 +93,7 @@ export class AppOtelMiddleware extends OtelTracingMiddleware {}
 ```
 
 ::: warning Important
-Asena's IoC container only scans the `src` folder defined in your `asena.config.ts`. Since `OtelTracingMiddleware` lives in `node_modules`, the container cannot discover it automatically. You **must** create a local class extending it with `@Middleware()` so that Asena can register and use it. Without this step, the container will throw an error because it cannot find the middleware.
+Asena's IoC container only scans the `src` folder defined in your `asena-config.ts`. Since `OtelTracingMiddleware` lives in `node_modules`, the container cannot discover it automatically. You **must** create a local class extending it with `@Middleware()` so that Asena can register and use it. Without this step, the container will throw an error because it cannot find the middleware.
 :::
 
 ### 3. Register the Middleware in Your Config
@@ -401,10 +401,10 @@ import { RedisMicroserviceTransport } from '@asenajs/asena-redis';
 export class AppConfig extends ConfigService {
   public transport() {
     return {
-      microservice: new RedisMicroserviceTransport({
-        url: 'redis://localhost:6379',
-        serviceName: 'order-service',
-      }),
+      microservice: new RedisMicroserviceTransport(
+        { url: 'redis://localhost:6379' }, // connection
+        { serviceName: 'order-service' },  // required options
+      ),
       interceptors: [otelMessaging({ system: 'redis' })],
     };
   }
@@ -426,10 +426,15 @@ Use `InMemorySpanExporter` and `InMemoryMetricExporter` for testing:
 ```typescript
 import { Otel, OtelTracingPostProcessor } from '@asenajs/asena-otel';
 import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
-import { InMemoryMetricExporter, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 
 const spanExporter = new InMemorySpanExporter();
-const metricExporter = new InMemoryMetricExporter();
+// InMemoryMetricExporter requires an aggregation temporality
+const metricExporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
 const metricReader = new PeriodicExportingMetricReader({
   exporter: metricExporter,
   exportIntervalMillis: 100,

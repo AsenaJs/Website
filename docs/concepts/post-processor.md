@@ -73,7 +73,7 @@ Accepts optional `ComponentParams`:
 PostProcessor runs at a specific point in the component initialization chain:
 
 ```
-Constructor → @Inject (DI) → @PostConstruct → postProcess()
+Constructor → @Inject (DI) → @Strategy → @PostConstruct → postProcess()
 ```
 
 1. Component is instantiated (`new`)
@@ -153,10 +153,11 @@ export class ComponentRegistryPostProcessor implements ComponentPostProcessor {
 The `@asenajs/asena-openapi` package uses a PostProcessor to automatically generate OpenAPI specs from your existing controllers and validators. Here's a simplified version:
 
 ```typescript
-import { PostProcessor, PostConstruct } from '@asenajs/asena/decorators';
+import { PostProcessor } from '@asenajs/asena/decorators';
+import { PostConstruct } from '@asenajs/asena/decorators/ioc';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ComponentPostProcessor } from '@asenajs/asena/ioc/types';
-import { extractControllerRouteInfo, isController } from '@asenajs/asena/utils';
+import { extractControllerRouteInfo, isController, isValidator } from '@asenajs/asena/utils';
 
 @PostProcessor()
 export class OpenApiPostProcessor implements ComponentPostProcessor {
@@ -186,7 +187,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
       this.controllers.push({ instance, Class });
     }
 
-    if (this.isValidator(Class)) {
+    if (isValidator(Class)) {
       this.validators.set(Class.name, instance);
     }
 

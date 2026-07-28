@@ -45,7 +45,7 @@ Check that the CLI is installed correctly:
 asena --version
 ```
 
-You should see the version number (e.g., `0.2.0`).
+You should see the version number (e.g., `0.7.1`).
 
 View available commands:
 

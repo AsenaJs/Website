@@ -23,7 +23,7 @@ import type { Context } from '@asenajs/ergenecore';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = context.getQuery('page') || '1';
+    const page = await context.getQuery('page') || '1';
     return context.send({ users: [], page });
   }
 
@@ -50,7 +50,7 @@ import type { Context } from '@asenajs/hono-adapter';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = context.getQuery('page') || '1';
+    const page = await context.getQuery('page') || '1';
     return context.send({ users: [], page });
   }
 
@@ -206,9 +206,9 @@ Access URL query strings:
 ```typescript
 @Get('/search')
 async search(context: Context) {
-  const query = context.getQuery('q');
-  const page = context.getQuery('page') || '1';
-  const limit = context.getQuery('limit') || '10';
+  const query = await context.getQuery('q');
+  const page = await context.getQuery('page') || '1';
+  const limit = await context.getQuery('limit') || '10';
 
   return context.send({ query, page, limit });
 }
@@ -240,7 +240,7 @@ Access request headers:
 @Get('/profile')
 async getProfile(context: Context) {
   const token = context.headers["authorization"];
-  const userAgent = context.headers["authorization"];
+  const userAgent = context.headers["user-agent"];
 
   return context.send({ token, userAgent });
 }
@@ -279,7 +279,7 @@ async download(context: Context) {
 
   context.res.headers.set('X-My-Header', 'Awsome-Header');
 
-  return respcontext.send('File content', 200);
+  return context.send('File content', 200);
 }
 ```
 
@@ -330,14 +330,14 @@ import type { Context } from '@asenajs/hono-adapter'
 | `res` | `S` | Original response object |
 | `headers` | `Record<string, string>` | Request headers as key-value pairs |
 
-::: tip Adapter-Specific APIs Available
-This table shows **unified APIs** that work across all adapters. Each adapter may provide **additional methods** for enhanced functionality.
+::: tip What differs between adapters
+The whole table above is unified - `setResponseHeader()` included. What actually differs is
+the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
 
-**Examples:**
-- **Ergenecore**: `context.setResponseHeader(key, value)`
-- **Hono**: Native Hono context via `context.req`
+One behavioural difference worth knowing: calling `setResponseHeader()` twice with the same
+key **replaces** the value on Ergenecore but **appends** a second header on Hono.
 
-See adapter documentation for complete API reference.
+See adapter documentation for the complete API reference.
 :::
 
 For more details about Context API methods and advanced usage, see the [Context API Reference](/docs/concepts/context) guide.
@@ -429,10 +429,14 @@ You can also inject services using their registered name as a string. This is us
 
 First, register your service with a custom name:
 
-::: tip String-Based Injection Requires Named Components
-When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+::: tip Name Your Components for String-Based Injection
+A component is registered under its `name` if you give one, and under its **class name**
+otherwise - so `@Inject('UserService')` already resolves an unnamed `@Service()` class
+called `UserService`.
 
-**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+**Why give an explicit name anyway?** The Bun bundler may rename classes during a
+production build, and the container key would change with it. An explicit
+`@Service('UserService')` pins the key so string injection keeps working after minification.
 
 **Example:**
 ```typescript
@@ -561,7 +565,7 @@ Middleware executes in this order:
 
 ## Validation
 
-Asena supports automatic request validation using Zod schemas (available with Ergenecore adapter).
+Asena supports automatic request validation using Zod schemas. Both adapters support it.
 
 ### Create a Validator
 
@@ -607,7 +611,12 @@ export class UserController {
 ```
 
 ::: warning Validation Errors
-If validation fails, Asena automatically returns a `400 Bad Request` with validation error details.
+If validation fails and your application defines **no** `onError` handler, the adapter
+answers with its own `400 Bad Request` envelope.
+
+As soon as you define `ConfigService.onError`, the failure is routed there instead as a
+`ValidationError` - match it with `isValidationError()`. See
+[Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
 ::: tip Learn More About Validation
@@ -638,8 +647,8 @@ export class PostController {
 
   @Get('/')
   async list(context: Context) {
-    const page = Number(context.getQuery('page')) || 1;
-    const limit = Number(context.getQuery('limit')) || 10;
+    const page = Number(await context.getQuery('page')) || 1;
+    const limit = Number(await context.getQuery('limit')) || 10;
 
     const posts = await this.postService.findAll(page, limit);
     return context.send({ posts, page, limit });
@@ -750,6 +759,7 @@ Do not forget `await` your `Promises`. If not awaited promises throws an error, 
 - [Middleware](/docs/concepts/middleware) - Request/response interception
 - [Validation](/docs/concepts/validation) - Request validation with Zod
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Inheritance](/docs/concepts/inheritance) - Sharing routes through a base controller
 - [Context API](/docs/concepts/context) - Detailed context methods for each adapter
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Hono Adapter](/docs/adapters/hono) - Hono-specific features

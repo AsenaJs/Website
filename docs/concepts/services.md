@@ -55,7 +55,7 @@ Inject services into controllers using the `@Inject` decorator:
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post, Delete } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -80,7 +80,7 @@ export class UserController {
   async deleteUser(context: Context) {
     const id = context.getParam('id');
     await this.userService.deleteUser(id);
-    return context.send({ success: true }, 204);
+    return context.send({ success: true }, 200);
   }
 }
 ```
@@ -541,7 +541,7 @@ interface ComponentParams {
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
-| `name` | `string` | `undefined` | Custom name for the service. Enables string-based injection. |
+| `name` | `string` | the class name | Container key for the service. Pin it explicitly so string-based injection survives bundler minification. |
 | `scope` | `Scope` | `Scope.SINGLETON` | Service lifecycle scope. |
 
 ## Asena-Specific Best Practices
@@ -729,5 +729,6 @@ describe('UserService', () => {
 
 **Next Steps:**
 - Learn about [Dependency Injection](/docs/concepts/dependency-injection)
+- Share behaviour across services with [Inheritance](/docs/concepts/inheritance)
 - Explore [Repository Pattern](/docs/packages/drizzle)
 - Understand [Testing Strategies](/docs/guides/testing)

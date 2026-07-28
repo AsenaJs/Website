@@ -30,6 +30,7 @@
 - [Scheduled Tasks](https://asena.sh/raw/concepts/scheduled-tasks.md): Cron-based background jobs with @Schedule and CronRunner, powered by Bun's native cron
 - [Frontend Controller](https://asena.sh/raw/concepts/frontend-controller.md): Serve HTML pages with @FrontendController and @Page using Bun's native HTML imports
 - [PostProcessor](https://asena.sh/raw/concepts/post-processor.md): Intercept and transform every component during IoC bootstrap with @PostProcessor
+- [Inheritance](https://asena.sh/raw/concepts/inheritance.md): How decorators behave when components extend a base class — what is inherited, how overrides resolve, and which conflicts fail the build
 
 ## Adapters
 
@@ -51,7 +52,7 @@
 - [CLI Overview](https://asena.sh/raw/cli/overview.md): Asena CLI for project scaffolding, code generation, dev server, and production bundling
 - [CLI Installation](https://asena.sh/raw/cli/installation.md): Install @asenajs/asena-cli globally with Bun, verify the installation, and troubleshoot common issues
 - [CLI Commands](https://asena.sh/raw/cli/commands.md): Reference for every CLI command - create, generate, dev start, build and init, including shortcuts
-- [CLI Configuration](https://asena.sh/raw/cli/configuration.md): Complete reference for asena.config.ts configuration file
+- [CLI Configuration](https://asena.sh/raw/cli/configuration.md): Complete reference for asena-config.ts configuration file
 - [Suffix Configuration](https://asena.sh/raw/cli/suffix-configuration.md): Customize component naming conventions with flexible suffix configuration
 - [CLI Examples](https://asena.sh/raw/cli/examples.md): Step-by-step tutorial for creating and running an Asena project
 

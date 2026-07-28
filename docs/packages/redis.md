@@ -30,7 +30,7 @@ bun add @asenajs/asena-redis redis
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 
 ## Quick Start
 
@@ -338,10 +338,37 @@ A background sweep (`XPENDING` + `XCLAIM`) rescues entries from crashed replicas
 
 - **Events: at-least-once.** Messages survive restarts and deploys (within the `maxStreamLength` trim window). Duplicate delivery is possible — [write idempotent handlers](/docs/concepts/microservices#idempotent-handlers).
 - **RPC: at-most-once per attempt.** Handler errors are final; retrying is the caller's decision.
+- **Replies are not durable.** A reply is a plain `PUBLISH` on the caller's reply channel and the request entry is ACKed either way — Redis pub/sub has no replay, so a reply published while the caller has no live subscription on that channel is **dropped and never redelivered**. The caller sees a `TIMEOUT`. This is the one place where the transport is deliberately lossy; see [Reply loss across an outage](#reply-loss-across-an-outage) for exactly when it bites.
+- **Readiness means "this instance can complete a `send()`", not "a socket is open".** `isConnected` requires the publisher connection **and** a reply subscription Redis is actually serving — the socket open *and* its `SUBSCRIBE` acknowledged since the last reconnect. Those are different facts: Bun's `RedisClient` reconnects on its own but does not restore subscriptions, so the replay costs a further round trip after the socket reports open, and the publisher is typically back before it finishes. Expect an instance to stay `503` a little past its reconnect; that is the honest signal, and it is what keeps a load balancer from releasing traffic at a pod whose replies are still being dropped.
 - **Reconnect:** on connection loss the transport reports `isConnected: false`, retries with capped backoff, and continues where it left off — Streams hold the messages meanwhile. If the consumer group itself was lost (Redis restart without persistence, `FLUSHALL`), the transport re-creates it automatically from the beginning of the stream, so surviving entries are replayed — but data already trimmed or flushed from the stream is gone.
 - **Connection poisoning defense:** Bun's `RedisClient` loses in-flight commands when a socket dies and afterwards resolves replies against the wrong promises. The transport guards both of its command connections against this — the blocking consumer via a wedge watchdog, the publisher via connection-loss detection plus the `commandTimeout` bound — and replaces a poisoned connection with a fresh one. The publisher is always a transport-owned duplicate, so a shared `AsenaRedisService` client is never touched.
 - **Retry latency is sweep-driven, not immediate.** A failed event is redelivered by the sweep once its idle time exceeds `claimIdleMs` — with defaults the first retry lands after ~60–90s and a poison message reaches the DLQ after `maxRetries` sweep cycles (minutes, not seconds). Coming from BullMQ/NestJS-style immediate retries, plan for this or lower `claimIdleMs`.
 - **No ordering guarantee.** Entries within a read batch are dispatched in parallel; consumers must not rely on event order.
+
+### Reply Loss Across an Outage
+
+Readiness is honest about the reply channel, but it does **not** make the reply channel durable. A reply is lost whenever it is published at a moment when the caller has no subscription on its reply channel:
+
+| Situation | Outcome |
+|---|---|
+| `send()` in flight when the connection drops | **Lost.** The responder publishes into an empty channel and ACKs the request; the caller gets a `TIMEOUT` after `requestTimeout`. |
+| `send()` issued while the instance reports `503` | Your own choice — the endpoint told you it could not serve. |
+| `send()` issued after the instance reports `200` | Delivered. This is what readiness now guarantees; before it did not. |
+
+So an RPC that spans a Redis outage must be treated as **retryable, not reliable**. Make handlers idempotent and retry the `TIMEOUT` at the caller, or use `emit()` (Streams, at-least-once) where losing the call is unacceptable.
+
+Two narrower residuals are worth knowing about:
+
+- Readiness is driven by connection events, so a health check that lands between the socket being marked open and the connect event being dispatched can read `200` for at most one event-loop turn.
+- A **custom** `RedisClientAdapter` that implements `onConnected` but neither `onResubscribed` nor subscription restoration of its own is taken at its word on connect. Both built-in adapters (`BunRedisAdapter`, `NodeRedisAdapter`) report honestly.
+
+::: warning Liveness must be more forgiving than readiness
+`isConnected` feeds Asena's health endpoint: `503` now means "the publisher is down **or** this instance's reply channel is not being served", i.e. a `send()` issued right now cannot complete. Wire it into your orchestrator's **readiness** probe. Because an instance stays `503` until its reply subscription is acknowledged — not merely until its socket reconnects — a liveness probe sharing the same thresholds will restart pods that were about to recover on their own.
+:::
+
+::: info Durable replies are not in 0.9.0
+Moving replies onto a Stream would close the loss entirely, at the cost of a per-request write and trim. It is deliberately deferred; the table above is the current contract.
+:::
 
 ## Best Practices
 
@@ -384,6 +411,10 @@ async health(context: Context) {
   return context.send({ redis: redisOk ? 'up' : 'down' });
 }
 ```
+
+::: warning `testConnection()` is not a microservice readiness check
+It `PING`s the cache client and says nothing about whether this instance's **reply channel** is being served, which is what decides whether a `send()` can complete. For an instance running `RedisMicroserviceTransport`, the readiness signal is the transport's `isConnected` (already wired into Asena's health endpoint) — see [Delivery Guarantees](#delivery-guarantees).
+:::
 
 ## Related Documentation
 

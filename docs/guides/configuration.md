@@ -22,13 +22,12 @@ export class AppConfig implements ConfigService {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: 'localhost',
-        port: 3000,
         development: true,
+        // port comes from AsenaServerFactory.create({ port }) - see Network Configuration
       },
       wsOptions: {
         perMessageDeflate: true,
-        maxPayloadLimit: 1024 * 1024, // 1MB
+        idleTimeout: 120,
       },
     };
   }
@@ -53,13 +52,12 @@ export class AppConfig implements ConfigService {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: 'localhost',
-        port: 3000,
         development: true,
+        // port comes from AsenaServerFactory.create({ port }) - see Network Configuration
       },
       wsOptions: {
         perMessageDeflate: true,
-        maxPayloadLimit: 1024 * 1024, // 1MB
+        idleTimeout: 120,
       },
     };
   }
@@ -114,14 +112,22 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
   onError?(error: Error, context: C): Response | Promise<Response>;
 
   /**
+   * Answers a request that matched no route
+   */
+  onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>;
+
+  /**
    * Global middleware configuration with pattern-based filtering
    */
   globalMiddlewares?(): Promise<GlobalMiddlewareEntry[]> | GlobalMiddlewareEntry[];
 
   /**
-   * WebSocket transport for multi-pod messaging
+   * WebSocket and/or microservice transport configuration
    */
-  transport?(): WebSocketTransport | Promise<WebSocketTransport>;
+  transport?():
+    | WebSocketTransport
+    | AsenaTransportConfig
+    | Promise<WebSocketTransport | AsenaTransportConfig>;
 }
 ```
 
@@ -167,16 +173,12 @@ type AsenaServerOptions = Omit<ServeOptions, 'fetch' | 'routes' | 'websocket' | 
 
 ### Network Configuration
 
-Configure network interfaces and ports.
-
 ```typescript
 @Config()
 class AppConfig implements AsenaConfig {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: '0.0.0.0',     // Bind to all interfaces
-        port: 8080,               // Server port
         reusePort: true,          // Enable load balancing across processes
         ipv6Only: false,          // Allow both IPv4 and IPv6
       },
@@ -185,28 +187,31 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
-**Unix Socket Configuration:**
+::: danger `port` and `hostname` do not belong here
+**`port`** is always overwritten. `AsenaServer.start()` pushes the port from
+`AsenaServerFactory.create({ port })` into the adapter on every start, after
+`serveOptions()` has been read - so a `port` (including `port: 0`) inside `serveOptions`
+never takes effect. Set it on the factory:
 
 ```typescript
-public serveOptions(): AsenaServeOptions {
-  return {
-    serveOptions: {
-      unix: '/tmp/asena.sock',  // Use Unix domain socket
-    },
-  };
-}
+const server = await AsenaServerFactory.create({ adapter, logger, port: 8080 });
 ```
 
-**Dynamic Port (Random Available Port):**
+**`hostname`** is adapter-specific. Hono honours `serveOptions.hostname`; Ergenecore
+overwrites it with the value given to the factory function:
 
 ```typescript
-public serveOptions(): AsenaServeOptions {
-  return {
-    serveOptions: {
-      port: 0,  // Bun will assign a random available port
-    },
-  };
-}
+const adapter = createErgenecoreAdapter({ hostname: '0.0.0.0' });
+```
+:::
+
+**Unix Socket Configuration:**
+
+A unix socket is a *start* option, not a serve option - Bun rejects `hostname` and `unix`
+together, so the framework only wires it through `start()`:
+
+```typescript
+await server.start({ unix: '/tmp/asena.sock' });
 ```
 
 ### TLS/SSL Configuration
@@ -280,7 +285,7 @@ class AppConfig implements AsenaConfig {
 **Options:**
 
 - **`maxRequestBodySize`** - Maximum allowed request body size in bytes. Requests exceeding this limit will be rejected.
-- **`idleTimeout`** - Maximum time (in seconds) a connection can remain idle before being closed. Default: 120 seconds.
+- **`idleTimeout`** - Maximum time (in seconds) an HTTP connection can remain idle before being closed. Bun's default is **10 seconds** (the 120 s default belongs to `wsOptions.idleTimeout`).
 
 ### Development Mode
 
@@ -306,12 +311,14 @@ Configure WebSocket-specific settings for real-time communication.
 
 ```typescript
 interface WSOptions {
-  maxPayloadLimit?: number;           // Maximum message size
+  maxPayloadLimit?: number;           // See the caveat below - currently not applied
   backpressureLimit?: number;         // Backpressure threshold
   closeOnBackpressureLimit?: boolean; // Close on backpressure
   idleTimeout?: number;               // WebSocket idle timeout
   publishToSelf?: boolean;            // Receive own published messages
-  sendPings?: boolean;                // Enable automatic ping frames
+  sendPings?: boolean;                // See the caveat below - superseded by sendPingStrategy
+  sendPingStrategy?: 'adapter' | 'native'; // Keep-alive mechanism (default 'adapter')
+  heartbeatInterval?: number;         // Heartbeat period in ms, 'adapter' strategy only
   perMessageDeflate:                  // Compression configuration (required)
     | boolean
     | {
@@ -340,8 +347,9 @@ class AppConfig implements AsenaConfig {
         // Publishing
         publishToSelf: false,                   // Don't receive own messages
 
-        // Keep-Alive
-        sendPings: true,                        // Send automatic ping frames
+        // Keep-Alive ('adapter' is the default; 'native' delegates to Bun)
+        sendPingStrategy: 'adapter',
+        heartbeatInterval: 30_000,              // no heartbeat is sent without this
 
         // Compression (required field)
         perMessageDeflate: true,                // Enable compression with defaults
@@ -355,13 +363,21 @@ class AppConfig implements AsenaConfig {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `maxPayloadLimit` | 16 MB | Maximum message size. Larger messages close the connection. |
-| `backpressureLimit` | 1 MB | Threshold for backpressure detection. Triggers `drain` event. |
+| `maxPayloadLimit` | 16 MB | Intended as the maximum message size. **Currently has no effect** - see the caveat below. |
+| `backpressureLimit` | 16 MB (Bun's default) | Threshold for backpressure detection. Triggers `drain` event. |
 | `closeOnBackpressureLimit` | `false` | Whether to close connection when backpressure limit is reached. |
 | `idleTimeout` | 120 seconds | Auto-close connections exceeding idle period. |
 | `publishToSelf` | `false` | Whether socket receives its own published messages. |
-| `sendPings` | `true` | Enable automatic ping frames for keep-alive. |
+| `sendPings` | — | **Ignored.** Superseded by `sendPingStrategy`; the adapters overwrite whatever you pass. |
+| `sendPingStrategy` | `'adapter'` | `'adapter'` uses the framework's own `ws.ping()` heartbeat; `'native'` hands keep-alive to Bun. |
+| `heartbeatInterval` | — | Heartbeat period in ms for the `'adapter'` strategy. With no value, no heartbeat is sent. |
 | `perMessageDeflate` | `false` | Enable per-message compression (reduces bandwidth). **Required field.** |
+
+::: warning `maxPayloadLimit` is not applied
+The adapters forward `wsOptions` to `Bun.serve()` verbatim, but Bun's option is named
+`maxPayloadLength`. `maxPayloadLimit` is therefore an unknown key that Bun silently drops,
+and the cap stays at Bun's 16 MB default. Do not rely on it to bound message size.
+:::
 
 **Advanced Compression Configuration:**
 
@@ -496,6 +512,70 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
+## onNotFound() Method
+
+Answers a request that matched no route. Separate from `onError` on purpose: nothing threw, the
+router simply had nowhere to send the request, so neither handler has to ask which case it is
+looking at.
+
+```typescript
+onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>
+```
+
+**Parameters:**
+- `context` - The request context
+- `request` - `{ path, method }`, normalised by the adapter
+
+**Returns:** `Response` or `Promise<Response>`
+
+### Basic Usage
+
+```typescript
+import { Config } from '@asenajs/asena/decorators';
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService, type Context } from '@asenajs/hono-adapter';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public onNotFound(context: Context, request: NotFoundRequest) {
+    return context.send({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      instance: request.path
+    }, 404);
+  }
+
+}
+```
+
+`request.path` carries the path only - no origin, no query string - and `request.method` is the
+upper-case verb. Both adapters produce identical values, so the same body works under either.
+
+### Defaults
+
+With no `onNotFound` declared, both adapters answer `{"error":"Not Found"}` with status `404` and
+`Content-Type: application/json`.
+
+Global middlewares run **before** `onNotFound` on both adapters, so a 404 still carries CORS
+headers and anything else you apply to every request.
+
+If the hook throws, the adapter logs it and falls back to the default 404 rather than taking the
+server down. It is deliberately **not** routed to `onError`.
+
+::: warning Not for domain 404s
+When the route exists but the record does not, throw instead - that reaches `onError` like any
+other application decision:
+
+```typescript
+if (!user) {
+  throw new HttpException(404, { code: 'USER_NOT_FOUND' });
+}
+```
+:::
+
+
 ## globalMiddlewares() Method
 
 Configure global middleware that applies to all or specific routes. Supports both simple array syntax and pattern-based filtering.
@@ -505,6 +585,15 @@ globalMiddlewares?(): Promise<GlobalMiddlewareEntry[]> | GlobalMiddlewareEntry[]
 ```
 
 **Returns:** Array of middleware classes or `GlobalMiddlewareEntry` objects
+
+::: danger It must be a method, not a property
+Asena reads global middleware by calling `globalMiddlewares()`. A `middlewares = [...]`
+property on the config class is never read - the server starts normally and the middleware
+simply never runs.
+
+The server warns at startup when it finds such a property, but the warning is scrollback:
+if middleware seems to be skipped, check the shape of this hook first.
+:::
 
 ### Simple Global Middleware
 
@@ -579,10 +668,26 @@ type GlobalMiddlewareEntry =
 ```
 
 **Pattern Matching:**
-- `*` - Matches any characters except `/`
-- `**` - Matches any characters including `/`
-- `/api/*` - Matches `/api/users` but not `/api/v1/users`
-- `/api/**` - Matches `/api/users` and `/api/v1/users`
+
+A `*` matches any characters **including `/`**, so a pattern covers every path below it.
+`**` is not a separate construct - it compiles to the same regex as `*`.
+
+| Path | `/api/*` | `/api/**` |
+|:-----|:---------|:----------|
+| `/api/users` | ✅ | ✅ |
+| `/api/v1/users` | ✅ | ✅ |
+| `/api` (no trailing segment) | ❌ | ❌ |
+
+Other forms: an exact path (`/health`) matches literally, trailing slashes are normalized,
+and `:param` patterns (`/users/:id`) match a single segment.
+
+::: danger `/api/*` is recursive
+A wildcard does **not** stop at the next `/`. If you write
+`{ middleware: AuthMiddleware, routes: { include: ['/api/*'] } }` it protects
+`/api/v1/admin/users` too - which is usually what you want, but is the opposite of a
+single-segment glob. Conversely `include: ['/api/*']` does **not** cover the bare `/api`
+path; list it explicitly if you need it.
+:::
 
 ### Execution Order
 
@@ -707,10 +812,10 @@ export class AppConfig extends ConfigService {
   public transport() {
     return {
       websocket: new RedisTransport({ url: 'redis://localhost:6379' }),      // optional
-      microservice: new RedisMicroserviceTransport({
-        url: 'redis://localhost:6379',
-        serviceName: 'order-service',
-      }),
+      microservice: new RedisMicroserviceTransport(
+        { url: 'redis://localhost:6379' },                                   // connection
+        { serviceName: 'order-service' },                                    // required options
+      ),
       interceptors: [otelMessaging({ system: 'redis' })],                    // optional
     };
   }
@@ -731,7 +836,8 @@ A real-world configuration example combining all features:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Config, Inject, Service } from '@asenajs/asena/decorators';
+import { Config, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ConfigService, Context } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 
@@ -752,8 +858,7 @@ export class AppConfig implements ConfigService {
 
     return {
       serveOptions: {
-        hostname: process.env.HOSTNAME || '0.0.0.0',
-        port: parseInt(process.env.PORT || '3000', 10),
+        // port/hostname are not read from here - see Network Configuration
         development: !isProduction,
         maxRequestBodySize: 10 * 1024 * 1024,  // 10MB
         idleTimeout: isProduction ? 30 : 120,
@@ -770,7 +875,6 @@ export class AppConfig implements ConfigService {
         backpressureLimit: 1024 * 1024,     // 1MB
         closeOnBackpressureLimit: false,
         idleTimeout: 120,
-        sendPings: true,
         publishToSelf: false,
       },
     };
@@ -780,7 +884,7 @@ export class AppConfig implements ConfigService {
     await this.logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.getUrl(),
+      url: context.req.url,
     });
 
     const isProduction = process.env.NODE_ENV === 'production';
@@ -817,7 +921,8 @@ export class AppConfig implements ConfigService {
 ```
 
 ```typescript [Hono]
-import { Config, Inject, Service } from '@asenajs/asena/decorators';
+import { Config, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ConfigService, Context } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 
@@ -838,8 +943,7 @@ export class AppConfig implements ConfigService {
 
     return {
       serveOptions: {
-        hostname: process.env.HOSTNAME || '0.0.0.0',
-        port: parseInt(process.env.PORT || '3000', 10),
+        // port/hostname are not read from here - see Network Configuration
         development: !isProduction,
         maxRequestBodySize: 10 * 1024 * 1024,  // 10MB
         idleTimeout: isProduction ? 30 : 120,
@@ -856,7 +960,6 @@ export class AppConfig implements ConfigService {
         backpressureLimit: 1024 * 1024,     // 1MB
         closeOnBackpressureLimit: false,
         idleTimeout: 120,
-        sendPings: true,
         publishToSelf: false,
       },
     };
@@ -872,10 +975,10 @@ export class AppConfig implements ConfigService {
     const isProduction = process.env.NODE_ENV === 'production';
 
     if (isProduction) {
-      return context.json({ error: 'Internal Server Error' }, 500);
+      return context.send({ error: 'Internal Server Error' }, 500);
     }
 
-    return context.json({
+    return context.send({
       error: error.message,
       stack: error.stack,
     }, 500);
@@ -917,7 +1020,9 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 5. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
    - `onError()` is registered as error handler
+   - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
+   - `transport()` is called and the WebSocket / microservice transports are wired
 6. **Phase: SERVER_READY** - Server starts with applied configuration
 
 ### Singleton Validation
@@ -962,8 +1067,12 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
-::: info Async Configuration
-When using async operations in `serveOptions()`, the method can return `Promise<AsenaServeOptions>`.
+::: warning Async `serveOptions()` - runtime yes, types no
+The adapters `await` the result, so returning a Promise works at runtime. But
+`AsenaConfig.serveOptions?(): AsenaServeOptions` declares a synchronous return, so a class
+that `implements AsenaConfig` / `extends ConfigService` cannot legally declare the method
+`async`. Prefer resolving async values before the server starts and passing them in, or
+widen the type at the call site.
 :::
 
 ## Best Practices
@@ -1055,7 +1164,7 @@ When using async operations in `serveOptions()`, the method can return `Promise<
 
 ## Troubleshooting
 
-### "Only one config instance is allowed"
+### "Only one config is allowed"
 
 **Error:** Multiple `@Config` classes are defined in your application.
 

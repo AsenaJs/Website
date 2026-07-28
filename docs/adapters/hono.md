@@ -62,6 +62,7 @@ bun add @asenajs/hono-adapter
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.3.12 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 - TypeScript v5.8.2 or higher
 
 ## Quick Start
@@ -71,9 +72,10 @@ bun add @asenajs/hono-adapter
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
+import { AsenaLogger } from '@asenajs/asena-logger';
 
-// Create adapter (returns tuple: [adapter, logger])
-const [adapter, logger] = createHonoAdapter();
+// Create adapter (returns tuple: [adapter, logger]) - a logger is required
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
 // Create and start server
 const server = await AsenaServerFactory.create({
@@ -97,13 +99,13 @@ export class UserController {
   @Get({ path: '/:id' })
   async getById(context: Context) {
     const id = context.req.param('id');
-    return context.json({ id, name: 'John Doe' });
+    return context.send({ id, name: 'John Doe' });
   }
 
   @Post({ path: '/' })
   async create(context: Context) {
     const body = await context.req.json();
-    return context.json({ created: true, data: body }, 201);
+    return context.send({ created: true, data: body }, 201);
   }
 }
 ```
@@ -145,6 +147,7 @@ const [adapter, logger] = createHonoAdapter({
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
 | `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
+| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 **Returns:** Tuple: `[adapter, logger]`
 
@@ -227,7 +230,7 @@ export class DynamicCors extends CorsMiddleware {
 |:-----------------|:------------------------------|:-----------|:--------------------------------|
 | `origin`         | `string \| string[] \| function` | `'*'`   | Allowed origins                 |
 | `credentials`    | `boolean`                     | `false`    | Allow credentials               |
-| `methods`        | `string[]`                    | All        | Allowed HTTP methods            |
+| `methods`        | `string[]`                    | `['GET','POST','PUT','PATCH','DELETE','OPTIONS']` | Allowed HTTP methods |
 | `allowedHeaders` | `string[]`                    | `['Content-Type', 'Authorization']` | Allowed request headers |
 | `exposedHeaders` | `string[]`                    | `[]`       | Exposed response headers        |
 | `maxAge`         | `number`                      | `86400`    | Preflight cache duration (sec)  |
@@ -241,7 +244,9 @@ import { ConfigService } from '@asenajs/hono-adapter';
 // Global CORS
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 
 // Per-route CORS
@@ -249,7 +254,7 @@ export class ServerConfig extends ConfigService {
 export class ApiController {
   @Get({ path: '/public', middlewares: [RestrictedCors] })
   async publicData(context: Context) {
-    return context.json({ data: 'public' });
+    return context.send({ data: 'public' });
   }
 }
 ```
@@ -333,7 +338,7 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | IP-based                                 | Client identifier function     |
+| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
@@ -359,7 +364,9 @@ import { ConfigService } from '@asenajs/hono-adapter';
 // Global rate limiter
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [ApiRateLimiter];
+  globalMiddlewares() {
+    return [ApiRateLimiter];
+  }
 }
 
 // Per-controller
@@ -372,7 +379,7 @@ export class AuthController {
   @Post({ path: '/login', middlewares: [StrictRateLimiter] })
   async login(context: Context) {
     const body = await context.req.json();
-    return context.json({ token: 'abc123' });
+    return context.send({ token: 'abc123' });
   }
 }
 ```
@@ -387,13 +394,15 @@ RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal 
 
 The `@Override` decorator allows middleware to work directly with Hono's native context without Asena wrappers. This is **unique to Hono Adapter** and enables seamless integration with Hono ecosystem middleware.
 
+Extend `AsenaMiddlewareService` rather than the adapter's `MiddlewareService` here: the adapter class binds `handle()` to Asena's wrapped Context, so declaring a Hono `Context` parameter on it is a signature mismatch. `AsenaMiddlewareService` leaves the context type open, which is exactly what `@Override` needs.
+
 ```typescript
 import { Middleware, Override } from '@asenajs/asena/decorators';
-import { MiddlewareService } from '@asenajs/hono-adapter';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class NativeHonoMiddleware extends MiddlewareService {
+export class NativeHonoMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's native context directly - no wrapper!
@@ -402,6 +411,7 @@ export class NativeHonoMiddleware extends MiddlewareService {
     await next();
 
     const duration = Date.now() - startTime;
+    // Hono's own API - this is the native context, not Asena's wrapper
     context.header('X-Response-Time', `${duration}ms`);
   }
 }
@@ -417,13 +427,13 @@ export class NativeHonoMiddleware extends MiddlewareService {
 
 ```typescript
 import { Middleware, Override } from '@asenajs/asena/decorators';
-import { MiddlewareService } from '@asenajs/hono-adapter';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import { compress } from 'hono/compress';
 import { logger } from 'hono/logger';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class CompressionMiddleware extends MiddlewareService {
+export class CompressionMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's compress middleware directly
@@ -432,7 +442,7 @@ export class CompressionMiddleware extends MiddlewareService {
 }
 
 @Middleware()
-export class LoggerMiddleware extends MiddlewareService {
+export class LoggerMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's logger middleware directly
@@ -472,7 +482,7 @@ export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
     const token = context.req.header('authorization');
     if (!token) {
-      return context.json({ error: 'Unauthorized' }, 401);
+      return context.send({ error: 'Unauthorized' }, 401);
     }
     await next();
   }
@@ -517,11 +527,13 @@ import { ConfigService, type Context } from '@asenajs/hono-adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
     console.error('Error:', error);
-    return context.json({ error: error.message }, 500);
+    return context.send({ error: error.message }, 500);
   }
 }
 ```
@@ -537,8 +549,8 @@ Extend `StaticServeService` for serving static files:
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import { StaticServe, StaticServeService } from '@asenajs/asena/static';
-import type { Context } from '@asenajs/hono-adapter/types';
+import { StaticServe } from '@asenajs/asena/decorators';
+import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 
 @StaticServe({ root: './public' })
 export class StaticMiddleware extends StaticServeService {
@@ -598,13 +610,13 @@ export class UserController {
   @Get({ path: '/:id' })
   async getUser(context: Context) {
     const id = context.req.param('id');
-    return context.json({ id, name: 'John' });
+    return context.send({ id, name: 'John' });
   }
 
   @Post({ path: '/' })
   async create(context: Context) {
     const body = await context.req.json();
-    return context.json({ created: true, data: body }, 201);
+    return context.send({ created: true, data: body }, 201);
   }
 }
 ```
@@ -628,14 +640,21 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { AsenaServerFactory } from "@asenajs/asena";
 import { createHonoAdapter } from "@asenajs/hono-adapter";
 import { UserController } from "./controllers/UserController";
+import { logger } from "./logger";
 
 describe("UserController", () => {
   let server;
   let baseUrl;
 
   beforeEach(async () => {
-    const port = Math.floor(Math.random() * 55000) + 10000;
-    const [adapter, logger] = createHonoAdapter();
+    // 10000-31999: below the kernel's ephemeral floor (net.ipv4.ip_local_port_range,
+    // 32768-60999). A server port drawn from that range collides with the outbound
+    // sockets the suite itself holds open - TIME_WAIT included - and Bun.serve then
+    // fails with EADDRINUSE, randomly, in whichever test happened to draw it.
+    const port = 10000 + Math.floor(Math.random() * 22000);
+    // createHonoAdapter returns a tuple and requires a logger - calling it with no argument
+    // yields [adapter, undefined], and AsenaServerFactory.create throws on the undefined logger
+    const [adapter] = createHonoAdapter({ logger });
 
     server = await AsenaServerFactory.create({
       adapter,
@@ -711,7 +730,9 @@ import { Context } from '@asenajs/hono-adapter';
 // ✅ Good: Use built-in CORS and rate limiting
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 }
 ```
 
@@ -720,7 +741,7 @@ export class ServerConfig extends ConfigService {
 ```typescript
 // ✅ Good: Use @Override for Hono ecosystem middleware
 @Middleware()
-export class HonoCompress extends MiddlewareService {
+export class HonoCompress extends AsenaMiddlewareService {
   @Override()
   async handle(c: HonoContext, next: Next) {
     return compress()(c, next);
@@ -734,7 +755,7 @@ export class HonoCompress extends MiddlewareService {
 // ✅ Good: Use Hono's native context methods
 const id = context.req.param('id');
 const body = await context.req.json();
-return context.json({ data });
+return context.send({ data });
 
 // Also works: Asena's unified API
 const id = context.getParam('id');
@@ -770,12 +791,14 @@ export class MyMiddleware extends MiddlewareService {
 **Issue: Hono-specific middleware not working**
 
 ```typescript
-// Solution: Use @Override decorator for native Hono middleware
+// Solution: Use @Override decorator for native Hono middleware, and extend
+// AsenaMiddlewareService so the Hono Context parameter type-checks
 import { Override } from '@asenajs/asena/decorators';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class MyHonoMiddleware extends MiddlewareService {
+export class MyHonoMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's native context

@@ -18,7 +18,7 @@ import { mock } from 'bun:test';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }
@@ -304,7 +304,7 @@ import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }

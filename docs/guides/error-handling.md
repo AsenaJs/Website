@@ -95,11 +95,11 @@ The `HttpException` class accepts three parameters:
 new HttpException(status, body, options?)
 ```
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `status` | `number` | HTTP status code (e.g., 400, 401, 404, 500) |
-| `body` | `string \| object` | Response body (string or JSON object) |
-| `options` | `ResponseInit` | Optional response options (headers, statusText) |
+| Parameter | Type | Required | Description |
+|:----------|:-----|:---------|:------------|
+| `status` | `HttpStatusCode \| number` | Yes | HTTP status code. The `ClientErrorStatusCode` / `ServerErrorStatusCode` enums are accepted. |
+| `body` | `string \| object` | No (default `''`) | Response body. An object is serialized and gets `Content-Type: application/json` automatically. |
+| `options` | `HttpExceptionInit` | No | Extends `ResponseInit` (headers, statusText) with `cause?: Error` for wrapping the original failure. |
 
 **Examples:**
 
@@ -124,8 +124,39 @@ throw new HttpException(503, 'Service Unavailable', {
 });
 ```
 
-::: tip Automatic Detection
-Both adapters automatically detect `HttpException`/`HTTPException` and convert them to proper HTTP responses. You don't need to catch them manually in your handlers.
+::: tip Your handler always gets first refusal
+Both adapters turn the exception into a proper HTTP response without you catching it, and
+both offer it to `onError` first:
+
+1. `onError` is called. If it returns a `Response`, that is the answer.
+2. If there is no handler, it returns nothing, or it throws, the exception answers itself
+   from its own status and body. Anything that is not an `HttpException` becomes a 500.
+
+So an ExceptionMapper that logs or enriches thrown exceptions works the same on both adapters.
+
+Before 0.9.0 Ergenecore answered an `HttpException` straight from `getResponse()` and only
+consulted `onError` for everything else, so the same ExceptionMapper worked on Hono and was
+bypassed here. If you worked around that by throwing a plain domain error, you can now throw
+`HttpException` directly.
+:::
+
+::: warning Match the exception with `isHttpException()`, not `instanceof`
+A project that resolves two copies of an adapter - or two copies of `hono`, which is a peer
+dependency - ends up with two distinct exception classes, and `instanceof` silently answers
+false for one of them. Every deliberate 401/403/404 then collapses to your generic 500 branch
+while the API keeps responding.
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    return context.send({ error: error.message }, error.status);
+  }
+
+  return context.send({ error: 'Internal Server Error' }, 500);
+}
+```
 :::
 
 ---
@@ -309,7 +340,7 @@ import { AuthError } from '../errors/AuthError';
 export class AuthController {
   @Post('/login')
   async login(context: Context) {
-    const { username, password } = await context.getBody();
+    const { username, password } = await context.getBody<{ username: string; password: string }>();
 
     const user = await validateCredentials(username, password);
 
@@ -377,6 +408,104 @@ public map(error: Error, context: Context): Response {
 
 ---
 
+## Not Found
+
+A request that matched no route is not an error - nothing threw, the router simply had nowhere
+to send it. It has its own hook, so `onError` only ever sees something your code raised and
+never has to ask which it is looking at.
+
+```typescript
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public onNotFound(context: Context, request: NotFoundRequest) {
+    return context.send({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      instance: request.path
+    }, 404);
+  }
+
+  public onError(error: Error, context: Context) {
+    // No 404 branch needed here
+    return context.send({ error: 'Internal Server Error' }, 500);
+  }
+
+}
+```
+
+`request.path` is the path only - no origin, no query string - and `request.method` is the
+upper-case verb. Both are normalised by the adapter, so the same handler body works on
+Ergenecore and the Hono adapter alike.
+
+With no `onNotFound` declared, **both** adapters answer:
+
+```json
+{ "error": "Not Found" }
+```
+
+with status `404` and `Content-Type: application/json`, and write one INFO line -
+`Route not found:` with `{ path, method, status }`. A hook that answers the request itself
+replaces both. See [Adapter logging](#adapter-logging).
+
+::: info Not the same as a domain 404
+`onNotFound` is about routing. When the route exists but the record does not, throw - that is a
+real application decision and belongs in `onError`:
+
+```typescript
+const user = await this.db.findUser(id);
+
+if (!user) {
+  throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
+}
+```
+:::
+
+::: warning Upgrading from 0.8
+`NotFoundError`, `isNotFoundError` and the `NOT_FOUND_ERROR` brand are removed. An `onError`
+that branched on `isNotFoundError()` should move that branch into `onNotFound`. On the Hono
+adapter the default 404 body also changes from `text/plain` to the JSON envelope above.
+:::
+
+::: tip Static file 404s are separate
+`StaticServeService.onNotFound` handles a file missing *inside* a `@StaticServe` route. It is
+unrelated to the config hook, which only fires when no route matched at all.
+:::
+
+### Adapter logging
+
+One rule, both adapters: **the framework's default log fires exactly when the framework's
+default response fires.**
+
+| | your hook answered | no hook, or it declined or threw |
+|:--|:--|:--|
+| response | yours | the framework's |
+| log | none | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
+
+If your `onError` returns a `Response`, you own the response and therefore the record - log it
+there, with your correlation id, and the adapter stays out of the way. If it returns nothing or
+throws, the adapter is the one answering, so it writes the original error rather than letting it
+disappear. Same for `onNotFound`.
+
+The level split exists so a wall of 401s from a bot cannot flood the error stream: only `5xx`
+carries a stack. An unmatched route logs `Route not found:` with `{ path, method, status }` at
+INFO - low enough that a scanner walking `/wp-admin` and `/.env` cannot fill the warning stream,
+high enough that a mistyped route in a deployed client is visible without turning on debug.
+
+Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence all of it,
+including the 404 line. There is no setting that forces a log line for a request your own handler
+answered.
+
+::: warning Upgrading from ergenecore 1.5.x / hono-adapter 1.7.x
+Those versions logged only when **no** `onError` was registered - which in a real application
+meant never, since almost every application configures one. A 500 answered the client and wrote
+nothing at all, stack included. You will now see error output you did not see before: whenever the
+framework is the one answering. If your own handler answers and also logs, nothing is duplicated.
+:::
+
 ## Validation Errors
 
 ### Request Validation Errors
@@ -417,9 +546,21 @@ carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
 `ZodError.errors`; the field is now `issues`.
 :::
 
-::: warning Only when a handler exists
-If your application defines no `onError`, the adapter answers validation failures itself
-with its default 400 envelope. See [Validation](/docs/concepts/validation#validation-error-responses).
+::: info When no handler answers it
+A `ValidationError` is always thrown, whether or not you declare `onError`. If nothing answers it -
+no handler, or a handler that returns nothing - both adapters fall back to the same envelope:
+
+```json
+{
+  "error": "Validation failed",
+  "details": { "formErrors": [], "fieldErrors": { "email": ["..."] } },
+  "target": "json"
+}
+```
+
+`target` is which part of the request failed: `json`, `query`, `param`, `form` or `header`. The
+failure is logged like any other 4xx. See
+[Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
 ### Custom Validation Error Response
@@ -536,7 +677,7 @@ async getUser(id: string) {
   const user = await this.db.findUser(id);
 
   if (!user) {
-    throw new NotFoundError('User not found');
+    throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
   }
 
   return user;
@@ -599,7 +740,7 @@ logger.error('Payment processing failed', {
 @Post('/charge')
 async processPayment(context: Context) {
   try {
-    const { amount, token } = await context.getBody();
+    const { amount, token } = await context.getBody<{ amount: number; token: string }>();
 
     const charge = await this.paymentService.charge(amount, token);
 

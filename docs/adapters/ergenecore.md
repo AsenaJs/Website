@@ -62,7 +62,8 @@ bun add @asenajs/ergenecore
 
 **Requirements:**
 - Bun v1.3.12 or higher
-- TypeScript v5.8.2 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- TypeScript v5.9.3 or higher
 
 ## Quick Start
 
@@ -70,7 +71,7 @@ bun add @asenajs/ergenecore
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
 // Create adapter
@@ -91,7 +92,7 @@ await server.start();
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -122,7 +123,7 @@ Ergenecore provides three factory functions for creating adapter instances with 
 Creates a new Ergenecore adapter instance with custom configuration.
 
 ```typescript
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 
 const adapter = createErgenecoreAdapter({
   hostname: 'localhost',
@@ -135,18 +136,19 @@ const adapter = createErgenecoreAdapter({
 
 | Option              | Type                         | Default     | Description                    |
 |:--------------------|:-----------------------------|:------------|:-------------------------------|
-| `port`              | `number`                     | `3000`      | Server port (passed to AsenaServerFactory) |
-| `hostname`          | `string`                     | `undefined` | Server hostname (binds to all interfaces if not set) |
+| `port`              | `number`                     | —           | **Ignored.** `AsenaServer.start()` overwrites it with the port from `AsenaServerFactory.create({ port })`. |
+| `hostname`          | `string`                     | `undefined` | Server hostname. On Ergenecore this is the **only** way to set it - `serveOptions.hostname` is overwritten. |
 | `logger`            | `ServerLogger`               | `undefined` | Custom logger instance         |
 | `enableWebSocket`   | `boolean`                    | `true`      | Enable WebSocket support       |
 | `websocketAdapter`  | `ErgenecoreWebsocketAdapter` | Auto        | Custom WebSocket adapter       |
+| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 ### createProductionAdapter(options?)
 
 Creates a production-optimized adapter with sensible defaults.
 
 ```typescript
-import { createProductionAdapter } from '@asenajs/ergenecore/factory';
+import { createProductionAdapter } from '@asenajs/ergenecore';
 
 const adapter = createProductionAdapter({
   hostname: '0.0.0.0',
@@ -155,24 +157,33 @@ const adapter = createProductionAdapter({
 ```
 
 **Production Defaults:**
-- WebSocket enabled
-- Optimized for performance
-- Use with production logger
+- WebSocket enabled (which is already the default)
+
+::: info It is an alias
+`createProductionAdapter(options)` forwards to `createErgenecoreAdapter(options)` with
+`enableWebSocket` defaulted to `true` - and that is already the base default. There is no
+additional performance tuning; the name only documents intent.
+:::
 
 ### createDevelopmentAdapter(options?)
 
 Creates a development-friendly adapter with verbose logging.
 
 ```typescript
-import { createDevelopmentAdapter } from '@asenajs/ergenecore/factory';
+import { createDevelopmentAdapter } from '@asenajs/ergenecore';
 
 const adapter = createDevelopmentAdapter();
 ```
 
 **Development Defaults:**
-- Port 3000
-- WebSocket enabled
-- Console logging enabled
+- WebSocket **forced** on - unlike the other two factories, passing
+  `enableWebSocket: false` here has no effect
+- Same default console logger as `createErgenecoreAdapter`
+
+::: tip Prefer `createErgenecoreAdapter`
+The three factories are near-identical. Use the plain one unless you specifically want the
+forced-WebSocket behaviour.
+:::
 
 ## Built-in Middleware
 
@@ -235,9 +246,9 @@ export class DynamicCors extends CorsMiddleware {
 
 | Option           | Type                          | Default    | Description                     |
 |:-----------------|:------------------------------|:-----------|:--------------------------------|
-| `origin`         | `string \| string[] \| function` | `'*'`   | Allowed origins                 |
+| `origin`         | `'*' \| string[] \| (origin: string) => boolean` | `'*'` | Allowed origins. A **bare origin string is not supported** here - wrap it in an array. |
 | `credentials`    | `boolean`                     | `false`    | Allow credentials               |
-| `methods`        | `string[]`                    | All        | Allowed HTTP methods            |
+| `methods`        | `string[]`                    | `['GET','POST','PUT','PATCH','DELETE','OPTIONS']` | Allowed HTTP methods |
 | `allowedHeaders` | `string[]`                    | `['Content-Type', 'Authorization']` | Allowed request headers |
 | `exposedHeaders` | `string[]`                    | `[]`       | Exposed response headers        |
 | `maxAge`         | `number`                      | `86400`    | Preflight cache duration (sec)  |
@@ -251,7 +262,9 @@ import { ConfigService } from '@asenajs/ergenecore';
 // Global CORS
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 
 // Per-route CORS
@@ -317,10 +330,10 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
       refillRate: 50 / 60,
 
       // Rate limit by user ID instead of IP
-      keyGenerator: (ctx) => ctx.state.user?.id || 'anonymous',
+      keyGenerator: (ctx) => ctx.getValue('user')?.id || 'anonymous',
 
       // Skip rate limiting for admin users
-      skip: (ctx) => ctx.state.user?.role === 'admin',
+      skip: (ctx) => ctx.getValue('user')?.role === 'admin',
 
       // Expensive operations cost more tokens
       cost: (ctx) => ctx.req.url.includes('/search') ? 5 : 1,
@@ -343,7 +356,7 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | IP-based                                 | Client identifier function     |
+| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
@@ -369,7 +382,9 @@ import { ConfigService } from '@asenajs/ergenecore';
 // Global rate limiter
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [ApiRateLimiter];
+  globalMiddlewares() {
+    return [ApiRateLimiter];
+  }
 }
 
 // Per-controller
@@ -416,7 +431,7 @@ Ergenecore is built exclusively with:
 Always import Context from Ergenecore's types:
 
 ```typescript
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 ```
 
 ::: info
@@ -434,7 +449,7 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization');
+    const token = context.headers['authorization'];
     if (!token) {
       return context.send({ error: 'Unauthorized' }, 401);
     }
@@ -478,20 +493,61 @@ Extend `ConfigService` for server configuration:
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error);
-    return context.send({ error: error.message }, 500);
+    return context.send({ error: 'Something went wrong' }, 500);
+  }
+
+  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
 
+### The two handlers do not overlap
+
+`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
+route** — a routing outcome, not a failure — so neither handler has to ask which case it is looking
+at. An unmatched route never reaches `onError`.
+
+`request.path` is the path only, with no origin and no query string, and `request.method` is
+normalised by the adapter, so the same handler body works unchanged on the Hono adapter. With no
+`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
+
+A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
+`onError`:
+
+```typescript
+throw new HttpException(404, { message: 'User not found' });
+```
+
+::: warning `onNotFound` also catches missing static files
+A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
+body. The per-route `StaticServeService.onNotFound` still runs first when you declare one.
+:::
+
+### Every thrown error reaches `onError` first
+
+Including `HttpException`. The adapter used to answer an `HttpException` straight from
+`getResponse()` at several points and only consult your handler for everything else, so an
+application could reshape its own 4xx envelopes on the Hono adapter but not here. Your handler now
+sees all of them, and the adapter falls back to `getResponse()` (or a generic 500) only when there
+is no handler, when it returns nothing, or when it throws.
+
+With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+thrown message is deliberately not echoed to the caller — it is written to the log with its stack
+instead.
+
 ::: info
-For configuration, see [Configuration](/docs/guides/configuration).
+For configuration, see [Configuration](/docs/guides/configuration), and for the full picture of
+both hooks see [Error Handling](/docs/guides/error-handling).
 :::
 
 ## Best Practices
@@ -500,10 +556,10 @@ For configuration, see [Configuration](/docs/guides/configuration).
 
 ```typescript
 // ✅ Good: Type-only import
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 // ❌ Bad: Runtime import for types
-import { Context } from '@asenajs/ergenecore/types';
+import { Context } from '@asenajs/ergenecore';
 ```
 
 ### 2. Leverage Built-in Middleware
@@ -512,7 +568,9 @@ import { Context } from '@asenajs/ergenecore/types';
 // ✅ Good: Use built-in CORS and rate limiting
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 }
 ```
 
@@ -520,16 +578,39 @@ export class ServerConfig extends ConfigService {
 
 ```typescript
 // ✅ Good: Extend base classes
-import { MiddlewareService, ValidationService, ConfigService } from '@asenajs/ergenecore';
+import { Config, Middleware } from '@asenajs/asena/decorators';
+import {
+  ConfigService,
+  MiddlewareService,
+  ValidationService,
+  type Context,
+  type ValidationSchema,
+} from '@asenajs/ergenecore';
+import { z } from 'zod';
 
+// MiddlewareService requires handle() - it is the only abstract member
 @Middleware()
-export class MyMiddleware extends MiddlewareService { }
+export class MyMiddleware extends MiddlewareService {
+  public async handle(context: Context, next: () => Promise<void>) {
+    await next();
+  }
+}
 
+// ValidationService has no abstract members; define the request parts you validate
 @Middleware({ validator: true })
-export class MyValidator extends ValidationService { }
+export class MyValidator extends ValidationService {
+  public json(): ValidationSchema {
+    return z.object({ name: z.string() });
+  }
+}
 
+// ConfigService has no abstract members; override only the hooks you need
 @Config()
-export class MyConfig extends ConfigService { }
+export class MyConfig extends ConfigService {
+  public onError(error: Error, context: Context) {
+    return context.send({ error: error.message }, 500);
+  }
+}
 ```
 
 ### 4. Use Factory Functions
@@ -549,7 +630,7 @@ const adapter = process.env.NODE_ENV === 'production'
 
 ```typescript
 // Solution: Use type-only import
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 ```
 
 **Issue: Middleware not executing**

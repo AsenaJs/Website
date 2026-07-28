@@ -127,10 +127,15 @@ Asena provides **automatic room management** with built-in pub/sub pattern. You 
 - `ws.subscribe(room)` - Automatically joins room and tracks membership
 - `ws.publish(room, data)` - Broadcasts to all room subscribers
 - `ws.unsubscribe(room)` - Leaves room with automatic cleanup
-- `this.sockets` - All connected sockets (managed automatically)
-- `this.rooms` - All rooms and their members (managed automatically)
+- `this.sockets` - All connected sockets of this namespace (managed automatically)
 - `this.to(room, data)` - Broadcast from service level
 - `this.in(data)` - Broadcast to all connected clients
+:::
+
+::: warning Rooms are not enumerable
+Room membership lives in Bun's pub/sub topics, which cannot be listed. There is no
+`this.rooms` map and no `getSocketsByRoom()`. If you need a member count or roster, keep
+your own registry - add the socket in `onOpen`, remove it in `onClose`.
 :::
 
 ### Subscribing to Rooms
@@ -174,8 +179,8 @@ Use `ws.publish()` to broadcast messages to all subscribers of a room:
 
 ```typescript
 protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-  const room = ws.data?.room || 'general';
-  const username = ws.data?.username;
+  const room = ws.data?.values.room || 'general';
+  const username = ws.data?.values.username;
 
   try {
     const data = JSON.parse(message);
@@ -201,8 +206,8 @@ When a client disconnects or leaves a room, use `unsubscribe()`:
 
 ```typescript
 protected async onClose(ws: Socket<ChatData>): Promise<void> {
-  const room = ws.data?.room || 'general';
-  const username = ws.data?.username;
+  const room = ws.data?.values.room || 'general';
+  const username = ws.data?.values.username;
 
   // Notify room before leaving
   ws.publish(room, JSON.stringify({
@@ -215,23 +220,46 @@ protected async onClose(ws: Socket<ChatData>): Promise<void> {
 }
 ```
 
-### Accessing Room Members
+### Counting Room Members
 
-You can access all sockets in a room using the built-in `this.rooms` map:
+Bun's pub/sub topics are write-only - you can publish to a room but not enumerate it. To
+report a member count, track it yourself:
 
 ```typescript
-protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-  const room = ws.data?.room || 'general';
+@WebSocket({ path: '/ws/chat', name: 'ChatSocket' })
+export class ChatSocket extends AsenaWebSocketService<ChatData> {
+  private roomMembers = new Map<string, Set<string>>();
 
-  // Get all sockets in this room
-  const roomMembers = this.getSocketsByRoom(room);
+  protected async onOpen(ws: Socket<ChatData>): Promise<void> {
+    const room = ws.data?.values.room || 'general';
 
-  ws.send(JSON.stringify({
-    type: 'room_info',
-    totalUsers: roomMembers?.length || 0
-  }));
+    ws.subscribe(room);
+
+    if (!this.roomMembers.has(room)) this.roomMembers.set(room, new Set());
+    this.roomMembers.get(room).add(ws.id);
+  }
+
+  protected async onClose(ws: Socket<ChatData>): Promise<void> {
+    const room = ws.data?.values.room || 'general';
+
+    this.roomMembers.get(room)?.delete(ws.id);
+  }
+
+  protected async onMessage(ws: Socket<ChatData>, message: Buffer | string): Promise<void> {
+    const room = ws.data?.values.room || 'general';
+
+    ws.send(JSON.stringify({
+      type: 'room_info',
+      totalUsers: this.roomMembers.get(room)?.size ?? 0
+    }));
+  }
 }
 ```
+
+::: warning Single-pod only
+This registry lives in one process. In a multi-pod deployment each pod sees only its own
+sockets - use a shared store (Redis) if the count must be global.
+:::
 
 ## Broadcasting
 
@@ -246,10 +274,8 @@ export class NotificationSocket extends AsenaWebSocketService<void> {
 
   // Public method to broadcast notifications
   broadcastNotification(notification: any) {
-    const message = JSON.stringify(notification);
-
-    // Broadcast to all connected clients
-    this.in(message);
+    // Pass the object as-is - this.in()/this.to() serialize it for you
+    this.in(notification);
   }
 
   // You can also access all sockets via this.sockets (built-in)
@@ -268,19 +294,28 @@ Use `this.to(room, data)` to broadcast to a specific room from the service level
 export class ChatSocket extends AsenaWebSocketService<{ room: string }> {
   // Broadcast to a specific room
   notifyRoom(room: string, notification: any) {
-    this.to(room, JSON.stringify(notification));
+    this.to(room, notification);
   }
 
   // Example: Admin sends announcement to a room
   sendAnnouncement(room: string, message: string) {
-    this.to(room, JSON.stringify({
+    this.to(room, {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 }
 ```
+
+::: danger Do not pre-stringify for `this.to()` / `this.in()`
+These two serialize their payload internally. Passing a string that is already JSON gets
+encoded a second time, so the client receives `"{\"type\":\"announcement\"}"` - a quoted
+string, not an object.
+
+The socket-level methods behave the opposite way: `ws.send()` and `ws.publish()` pass the
+value through untouched, so those **do** take a string.
+:::
 
 ### Private Messages
 
@@ -492,7 +527,7 @@ interface NotificationData {
 @WebSocket({ path: '/ws/notifications', name: 'NotificationSocket' })
 export class NotificationSocket extends AsenaWebSocketService<NotificationData> {
   protected async onOpen(ws: Socket<NotificationData>): Promise<void> {
-    const userId = ws.data?.userId;
+    const userId = ws.data?.values.userId;
 
     // Subscribe to user's personal notification channel
     ws.subscribe(`user:${userId}`);
@@ -508,7 +543,7 @@ export class NotificationSocket extends AsenaWebSocketService<NotificationData> 
   }
 
   protected async onClose(ws: Socket<NotificationData>): Promise<void> {
-    const userId = ws.data?.userId;
+    const userId = ws.data?.values.userId;
 
     // Unsubscribe from channels - Asena handles cleanup
     ws.unsubscribe(`user:${userId}`);
@@ -573,7 +608,7 @@ You can also trigger notifications from HTTP endpoints:
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/admin')
 export class AdminController {
@@ -582,7 +617,7 @@ export class AdminController {
 
   @Post('/announcement')
   async sendAnnouncement(context: Context) {
-    const { message } = await context.getBody();
+    const { message } = await context.getBody<{ message: string }>();
 
     // Broadcast to all connected clients
     this.notificationSocket.to('announcements', JSON.stringify({
@@ -591,7 +626,7 @@ export class AdminController {
       timestamp: new Date().toISOString()
     }));
 
-    return context.json({ success: true });
+    return context.send({ success: true });
   }
 }
 ```
@@ -721,11 +756,11 @@ Asena automatically tracks sockets in rooms when you use `subscribe()` and `unsu
 ### 2. Use Broadcasting Methods
 
 ```typescript
-// ✅ Good: Use built-in broadcasting
-this.to('room-1', 'Message to room');  // Broadcast to specific room
-this.in('Message to all');             // Broadcast to all clients
+// ✅ Good: Use built-in broadcasting - pass objects, they are serialized for you
+this.to('room-1', { text: 'Message to room' });  // Broadcast to specific room
+this.in({ text: 'Message to all' });             // Broadcast to all clients
 
-// ✅ Good: Use publish from socket level
+// ✅ Good: Use publish from socket level - this one takes the raw payload
 ws.publish('room-1', 'Message from user');
 
 // ❌ Bad: Manual iteration over sockets
@@ -785,8 +820,10 @@ export class UserService {
 
 ```typescript
 // ✅ No circular dependency with Ulak
-import { Service, Inject, ulak } from '@asenajs/asena';
-import type { Ulak } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ulak } from '@asenajs/asena/messaging';
+import type { Ulak } from '@asenajs/asena/messaging';
 
 @Service('UserService')
 export class UserService {

@@ -14,9 +14,16 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.8.x)
+## ✅ Current Release (v0.9.x)
 
 These features are **stable and production-ready** in the current release:
+
+### New in v0.9
+
+- **[Decorator Inheritance](/docs/concepts/inheritance)** - A route, page, event or message handler declared on a base class is now inherited by the decorated subclass. What changes the behaviour of a request travels with the route; what says where the route lives, or what a class is, stays with the concrete class
+- **`onNotFound`** - An unmatched route is a routing outcome, not an error, so it has [its own config hook](/docs/guides/error-handling#not-found) and `onError` never has to ask which it is looking at
+- **[Uniform error handling](/docs/guides/error-handling#adapter-logging)** - Both adapters answer the same 404, 500 and validation envelopes, and the framework's default log fires exactly when its default response does
+- **`isHttpException()`** - Branded exception detection that survives a project resolving two copies of a package, where `instanceof` silently answers false and turns every deliberate 401/403 into a 500
 
 ### Core Framework
 
@@ -26,7 +33,7 @@ These features are **stable and production-ready** in the current release:
 - **Service Layer** - Service components with lifecycle management
 - **Middleware System** - Global, pattern-based, controller, and route-level middleware
 - **Context API** - Unified request context abstraction across adapters
-- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Validation`
+- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Middleware({ validator: true })`
 - **[Static File Serving](/docs/concepts/static-files)** - `@StaticServe` with lifecycle hooks
 - **WebSocket Support** - Decorator-based WebSocket with namespace, room management, and [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket)
 - **[Ulak](/docs/concepts/ulak)** - Central message hub that breaks circular dependencies between services, WebSocket namespaces, and microservice transports
@@ -63,14 +70,14 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.8.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.9.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
 
 - **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
-- **Project Bundling** - `asena build` command bundles your project based on [`asena.config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
+- **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 
 ## 📋 Planned for v1.0
 
@@ -142,8 +149,8 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.7.x  | Previous | Possible | Yes (with caution) |
-| v0.8.x  | Current | Possible | Yes (with caution) |
+| v0.8.x  | Previous | Possible | Yes (with caution) |
+| v0.9.x  | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -184,6 +191,7 @@ We welcome contributions in many forms:
 - **v0.7.0** - Released April 2026 (OpenAPI, Redis, OTel, FrontendController, Schedule, PostProcessor, Streaming)
 - **v0.7.1** - Released April 2026 (`routePattern` on Context, FrontendController registration refinements)
 - **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
+- **v0.9.0** - Released July 2026 (Decorator inheritance, `onNotFound` hook, uniform error and 404 handling across adapters, branded `HttpException`)
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress

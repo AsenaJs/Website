@@ -16,7 +16,10 @@ bun add @asenajs/asena-logger
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
+- TypeScript v5.8.3 or higher
+
+The package has no peer dependency on `@asenajs/asena` - it only implements the
+`ServerLogger` shape, so it works with any version.
 
 ## Quick Start
 
@@ -24,7 +27,7 @@ bun add @asenajs/asena-logger
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 // Create logger
@@ -47,14 +50,14 @@ await server.start();
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createHonoAdapter } from '@asenajs/hono-adapter/factory';
+import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 // Create logger
 export const logger = new AsenaLogger();
 
-// Create adapter
-const adapter = createHonoAdapter();
+// Create adapter - returns a tuple, and the logger is required
+const [adapter] = createHonoAdapter({ logger });
 
 // Create and start server
 const server = await AsenaServerFactory.create({
@@ -77,6 +80,17 @@ The most common pattern in Asena is to export the logger and use it directly:
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 export const logger = new AsenaLogger();
+```
+
+The constructor also takes an optional Winston logger and an options object, which is the
+simplest way to change the level or add transports without building a Winston logger
+yourself:
+
+```typescript
+export const logger = new AsenaLogger(undefined, {
+  level: 'debug',
+  transports: [/* extra Winston transports */],
+});
 ```
 
 ```typescript
@@ -116,8 +130,9 @@ You can also inject the logger using the IoC container:
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
-import { Inject, ICoreServiceNames } from '@asenajs/asena/decorators/ioc';
-import type { ServerLogger } from '@asenajs/asena/adapter';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
+import type { ServerLogger } from '@asenajs/asena/logger';
 
 @Service()
 export class UserService {
@@ -211,13 +226,20 @@ logger.profile('expensive-operation'); // Logs: "expensive-operation 1234ms"
 
 AsenaLogger supports the following log levels (in order of priority):
 
-| Level     | Priority | Description                     | Color  |
-|:----------|:---------|:--------------------------------|:-------|
-| `error`   | 0        | Error conditions                | Red    |
-| `warn`    | 1        | Warning conditions              | Yellow |
-| `info`    | 2        | Informational messages          | Green  |
-| `verbose` | 3        | Detailed informational messages | Cyan   |
-| `debug`   | 4        | Debug-level messages            | Blue   |
+AsenaLogger uses Winston's default `npm` levels:
+
+| Level     | Priority | Description                     | Color      |
+|:----------|:---------|:--------------------------------|:-----------|
+| `error`   | 0        | Error conditions                | Red        |
+| `warn`    | 1        | Warning conditions              | Yellow     |
+| `info`    | 2        | Informational messages          | Green      |
+| `http`    | 3        | HTTP-level messages             | uncoloured |
+| `verbose` | 4        | Detailed informational messages | uncoloured |
+| `debug`   | 5        | Debug-level messages            | Blue       |
+| `silly`   | 6        | Everything                      | uncoloured |
+
+Only `error`, `warn`, `info` and `debug` have a colour mapping; other levels print
+uppercased and uncoloured.
 
 ## Output Format
 
@@ -247,8 +269,8 @@ import { logger } from '../logger';
 export class RequestLoggerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const start = Date.now();
-    const method = context.getRequest().method;
-    const url = context.getRequest().url;
+    const method = context.req.method;
+    const url = context.req.url;
 
     logger.info('Request started', { method, url });
 
@@ -273,8 +295,8 @@ export class ServerConfig extends ConfigService {
     logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.getRequest().url,
-      method: context.getRequest().method
+      url: context.req.url,
+      method: context.req.method
     });
 
     return context.send({ error: 'Internal server error' }, 500);
@@ -293,6 +315,11 @@ import { logger } from '../logger';
 export class ReportService {
   @Inject(AnalyticsRepository)
   private analyticsRepo: AnalyticsRepository;
+
+  private async processData(data: unknown) {
+    // your own aggregation logic
+    return data;
+  }
 
   async generateReport(userId: string) {
     logger.profile('generate-report');
