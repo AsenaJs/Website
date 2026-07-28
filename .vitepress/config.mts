@@ -78,6 +78,7 @@ export default defineConfig({
                     {text: "Scheduled Tasks", link: "/docs/concepts/scheduled-tasks"},
                     {text: "Frontend Controller", link: "/docs/concepts/frontend-controller"},
                     {text: "PostProcessor", link: "/docs/concepts/post-processor"},
+                    {text: "Inheritance", link: "/docs/concepts/inheritance"},
                 ],
             },
             {

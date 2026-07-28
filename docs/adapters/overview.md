@@ -89,7 +89,7 @@ Benchmark conditions: 12 threads, 400 connections, 120s duration, Hello World en
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
 const adapter = createErgenecoreAdapter();
@@ -106,73 +106,73 @@ await server.start();
 ### Hono Setup
 
 ```typescript
-import { AsenaServer } from '@asenajs/asena';
+import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
-import { DefaultLogger } from '@asenajs/asena/logger';
+import { AsenaLogger } from '@asenajs/asena-logger';
 
-const [adapter, logger] = createHonoAdapter(new DefaultLogger());
+// createHonoAdapter returns a tuple; createErgenecoreAdapter returns the adapter alone
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
-await new AsenaServer(adapter)
-  .logger(logger)
-  .port(3000)
-  .start(true);
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000
+});
+
+await server.start();
 ```
 
-## Context API Differences
+## Context API
 
-Both adapters provide a similar Context API, but with some differences:
+Both adapters implement the same `AsenaContext` interface, so handler code is identical -
+only the import path differs.
 
-### Ergenecore Context
+::: code-group
 
-```typescript
-import type { Context } from '@asenajs/ergenecore/types';
+```typescript [Ergenecore]
+import type { Context } from '@asenajs/ergenecore';
 
-// Get parameters
+// Get parameters - getParam is sync, getQuery/getBody are async
 const id = context.getParam('id');
-const page = context.getQuery('page');
-const body = await context.getBody();
+const page = await context.getQuery('page');
+const body = await context.getBody<{ name: string }>();
 
 // Send response
-return context.send({ data }, 200);
+return context.send({ id, page, body }, 200);
 ```
 
-### Hono Context
-
-```typescript
+```typescript [Hono]
 import type { Context } from '@asenajs/hono-adapter';
 
-// Get parameters
+// Get parameters - getParam is sync, getQuery/getBody are async
 const id = context.getParam('id');
-const page = context.getQuery('page');
-const body = await context.getBody();
+const page = await context.getQuery('page');
+const body = await context.getBody<{ name: string }>();
 
 // Send response
-return context.json({ data }, 200);
+return context.send({ id, page, body }, 200);
 ```
+
+:::
+
+The differences are in what `context.req` gives you: a native `Request` on Ergenecore,
+a `HonoRequest` on Hono. See [Context API](/docs/concepts/context) for the full surface.
 
 ## Migration Between Adapters
 
-::: warning
-Migrating between adapters requires updating your Import and maybe some context calls, but your controllers, services, and business logic remain unchanged.
+::: tip
+Migrating between adapters means changing the adapter factory and the `Context` import
+path. Controllers, services and business logic stay unchanged.
 :::
 
 ### From Hono to Ergenecore
 
 ```typescript
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/hono-adapter';
-
-// Before (Hono)
-@Get('/:id')
-async getUser(context: Context) {
-  const id = context.getParam('id');
-  return context.json({ id });
-}
-
-// After (Ergenecore)
-import { Get } from '@asenajs/asena/decorators/http';
+// Before: import type { Context } from '@asenajs/hono-adapter';
 import type { Context } from '@asenajs/ergenecore';
 
+// The handler body itself does not change
 @Get('/:id')
 async getUser(context: Context) {
   const id = context.getParam('id');
@@ -180,12 +180,22 @@ async getUser(context: Context) {
 }
 ```
 
+The bootstrap file changes too, because the factories differ:
+
+```typescript
+// Before (Hono) - returns a tuple
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
+
+// After (Ergenecore) - returns the adapter alone
+const adapter = createErgenecoreAdapter();
+```
+
 ## Advanced Adapter Configuration
 
 ### Ergenecore Advanced Setup
 
 ```typescript
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 
 const adapter = createErgenecoreAdapter({
   hostname: '0.0.0.0',
@@ -201,8 +211,10 @@ const adapter = createErgenecoreAdapter({
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-const [adapter, asenaLogger] = createHonoAdapter(logger, {
-  // Hono-specific options
+// Single argument: either a bare logger, or an options object containing one
+const [adapter, asenaLogger] = createHonoAdapter({
+  logger,
+  strict: false, // match '/health' and '/health/' alike - useful behind a reverse proxy
 });
 ```
 

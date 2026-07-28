@@ -91,18 +91,29 @@ When using interactive mode without CLI arguments:
 ```
 my-asena-app/
 ├── src/
-│   ├── controllers/    # Route controllers
-│   ├── services/       # Business logic
-│   ├── middlewares/    # Middleware files
-│   ├── config/         # Server configuration classes
-│   ├── namespaces/     # WebSocket namespaces
-│   └── index.ts        # Application entry point
-├── tests/              # Test files
-├── public/             # Static assets
-├── asena.config.ts     # Configuration
+│   ├── controllers/
+│   │   └── AsenaController.ts   # Sample controller
+│   ├── logger/
+│   │   └── logger.ts            # Only when the logger option is enabled
+│   └── index.ts                 # Application entry point
+├── .asena/
+│   ├── config.json              # Adapter + suffix settings used by `asena generate`
+│   └── config.schema.json
+├── asena-config.ts              # Build configuration
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+├── .gitignore
+├── eslint.config.cjs            # Only when ESLint is enabled
+├── .prettierrc.js               # Only when Prettier is enabled
+└── .prettierignore              # Only when Prettier is enabled
 ```
+
+::: info Directories are created on demand
+`asena create` does not pre-create `services/`, `middlewares/`, `config/`, `namespaces/`,
+`tests/` or `public/`. `asena generate` creates the folder it needs the first time you use
+it. Folder layout is a convention only - the component scanner walks the whole
+`sourceFolder` tree and finds components wherever they live.
+:::
 
 ## asena generate
 
@@ -126,6 +137,7 @@ Quickly and consistently create project components with proper structure and imp
 | Controller | `asena generate controller` | `asena g c`   | Generates a controller      |
 | Service    | `asena generate service`    | `asena g s`   | Generates a service         |
 | Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
+| Validator  | `asena generate validator`  | `asena g v`   | Generates a Zod validator   |
 | Config     | `asena generate config`     | `asena g config` | Generates a server config |
 | WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
 
@@ -149,16 +161,18 @@ asena generate controller
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
-@Controller('/user')
+@Controller()
 export class UserController {
-  @Get({ path: '/' })
-  async index(context: Context) {
-    return context.send({ message: 'Hello from UserController!' });
-  }
+
 }
 ```
+
+::: tip The body is intentionally empty
+The generator scaffolds the class and its imports only - add the path and your routes
+yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler.
+:::
 
 #### Generate Service
 
@@ -180,10 +194,7 @@ import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class UserService {
-  async getUsers() {
-    // Add your business logic here
-    return [];
-  }
+
 }
 ```
 
@@ -208,12 +219,19 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>) {
-    // Add your middleware logic here
+
+  public async handle(context: Context, next: () => Promise<void>) {
+    context.setValue('testValue', 'test');
     await next();
   }
+
 }
 ```
+
+::: warning Replace the placeholder body
+The scaffolded `handle()` is a smoke-test stub. Real middleware should be `async`, take
+`next: () => Promise<void>`, and `await next()`.
+:::
 
 #### Generate Config
 
@@ -236,10 +254,13 @@ import { ConfigService, type Context } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  onError(error: Error, context: Context): Response {
-    console.error('Error:', error);
-    return context.send({ error: 'Internal server error' }, 500);
+
+  public onError(error: Error, context: Context): Response | Promise<Response> {
+    console.error('Error:', error.message);
+
+    return context.send({ error: error.message }, 500);
   }
+
 }
 ```
 
@@ -259,27 +280,34 @@ asena generate websocket
 **Generated:** `src/namespaces/ChatNamespace.ts`
 
 ```typescript
-import { Websocket } from '@asenajs/asena/decorators';
-import { WebsocketService, type Context } from '@asenajs/ergenecore';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
-@Websocket({ namespace: '/chat' })
-export class ChatNamespace extends WebsocketService {
-  onConnect(context: Context): void {
-    console.log('Client connected to /chat');
+@WebSocket({ path: '/chat', name: 'ChatNamespace' })
+export class ChatNamespace extends AsenaWebSocketService {
+
+  protected async onOpen(ws: Socket): Promise<void> {
+    console.log('Client connected');
   }
 
-  onMessage(context: Context, message: any): void {
+  protected async onMessage(ws: Socket, message: string): Promise<void> {
     console.log('Message received:', message);
   }
 
-  onDisconnect(context: Context): void {
-    console.log('Client disconnected from /chat');
+  protected async onClose(ws: Socket): Promise<void> {
+    console.log('Client disconnected');
   }
+
 }
 ```
 
+::: info Adapter-agnostic
+WebSocket namespaces are generated the same way for both adapters - the base class and
+`Socket` type come from `@asenajs/asena/web-socket`, not from the adapter package.
+:::
+
 ::: tip Adapter-Specific Generation
-The CLI automatically detects your adapter (Ergenecore or Hono) from `asena.config.ts` and generates appropriate imports and base classes.
+The CLI automatically detects your adapter (Ergenecore or Hono) from `asena-config.ts` and generates appropriate imports and base classes.
 :::
 
 ## asena dev start
@@ -290,7 +318,7 @@ Start the application in development mode with automatic building.
 
 - **Automatic Build** - Builds the project before starting
 - **Component Registration** - Automatically registers all controllers, services, and middlewares
-- **Hot Reload** - Restarts server on file changes (when used with `--watch`)
+- **Single Build + Run** - Builds once, then runs the bundle. `asena dev start` takes no options and does **not** watch for changes; use the scaffolded `bun run dev:hot` (`bun run --hot src/index.ts`) while iterating.
 
 ### Usage
 
@@ -318,7 +346,7 @@ Build completed successfully.
 ```
 
 ::: info Controller Names in Output
-Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena.config.ts`.
+Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
 
 ## asena build
@@ -327,7 +355,7 @@ Build the project for production deployment.
 
 ### Features
 
-- **Configuration Processing** - Reads and processes `asena.config.ts`
+- **Configuration Processing** - Reads and processes `asena-config.ts`
 - **Code Generation** - Creates a temporary build file combining all components
 - **Import Management** - Automatically organizes imports based on project structure
 - **Server Integration** - Integrates all components with AsenaServer
@@ -341,17 +369,17 @@ asena build
 
 ### Build Process
 
-1. Reads `asena.config.ts`
+1. Reads `asena-config.ts`
 2. Scans source folder for controllers, services, middlewares, configs, and websockets
 3. Generates a temporary build file with all imports
 4. Bundles the application using Bun's bundler
-5. Outputs compiled files to `buildOptions.outdir` (default: `dist/`)
+5. Outputs compiled files to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
 
 ### Build Output
 
 ```
 Build completed successfully.
-Output: dist/index.js
+Output: dist/index.asena.js
 ```
 
 ::: tip Production Deployment
@@ -367,7 +395,7 @@ Initialize an existing project with Asena configuration.
 
 ### Features
 
-- **Configuration Generation** - Creates `asena.config.ts`
+- **Configuration Generation** - Creates `asena-config.ts`
 - **Default Values** - Provides sensible defaults for quick start
 - **No Need if Using `create`** - Not required if you used `asena create`
 
@@ -379,7 +407,7 @@ asena init
 
 ### Generated Configuration
 
-Creates `asena.config.ts`:
+Creates `asena-config.ts`:
 
 ```typescript
 import { defineConfig } from '@asenajs/asena-cli';
@@ -387,18 +415,23 @@ import { defineConfig } from '@asenajs/asena-cli';
 export default defineConfig({
   sourceFolder: 'src',
   rootFile: 'src/index.ts',
+  // include: ['public'], // Directories/files to copy into outdir during build
   buildOptions: {
     outdir: 'dist',
-    sourcemap: 'linked',
-    target: 'bun',
     minify: {
       whitespace: true,
       syntax: true,
-      identifiers: false,
+      identifiers: false, //It's better for you to make this false for better debugging during the running phase of the application.
+      keepNames: true
     },
   },
 });
 ```
+
+::: tip Why `identifiers: false` and `keepNames: true`
+Component registration is name-based. Minifying identifiers would rename your classes and
+break `@Inject('UserService')` lookups at runtime.
+:::
 
 ::: info When to Use `asena init`
 Use `asena init` when:
@@ -423,7 +456,7 @@ Use `asena init` when:
 | `asena dev start`    | -               | Start development server             |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
-| `asena --version`    | `asena -v`      | Show CLI version                     |
+| `asena --version`    | `asena -V`      | Show CLI version                     |
 | `asena --help`       | `asena -h`      | Show help                            |
 
 ## Related Documentation

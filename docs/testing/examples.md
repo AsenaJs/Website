@@ -40,14 +40,14 @@ class UserController {
   async getUser(context: Context) {
     const id = context.getParam('id');
     const user = await this.userService.getUser(id);
-    return context.json(user);
+    return context.send(user);
   }
 
   @Post('/')
   async createUser(context: Context) {
-    const { name, email } = await context.getBody();
+    const { name, email } = await context.getBody<{ name: string; email: string }>();
     const user = await this.userService.createUser(name, email);
-    return context.json(user, 201);
+    return context.send(user, 201);
   }
 }
 
@@ -58,10 +58,10 @@ describe('UserController', () => {
     const mockUser = { id: 'user-123', name: 'John Doe' };
     mocks.userService.getUser.mockResolvedValue(mockUser);
 
-    // Mock context
+    // Mock context - stub the methods the handler actually calls
     const mockContext = {
       getParam: mock(() => 'user-123'),
-      json: mock((data) => data)
+      send: mock((data) => data)
     } as unknown as Context;
 
     const result = await instance.getUser(mockContext);
@@ -78,10 +78,14 @@ describe('UserController', () => {
 
     const mockContext = {
       getBody: mock(async () => ({ name: 'John', email: 'john@example.com' })),
-      json: mock((data, status) => ({ data, status }))
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const result = await instance.createUser(mockContext);
+    // send() is typed as returning a Response, so unwrap the stub's shape
+    const result = (await instance.createUser(mockContext)) as unknown as {
+      data: unknown;
+      status: number;
+    };
 
     expect(result.data).toEqual(mockUser);
     expect(result.status).toBe(201);
@@ -369,17 +373,17 @@ class AuthMiddleware extends MiddlewareService {
   @Inject(AuthService)
   private authService!: AuthService;
 
-  async handle(context: Context, next: Function) {
-    const token = context.getHeader('authorization');
+  async handle(context: Context, next: () => Promise<void>) {
+    const token = context.headers['authorization'];
 
     if (!token) {
-      return context.json({ error: 'Unauthorized' }, 401);
+      return context.send({ error: 'Unauthorized' }, 401);
     }
 
     const user = await this.authService.validateToken(token);
 
     if (!user) {
-      return context.json({ error: 'Invalid token' }, 401);
+      return context.send({ error: 'Invalid token' }, 401);
     }
 
     context.setValue('user', user);
@@ -392,16 +396,15 @@ describe('AuthMiddleware', () => {
     const { instance, mocks } = mockComponent(AuthMiddleware);
 
     const mockContext = {
-      getHeader: mock(() => null),
-      json: mock((data, status) => ({ data, status }))
+      headers: {},
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const mockNext = mock(() => {});
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
-    expect(result.data).toEqual({ error: 'Unauthorized' });
-    expect(result.status).toBe(401);
+    expect(mockContext.send).toHaveBeenCalledWith({ error: 'Unauthorized' }, 401);
     expect(mockNext).not.toHaveBeenCalled();
   });
 
@@ -411,16 +414,15 @@ describe('AuthMiddleware', () => {
     mocks.authService.validateToken.mockResolvedValue(null);
 
     const mockContext = {
-      getHeader: mock(() => 'Bearer invalid-token'),
-      json: mock((data, status) => ({ data, status }))
+      headers: { authorization: 'Bearer invalid-token' },
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const mockNext = mock(() => {});
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
-    expect(result.data).toEqual({ error: 'Invalid token' });
-    expect(result.status).toBe(401);
+    expect(mockContext.send).toHaveBeenCalledWith({ error: 'Invalid token' }, 401);
     expect(mockNext).not.toHaveBeenCalled();
   });
 
@@ -431,17 +433,16 @@ describe('AuthMiddleware', () => {
     mocks.authService.validateToken.mockResolvedValue(mockUser);
 
     const mockContext = {
-      getHeader: mock(() => 'Bearer valid-token'),
+      headers: { authorization: 'Bearer valid-token' },
       setValue: mock(() => {})
     } as unknown as Context;
 
-    const mockNext = mock(() => 'next-response');
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
     expect(mockContext.setValue).toHaveBeenCalledWith('user', mockUser);
     expect(mockNext).toHaveBeenCalled();
-    expect(result).toBe('next-response');
   });
 });
 ```

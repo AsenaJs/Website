@@ -25,7 +25,8 @@ Asena's Event System provides a decoupled, event-driven architecture for your ap
 ### 1. Create an Event Service
 
 ```typescript
-import { EventService, On } from '@asenajs/asena/decorators';
+import { EventService } from '@asenajs/asena/decorators';
+import { On } from '@asenajs/asena/event';
 
 @EventService({ prefix: 'user' })
 export class UserEventService {
@@ -50,8 +51,10 @@ export class UserEventService {
 ### 2. Emit Events from Your Services
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/decorators';
-import type { EventEmitter } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { emitter } from '@asenajs/asena/event';
+import type { EventEmitter } from '@asenajs/asena/event';
 
 @Service()
 export class UserService {
@@ -144,9 +147,15 @@ Use wildcards to match multiple events with a single handler:
 | Pattern | Matches | Examples |
 |---------|---------|----------|
 | `*` | All events | Any event |
-| `user.*` | All user events | `user.created`, `user.updated`, `user.deleted` |
-| `*.error` | All error events | `user.error`, `db.error`, `auth.error` |
+| `user.*` | All user events, at **any** depth | `user.created`, `user.profile.updated` |
+| `*.error` | All error events, at any depth | `user.error`, `db.pool.error` |
 | `user.*.created` | Nested patterns | `user.admin.created`, `user.guest.created` |
+
+::: warning `*` matches one **or more** segments
+A wildcard is not limited to a single segment: `user.*` also matches
+`user.profile.updated`. It never matches **zero** segments though, so `download.*` does
+not match the bare event `download`.
+:::
 
 ```typescript
 @EventService()
@@ -253,9 +262,17 @@ class PaymentEventService { }
 Marks a method as an event handler.
 
 **Parameters:**
-- `params`: Event pattern or configuration object
+- `params`: Event pattern (string shorthand) or configuration object
   - `event: string` - Event pattern to match
+  - `prefix?: boolean` - Whether the `@EventService` prefix is prepended (default `true`;
+    set `false` for an absolute pattern)
   - `skip?: boolean` - Skip this handler (useful for debugging)
+
+::: danger One `@On` per method
+Handler metadata is keyed by **method name**, so stacking several `@On` decorators on one
+method silently keeps only the last one applied (the topmost decorator). To handle several
+patterns, write several methods - or use a wildcard.
+:::
 
 **Method Signature:**
 ```typescript
@@ -325,8 +342,10 @@ export class UserEventService {
 Utility function for injecting EventEmitter.
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/decorators';
-import type { EventEmitter } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { emitter } from '@asenajs/asena/event';
+import type { EventEmitter } from '@asenajs/asena/event';
 
 @Service()
 class UserService {
@@ -413,16 +432,23 @@ Group related events using prefixes:
 ```typescript
 @EventService({ prefix: 'user' })
 class UserEventService {
-  @On('created')       // Handles 'user.created'
-  @On('updated')       // Handles 'user.updated'
-  @On('deleted')       // Handles 'user.deleted'
+  @On('created')
+  onCreated(event: string, data: any) {}   // Handles 'user.created'
+
+  @On('updated')
+  onUpdated(event: string, data: any) {}   // Handles 'user.updated'
+
+  @On('deleted')
+  onDeleted(event: string, data: any) {}   // Handles 'user.deleted'
 }
 
 @EventService({ prefix: 'order' })
 class OrderEventService {
-  @On('placed')        // Handles 'order.placed'
-  @On('cancelled')     // Handles 'order.cancelled'
-  @On('completed')     // Handles 'order.completed'
+  @On('placed')
+  onPlaced(event: string, data: any) {}    // Handles 'order.placed'
+
+  @On('cancelled')
+  onCancelled(event: string, data: any) {} // Handles 'order.cancelled'
 }
 ```
 
@@ -794,10 +820,8 @@ export class NotificationService {
   @Inject('EmailService')
   private email!: EmailService;
 
-  // Send notifications for important events
+  // One @On per method - see the warning under "Handler Registration"
   @On('user.created')
-  @On('order.completed')
-  @On('payment.success')
   notifyUser(eventName: string, data: any) {
     // Real-time notification via WebSocket
     this.ws.sendToUser(data.userId, {
@@ -899,13 +923,16 @@ handleUserCreated(eventName: string, data: any) {
 Wildcard patterns are slower than exact matches:
 
 ```typescript
-// ✅ Good - Specific patterns
+// ✅ Good - Specific patterns, one per method
 @On('user.created')
+onCreated(event: string, data: any) {}
+
 @On('user.updated')
-@On('user.deleted')
+onUpdated(event: string, data: any) {}
 
 // ⚠️ Use with caution - Matches all user events
 @On('user.*')
+onAnyUserEvent(event: string, data: any) {}
 
 // ⚠️ Use with extreme caution - Matches ALL events
 @On('*')
@@ -1026,5 +1053,6 @@ this.emitter.emit('user.created', {
 ## Related
 
 - [Dependency Injection](/docs/concepts/dependency-injection.md) - Understanding DI in Asena
+- [Inheritance](/docs/concepts/inheritance.md) - Sharing `@On` handlers through a base class
 - [Services](/docs/concepts/services.md) - Creating services
 - [Ulak](/docs/concepts/ulak.md) - WebSocket messaging system

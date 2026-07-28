@@ -15,7 +15,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Project Scaffolding** - Create new projects with complete setup
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
-- **Development Mode** - Hot reload and automatic compilation
+- **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
 ## Key Features

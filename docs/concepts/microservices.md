@@ -27,10 +27,17 @@ Asena's microservice layer lets independent Asena services communicate through a
 
 ```typescript
 import { MessageController } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { MessagePattern, EventPattern, type MessageContext } from '@asenajs/asena/microservice';
 
 @MessageController('order') // prefix - applied to every handler below
 export class OrderHandler {
+  @Inject('OrderService')
+  private orderService: OrderService;
+
+  @Inject('SearchIndexService')
+  private searchIndex: SearchIndexService;
+
   // Request/Response (orchestration): return value is the reply
   @MessagePattern('create') // handles 'order.create'
   async create(data: CreateOrderDto, context: MessageContext) {
@@ -116,7 +123,8 @@ export class CheckoutService {
 
   async checkout(dto: CheckoutDto) {
     // RPC - awaits the remote handler's reply
-    const order = await this.orders.send('create', dto); // → 'order.create'
+    // `send<T>` defaults to `unknown` - name the reply type to use it
+    const order = await this.orders.send<{ id: string }>('create', dto); // → 'order.create'
 
     // Event - fire-and-forget
     await this.orders.emit('created', { id: order.id }); // → 'order.created'
@@ -353,3 +361,7 @@ Contract notes:
 | Use for | Domain events inside one app | Service-to-service communication |
 
 They are deliberately separate: hiding the local-vs-remote distinction creates false expectations about delivery guarantees.
+
+## Related
+
+- [Inheritance](/docs/concepts/inheritance) - Sharing `@MessagePattern` and `@EventPattern` handlers through a base class, and why an inherited `@EventPattern` opens a real subscription

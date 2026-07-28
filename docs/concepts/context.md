@@ -38,7 +38,7 @@ export class ApiController {
   @Get('/user/:id')
   async getUser(context: Context) {
     const id = context.getParam('id');
-    const format = context.getQuery('format');
+    const format = await context.getQuery('format');
 
     return context.send({
       userId: id,
@@ -68,7 +68,7 @@ export class ApiController {
   @Get('/user/:id')
   async getUser(context: Context) {
     const id = context.getParam('id');
-    const format = context.getQuery('format');
+    const format = await context.getQuery('format');
 
     return context.send({
       userId: id,
@@ -607,7 +607,7 @@ export class WsAuthMiddleware implements MiddlewareService {
 ### Get WebSocket Value - `getWebSocketValue()`
 
 ::: warning
-Socket data will automaticly injectining in `ws.data.value` by adapter. So you dont need to use this.
+Socket data will automaticly injectining in `ws.data.values` by adapter. So you dont need to use this.
 :::
 
 ## Streaming
@@ -1047,14 +1047,18 @@ return context.send({
 :::
 
 ::: warning Async Methods
-Most Context methods are async. Always use `await`:
+`getBody()`, `getQuery()`, `getQueryAll()`, `getFormData()`, `getParseBody()`,
+`getArrayBuffer()`, `getBlob()` and the cookie helpers return a `Promise`. Forgetting
+`await` does not raise a type error in every position - it silently yields the Promise
+object instead of the value:
 ```typescript
-// ❌ Wrong
-const query = context.getQuery('q');
+// ❌ Wrong - `page` is a Promise, so `|| '1'` never applies and Number() gives NaN
+const page = context.getQuery('page') || '1';
 
 // ✅ Correct
-const query = await context.getQuery('q');
+const page = (await context.getQuery('page')) || '1';
 ```
+`getParam()`, `getAllQueries()`, `getValue()`, `setValue()` and `send()` are synchronous.
 :::
 
 ## Related Documentation

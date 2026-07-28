@@ -169,7 +169,8 @@ import path from 'path';
 
 ## Lifecycle Hooks
 
-The `StaticServeService` base class provides three lifecycle hooks for customizing static file serving behavior:
+The `StaticServeService` base class provides three lifecycle hooks. **All three are
+optional** - override only the ones you need.
 
 ### `rewriteRequestPath(reqPath: string): string`
 
@@ -206,7 +207,9 @@ public rewriteRequestPath(reqPath: string): string {
 Called when a file is successfully found and served. Useful for logging, analytics, or custom headers.
 
 **Parameters:**
-- `filePath: string` - The absolute path to the file being served
+- `filePath: string` - The looked-up path. **Not absolute, and not the same across
+  adapters:** Ergenecore passes the rewritten *request* path (no root prefix), Hono passes
+  the root-joined path (e.g. `./public/index.html`).
 - `c: Context` - The request context
 
 **Example:**
@@ -215,13 +218,30 @@ Called when a file is successfully found and served. Useful for logging, analyti
 public onFound(filePath: string, c: Context): void {
   console.log(`✅ File served: ${filePath}`);
 
-  // Add custom headers
-  c.header('X-Served-By', 'Asena Static Serve');
-
   // Track analytics
   this.analytics.track('file_served', { path: filePath });
 }
 ```
+
+::: danger Setting response headers here does not work on Ergenecore
+`c.setResponseHeader()` writes into the context's response object, which Ergenecore only
+consults for `send()`/`html()`. Static responses are built directly from the file, so the
+header is dropped. (On Hono it does work, because the wrapper appends to the live response.)
+
+Use the service's `extra` property instead - it is honoured by both adapters:
+
+```typescript
+@StaticServe({ root: path.join(process.cwd(), 'public') })
+export class PublicStaticServe extends StaticServeService {
+  public extra = {
+    cacheControl: 'public, max-age=31536000, immutable',
+    headers: { 'X-Served-By': 'Asena Static Serve' },
+    precompressed: true,                 // prefer .br / .gz variants when present
+    mimes: { '.ts': 'text/typescript' }, // override MIME detection
+  };
+}
+```
+:::
 
 ---
 
@@ -237,18 +257,27 @@ Called when a requested file is not found. Useful for logging 404s or implementi
 
 ```typescript
 public onNotFound(reqPath: string, c: Context): void {
-  const pathname = new URL(c.req.url).pathname;
   console.log(`❌ File not found: ${reqPath}`);
-  console.log(`   Accessed from: ${pathname}`);
 
   // Log 404s
   this.logger.warn('Static file not found', { path: reqPath });
-
-  // Send custom 404 response (optional)
-  c.status(404);
-  c.json({ error: 'File not found' });
 }
 ```
+
+::: warning `onNotFound` is observational
+Its return value is discarded and the adapter still answers `404`. To take the request over,
+mark the hook with `@Override()` - Ergenecore then skips its own 404 and lets the request
+fall through to your route handlers:
+
+```typescript
+import { Override } from '@asenajs/asena/decorators';
+
+@Override()
+public onNotFound(reqPath: string, c: Context): void {
+  this.logger.warn('Static file not found', { path: reqPath });
+}
+```
+:::
 
 ---
 
@@ -350,7 +379,7 @@ export class SPAStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Cache static assets
     if (filePath.match(/\.(js|css|png|jpg|svg)$/)) {
-      c.header('Cache-Control', 'public, max-age=31536000');
+      c.setResponseHeader('Cache-Control', 'public, max-age=31536000');
     }
   }
 
@@ -384,7 +413,7 @@ export class SPAStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Cache static assets
     if (filePath.match(/\.(js|css|png|jpg|svg)$/)) {
-      c.header('Cache-Control', 'public, max-age=31536000');
+      c.setResponseHeader('Cache-Control', 'public, max-age=31536000');
     }
   }
 
@@ -446,7 +475,7 @@ export class DownloadStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Force download
     const fileName = path.basename(filePath);
-    c.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    c.setResponseHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   }
 }
 
@@ -459,7 +488,7 @@ export class ImageStaticServe extends StaticServeService {
 
   public onFound(filePath: string, c: Context): void {
     // Long cache for images
-    c.header('Cache-Control', 'public, max-age=2592000'); // 30 days
+    c.setResponseHeader('Cache-Control', 'public, max-age=2592000'); // 30 days
   }
 }
 ```
@@ -487,7 +516,7 @@ export class DownloadStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Force download
     const fileName = path.basename(filePath);
-    c.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    c.setResponseHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   }
 }
 
@@ -500,7 +529,7 @@ export class ImageStaticServe extends StaticServeService {
 
   public onFound(filePath: string, c: Context): void {
     // Long cache for images
-    c.header('Cache-Control', 'public, max-age=2592000'); // 30 days
+    c.setResponseHeader('Cache-Control', 'public, max-age=2592000'); // 30 days
   }
 }
 ```
@@ -583,17 +612,17 @@ public onFound(filePath: string, c: Context): void {
 
   // Long cache for immutable assets
   if (ext.match(/\.(js|css|woff2?|ttf|svg|png|jpg|gif)$/)) {
-    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    c.setResponseHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
 
   // Short cache for HTML
   else if (ext === '.html') {
-    c.header('Cache-Control', 'public, max-age=300');
+    c.setResponseHeader('Cache-Control', 'public, max-age=300');
   }
 
   // No cache for others
   else {
-    c.header('Cache-Control', 'no-cache');
+    c.setResponseHeader('Cache-Control', 'no-cache');
   }
 }
 ```
@@ -673,8 +702,8 @@ Serve user-uploaded files:
 export class UploadsStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Add security headers
-    c.header('X-Content-Type-Options', 'nosniff');
-    c.header('Content-Disposition', 'inline');
+    c.setResponseHeader('X-Content-Type-Options', 'nosniff');
+    c.setResponseHeader('Content-Disposition', 'inline');
   }
 }
 ```

@@ -19,20 +19,16 @@ Middleware is code that executes **before** your route handler. It can:
 - Rate limiting
 - Error handling
 
-::: info Adapter-Specific Response Handling
-The way you handle responses in middleware differs between adapters:
+::: info Responding from middleware
+Both adapters accept the same three ways to answer a request from middleware:
 
-**Ergenecore:** Supports both approaches:
+- **`return context.send(...)`** - returning a `Response` short-circuits the chain
+- **`return false`** - short-circuits with `403 Forbidden`
+- **`throw`** - an `HttpException` (Ergenecore) or `HTTPException` (Hono) is routed to
+  your `onError` handler
 
-- `context.send()` - Direct response (native feature)
-- `throw new HttpException()` - Throwing HTTP exceptions
-
-**Hono:** Only supports:
-
-- `throw new HTTPException()` - Throwing HTTP exceptions
-- `context.send()` does NOT work in middleware
-
-This guide shows both approaches using code-groups where applicable.
+The one thing that is *not* portable is **omitting `next()`**. See
+[Stopping Middleware Chain](#stopping-middleware-chain).
 :::
 
 ## Creating Middleware
@@ -76,12 +72,35 @@ import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    LoggerMiddleware,
-    CorsMiddleware
-  ];
+  public globalMiddlewares() {
+    return [
+      LoggerMiddleware,
+      CorsMiddleware
+    ];
+  }
 }
 ```
+
+::: warning Every entry must be a component
+The names above stand for **your** middlewares — each one a class carrying `@Middleware()`. The
+built-ins an adapter ships (`CorsMiddleware`, `RateLimiterMiddleware`) are undecorated base classes
+meant to be extended, so listing one directly fails at startup with
+`… is not a component. Decorate it with @Middleware()`. Subclass it first:
+
+```typescript
+@Middleware()
+export class GlobalCors extends CorsMiddleware {}
+```
+
+Component identity is not inherited, which is exactly why the subclass needs its own decorator —
+see [Inheritance](/docs/concepts/inheritance).
+:::
+
+::: warning It is a method, not a property
+Global middleware must be returned from a `globalMiddlewares()` **method**. A
+`middlewares = [...]` property compiles but is never read by the framework, so the
+middleware silently never runs.
+:::
 
 ### 2. Pattern-Based Middleware
 
@@ -90,22 +109,24 @@ Apply middleware to specific route patterns:
 ```typescript
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    // Apply to all routes
-    LoggerMiddleware,
+  public globalMiddlewares() {
+    return [
+      // Apply to all routes
+      LoggerMiddleware,
 
-    // Apply only to /api/* and /admin/* routes
-    {
-      middleware: AuthMiddleware,
-      routes: { include: ['/api/*', '/admin/*'] }
-    },
+      // Apply only to /api/* and /admin/* routes
+      {
+        middleware: AuthMiddleware,
+        routes: { include: ['/api/*', '/admin/*'] }
+      },
 
-    // Apply to all routes except /health and /metrics
-    {
-      middleware: RateLimiterMiddleware,
-      routes: { exclude: ['/health', '/metrics'] }
-    }
-  ];
+      // Apply to all routes except /health and /metrics
+      {
+        middleware: RateLimiterMiddleware,
+        routes: { exclude: ['/health', '/metrics'] }
+      }
+    ];
+  }
 }
 ```
 
@@ -364,8 +385,8 @@ export class AdvancedRateLimiter extends RateLimiterMiddleware {
 
       // Expensive operations cost more
       cost: (ctx) => {
-        if (ctx.getRequest().url.includes('/search')) return 5;
-        if (ctx.getRequest().url.includes('/export')) return 10;
+        if (ctx.req.url.includes('/search')) return 5;
+        if (ctx.req.url.includes('/export')) return 10;
         return 1;
       }
     });
@@ -427,7 +448,7 @@ export class AuthMiddleware extends MiddlewareService {
   private userService: UserService;
 
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       throw new HTTPException(401, { message: 'Unauthorized' });
@@ -453,9 +474,7 @@ export class AuthMiddleware extends MiddlewareService {
 Middleware executes in the order it's defined:
 
 ```text
-Global Middleware
-  ↓
-Pattern-Based Middleware
+globalMiddlewares()   ← array order, pattern-based entries included
   ↓
 Controller Middleware
   ↓
@@ -467,11 +486,16 @@ Route Middleware
   ↓
 Controller Middleware
   ↓
-Pattern-Based Middleware
-  ↓
-Global Middleware
+globalMiddlewares()
 
 ```
+
+::: info Pattern-based entries are not a separate stage
+An entry with a `routes` filter is just an item in the `globalMiddlewares()` array. It runs
+in **array position**, interleaved with unfiltered entries - putting a pattern-based entry
+first makes it run first. Controller-level middleware always follows the whole global list,
+because the config is applied before controllers are registered.
+:::
 
 **Example:**
 
@@ -479,10 +503,12 @@ Global Middleware
 // 1. Global
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    LoggerMiddleware, // Executes 1st
-    { middleware: AuthMiddleware, routes: { include: ['/api/*'] } } // Executes 2nd
-  ];
+  public globalMiddlewares() {
+    return [
+      LoggerMiddleware, // Executes 1st
+      { middleware: AuthMiddleware, routes: { include: ['/api/*'] } } // Executes 2nd
+    ];
+  }
 }
 
 // 2. Controller-level
@@ -498,7 +524,38 @@ export class UserController {
 
 ## Stopping Middleware Chain
 
-Don't call `next()` to stop the middleware chain:
+Return a `Response` (or `false`, or throw) to stop the chain:
+
+::: danger Omitting `next()` is not portable
+Under **Hono**, a middleware that returns without calling `next()` ends the chain. Under
+**Ergenecore** it does not: when a middleware returns `void` or `true` without calling
+`next()`, the adapter continues to the next middleware on your behalf.
+
+Always signal explicitly - `return context.send(...)`, `return false`, or `throw` - so the
+same middleware behaves identically on both adapters.
+:::
+
+### Shorthand: `return false`
+
+Returning `false` short-circuits the chain with a plain `403 Forbidden` on both adapters -
+useful when no response body is needed:
+
+```typescript
+@Middleware()
+export class IpAllowlistMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    if (!this.isAllowed(context.getRequestIp())) {
+      return false; // -> 403 Forbidden, handler never runs
+    }
+
+    await next();
+  }
+
+  private isAllowed(ip: string | null) {
+    return ip !== null;
+  }
+}
+```
 
 ::: code-group
 
@@ -512,7 +569,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Don't call next() - stop here
+      // Returning a Response stops the chain
       return context.send({
         error: 'Service under maintenance'
       }, 503);
@@ -534,7 +591,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Don't call next() - stop here
+      // Returning a Response also works here; throwing routes through onError instead
       throw new HTTPException(503, {
         message: 'Service under maintenance'
       });
@@ -579,16 +636,14 @@ next(); // Missing await!
 
 ```typescript
 // ✅ Good: Logger first, then auth
-middlewares = [
-  LoggerMiddleware,
-  AuthMiddleware
-];
+public globalMiddlewares() {
+  return [LoggerMiddleware, AuthMiddleware];
+}
 
 // ❌ Bad: Auth before logger (auth logs won't be captured)
-middlewares = [
-  AuthMiddleware,
-  LoggerMiddleware
-];
+public globalMiddlewares() {
+  return [AuthMiddleware, LoggerMiddleware];
+}
 ```
 
 ## Related Documentation

@@ -243,7 +243,8 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-const adapter = createHonoAdapter();
+// createHonoAdapter returns a tuple and requires a logger
+const [adapter] = createHonoAdapter({ logger });
 
 const server = await AsenaServerFactory.create({
   adapter,
@@ -305,7 +306,7 @@ export class HelloController {
 asena init
 ```
 
-This creates `asena.config.ts` with default build settings.
+This creates `asena-config.ts` with default build settings.
 
 ### 8. Run Your Application
 
@@ -356,7 +357,7 @@ my-app/
 │   │   └── HelloController.ts
 │   ├── index.ts
 │   └── logger.ts
-├── asena.config.ts
+├── asena-config.ts
 ├── package.json
 └── tsconfig.json
 ```
@@ -459,7 +460,7 @@ my-api/
 │   ├── database.ts
 │   ├── logger.ts
 │   └── index.ts
-├── asena.config.ts
+├── asena-config.ts
 ├── package.json
 └── tsconfig.json
 ```
@@ -468,7 +469,7 @@ my-api/
 
 ```typescript
 // src/database.ts
-import { Database } from '@asenajs/asena-drizzle';
+import { AsenaDatabaseService, Database } from '@asenajs/asena-drizzle';
 import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -488,7 +489,7 @@ export const users = pgTable('users', {
     password: process.env.DB_PASSWORD || 'postgres'
   }
 })
-export class MainDB {}
+export class MainDB extends AsenaDatabaseService {}
 ```
 
 ### Repository
@@ -533,11 +534,11 @@ Without the database type parameter, TypeScript cannot infer the correct query b
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { users } from './schema';
 
-@Repository(users)
+@Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
   // Type-safe methods with IntelliSense
   async findByEmail(email: string) {
-    return this.query().where(eq(users.email, email)).limit(1);
+    return this.findOne(eq(users.email, email));
   }
 }
 ```
@@ -762,7 +763,7 @@ A real-time chat application with room management and broadcasting.
 
 ```typescript
 // src/websockets/ChatSocket.ts
-import { WebSocket } from '@asenajs/asena/web-socket';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService } from '@asenajs/asena/web-socket';
 import type { Socket } from '@asenajs/asena/web-socket';
 
@@ -775,8 +776,8 @@ interface ChatData {
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
 
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // Send message to socket
     ws.send(`Hello ${username}`)
@@ -789,16 +790,16 @@ export class ChatSocket extends AsenaWebSocketService<ChatData> {
   }
 
   protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // send message to other sockets in room. (except itself)
     ws.publish(room, message);
   }
 
   protected async onClose(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // leave room
     ws.unsubscribe(room);
@@ -851,7 +852,7 @@ export class AuthMiddleware extends MiddlewareService {
   private authService: AuthService;
 
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       return context.send({ error: 'No token provided' }, 401);
@@ -874,7 +875,7 @@ export class AuthMiddleware extends MiddlewareService {
 // src/controllers/ProfileController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
 @Controller({ path: '/profile', middlewares: [AuthMiddleware] })
@@ -900,7 +901,7 @@ export class ProfileController {
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { AuthService } from '../services/AuthService';
 
 @Controller('/auth')
@@ -963,7 +964,7 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       keyGenerator: (ctx) => {
         // Rate limit per user or IP
         const user = ctx.getValue('user');
-        return user?.id || ctx.getRequest().headers.get('x-forwarded-for') || 'anonymous';
+        return user?.id || ctx.req.headers.get('x-forwarded-for') || 'anonymous';
       },
       skip: (ctx) => {
         // Skip for admins
@@ -972,8 +973,8 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       },
       cost: (ctx) => {
         // Expensive operations cost more tokens
-        if (ctx.getRequest().url.includes('/search')) return 5;
-        if (ctx.getRequest().url.includes('/export')) return 10;
+        if (ctx.req.url.includes('/search')) return 5;
+        if (ctx.req.url.includes('/export')) return 10;
         return 1;
       }
     });
@@ -1021,7 +1022,9 @@ import { GlobalCors } from '../middlewares/GlobalCors';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 ```
 
@@ -1465,9 +1468,16 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.8.x)
+## ✅ Current Release (v0.9.x)
 
 These features are **stable and production-ready** in the current release:
+
+### New in v0.9
+
+- **[Decorator Inheritance](/docs/concepts/inheritance)** - A route, page, event or message handler declared on a base class is now inherited by the decorated subclass. What changes the behaviour of a request travels with the route; what says where the route lives, or what a class is, stays with the concrete class
+- **`onNotFound`** - An unmatched route is a routing outcome, not an error, so it has [its own config hook](/docs/guides/error-handling#not-found) and `onError` never has to ask which it is looking at
+- **[Uniform error handling](/docs/guides/error-handling#adapter-logging)** - Both adapters answer the same 404, 500 and validation envelopes, and the framework's default log fires exactly when its default response does
+- **`isHttpException()`** - Branded exception detection that survives a project resolving two copies of a package, where `instanceof` silently answers false and turns every deliberate 401/403 into a 500
 
 ### Core Framework
 
@@ -1477,7 +1487,7 @@ These features are **stable and production-ready** in the current release:
 - **Service Layer** - Service components with lifecycle management
 - **Middleware System** - Global, pattern-based, controller, and route-level middleware
 - **Context API** - Unified request context abstraction across adapters
-- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Validation`
+- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Middleware({ validator: true })`
 - **[Static File Serving](/docs/concepts/static-files)** - `@StaticServe` with lifecycle hooks
 - **WebSocket Support** - Decorator-based WebSocket with namespace, room management, and [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket)
 - **[Ulak](/docs/concepts/ulak)** - Central message hub that breaks circular dependencies between services, WebSocket namespaces, and microservice transports
@@ -1514,14 +1524,14 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.8.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.9.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
 
 - **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
-- **Project Bundling** - `asena build` command bundles your project based on [`asena.config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
+- **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 
 ## 📋 Planned for v1.0
 
@@ -1593,8 +1603,8 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.7.x  | Previous | Possible | Yes (with caution) |
-| v0.8.x  | Current | Possible | Yes (with caution) |
+| v0.8.x  | Previous | Possible | Yes (with caution) |
+| v0.9.x  | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -1635,6 +1645,7 @@ We welcome contributions in many forms:
 - **v0.7.0** - Released April 2026 (OpenAPI, Redis, OTel, FrontendController, Schedule, PostProcessor, Streaming)
 - **v0.7.1** - Released April 2026 (`routePattern` on Context, FrontendController registration refinements)
 - **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
+- **v0.9.0** - Released July 2026 (Decorator inheritance, `onNotFound` hook, uniform error and 404 handling across adapters, branded `HttpException`)
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress
@@ -1687,7 +1698,7 @@ import type { Context } from '@asenajs/ergenecore';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = context.getQuery('page') || '1';
+    const page = await context.getQuery('page') || '1';
     return context.send({ users: [], page });
   }
 
@@ -1714,7 +1725,7 @@ import type { Context } from '@asenajs/hono-adapter';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = context.getQuery('page') || '1';
+    const page = await context.getQuery('page') || '1';
     return context.send({ users: [], page });
   }
 
@@ -1870,9 +1881,9 @@ Access URL query strings:
 ```typescript
 @Get('/search')
 async search(context: Context) {
-  const query = context.getQuery('q');
-  const page = context.getQuery('page') || '1';
-  const limit = context.getQuery('limit') || '10';
+  const query = await context.getQuery('q');
+  const page = await context.getQuery('page') || '1';
+  const limit = await context.getQuery('limit') || '10';
 
   return context.send({ query, page, limit });
 }
@@ -1904,7 +1915,7 @@ Access request headers:
 @Get('/profile')
 async getProfile(context: Context) {
   const token = context.headers["authorization"];
-  const userAgent = context.headers["authorization"];
+  const userAgent = context.headers["user-agent"];
 
   return context.send({ token, userAgent });
 }
@@ -1943,7 +1954,7 @@ async download(context: Context) {
 
   context.res.headers.set('X-My-Header', 'Awsome-Header');
 
-  return respcontext.send('File content', 200);
+  return context.send('File content', 200);
 }
 ```
 
@@ -1994,14 +2005,14 @@ import type { Context } from '@asenajs/hono-adapter'
 | `res` | `S` | Original response object |
 | `headers` | `Record<string, string>` | Request headers as key-value pairs |
 
-::: tip Adapter-Specific APIs Available
-This table shows **unified APIs** that work across all adapters. Each adapter may provide **additional methods** for enhanced functionality.
+::: tip What differs between adapters
+The whole table above is unified - `setResponseHeader()` included. What actually differs is
+the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
 
-**Examples:**
-- **Ergenecore**: `context.setResponseHeader(key, value)`
-- **Hono**: Native Hono context via `context.req`
+One behavioural difference worth knowing: calling `setResponseHeader()` twice with the same
+key **replaces** the value on Ergenecore but **appends** a second header on Hono.
 
-See adapter documentation for complete API reference.
+See adapter documentation for the complete API reference.
 :::
 
 For more details about Context API methods and advanced usage, see the [Context API Reference](/docs/concepts/context) guide.
@@ -2093,10 +2104,14 @@ You can also inject services using their registered name as a string. This is us
 
 First, register your service with a custom name:
 
-::: tip String-Based Injection Requires Named Components
-When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+::: tip Name Your Components for String-Based Injection
+A component is registered under its `name` if you give one, and under its **class name**
+otherwise - so `@Inject('UserService')` already resolves an unnamed `@Service()` class
+called `UserService`.
 
-**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+**Why give an explicit name anyway?** The Bun bundler may rename classes during a
+production build, and the container key would change with it. An explicit
+`@Service('UserService')` pins the key so string injection keeps working after minification.
 
 **Example:**
 ```typescript
@@ -2225,7 +2240,7 @@ Middleware executes in this order:
 
 ## Validation
 
-Asena supports automatic request validation using Zod schemas (available with Ergenecore adapter).
+Asena supports automatic request validation using Zod schemas. Both adapters support it.
 
 ### Create a Validator
 
@@ -2271,7 +2286,12 @@ export class UserController {
 ```
 
 ::: warning Validation Errors
-If validation fails, Asena automatically returns a `400 Bad Request` with validation error details.
+If validation fails and your application defines **no** `onError` handler, the adapter
+answers with its own `400 Bad Request` envelope.
+
+As soon as you define `ConfigService.onError`, the failure is routed there instead as a
+`ValidationError` - match it with `isValidationError()`. See
+[Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
 ::: tip Learn More About Validation
@@ -2302,8 +2322,8 @@ export class PostController {
 
   @Get('/')
   async list(context: Context) {
-    const page = Number(context.getQuery('page')) || 1;
-    const limit = Number(context.getQuery('limit')) || 10;
+    const page = Number(await context.getQuery('page')) || 1;
+    const limit = Number(await context.getQuery('limit')) || 10;
 
     const posts = await this.postService.findAll(page, limit);
     return context.send({ posts, page, limit });
@@ -2414,6 +2434,7 @@ Do not forget `await` your `Promises`. If not awaited promises throws an error, 
 - [Middleware](/docs/concepts/middleware) - Request/response interception
 - [Validation](/docs/concepts/validation) - Request validation with Zod
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Inheritance](/docs/concepts/inheritance) - Sharing routes through a base controller
 - [Context API](/docs/concepts/context) - Detailed context methods for each adapter
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Hono Adapter](/docs/adapters/hono) - Hono-specific features
@@ -2476,7 +2497,7 @@ Inject services into controllers using the `@Inject` decorator:
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post, Delete } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -2501,7 +2522,7 @@ export class UserController {
   async deleteUser(context: Context) {
     const id = context.getParam('id');
     await this.userService.deleteUser(id);
-    return context.send({ success: true }, 204);
+    return context.send({ success: true }, 200);
   }
 }
 ```
@@ -2962,7 +2983,7 @@ interface ComponentParams {
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
-| `name` | `string` | `undefined` | Custom name for the service. Enables string-based injection. |
+| `name` | `string` | the class name | Container key for the service. Pin it explicitly so string-based injection survives bundler minification. |
 | `scope` | `Scope` | `Scope.SINGLETON` | Service lifecycle scope. |
 
 ## Asena-Specific Best Practices
@@ -3150,6 +3171,7 @@ describe('UserService', () => {
 
 **Next Steps:**
 - Learn about [Dependency Injection](/docs/concepts/dependency-injection)
+- Share behaviour across services with [Inheritance](/docs/concepts/inheritance)
 - Explore [Repository Pattern](/docs/packages/drizzle)
 - Understand [Testing Strategies](/docs/guides/testing)
 
@@ -3205,10 +3227,14 @@ You can also inject services using their registered name as a string. This is us
 
 First, register your service with a custom name:
 
-::: tip String-Based Injection Requires Named Components
-When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+::: tip Name Your Components for String-Based Injection
+A component is registered under its `name` if you give one, and under its **class name**
+otherwise - so `@Inject('UserService')` already resolves an unnamed `@Service()` class
+called `UserService`.
 
-**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+**Why give an explicit name anyway?** The Bun bundler may rename classes during a
+production build, and the container key would change with it. An explicit
+`@Service('UserService')` pins the key so string injection keeps working after minification.
 :::
 
 Inject services by their registered name:
@@ -3251,7 +3277,7 @@ Expressions allow you to transform the injected dependency or extract specific p
 ```typescript
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { DatabaseService } from '../services/DatabaseService';
-import type { BunSQLDatabase } from 'drizzle-orm/bun-sqlite';
+import type { BunSQLDatabase } from 'drizzle-orm/bun-sql';
 
 @Service()
 export class UserRepository {
@@ -3338,7 +3364,8 @@ Mark implementations with `@Implements`:
 
 ```typescript
 // src/services/EmailNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -3353,7 +3380,8 @@ export class EmailNotificationService implements NotificationService {
 
 ```typescript
 // src/services/SmsNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -3368,7 +3396,8 @@ export class SmsNotificationService implements NotificationService {
 
 ```typescript
 // src/services/PushNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -3497,9 +3526,8 @@ export class CacheService {
 
 ```typescript
 @Service()
-export class ConfigService {
-  @Inject('ENV_API_KEY')
-  private apiKey: string;
+export class ApiKeyService {
+  private apiKey = process.env.API_KEY;
 
   @PostConstruct()
   validate() {
@@ -3509,6 +3537,12 @@ export class ConfigService {
   }
 }
 ```
+
+::: warning `@Inject` resolves components, not values
+A string token names a **registered component**. There is no value/constant registry, so
+`@Inject('ENV_API_KEY')` throws `ENV_API_KEY is not registered` at startup. Read plain
+configuration values from `process.env` (or a `@Service` that wraps it) as above.
+:::
 
 **3. Setup with Injected Dependencies**
 
@@ -3562,7 +3596,15 @@ export class CountryService {
 
 1. Class constructor runs
 2. All `@Inject` dependencies are resolved
-3. All `@PostConstruct` methods are called
+3. All `@Strategy` arrays are resolved (a separate pass)
+4. All `@PostConstruct` methods are called
+5. Registered `@PostProcessor`s run
+
+::: danger A throwing `@PostConstruct` exits the process
+The container catches the error, logs it, and calls `process.exit(1)` - it is **not**
+propagated to the caller. Use `@PostConstruct` for setup that must succeed at boot
+(opening a connection pool, building a transport) and validate recoverable input elsewhere.
+:::
 
 ```typescript
 @Service()
@@ -3614,7 +3656,7 @@ export class ConfigService {
 New instance created for every injection:
 
 ```typescript
-import { Service, Scope } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
 import { Scope } from '@asenajs/asena/decorators/ioc';
 
 @Service({ scope: Scope.PROTOTYPE })
@@ -3936,20 +3978,16 @@ Middleware is code that executes **before** your route handler. It can:
 - Rate limiting
 - Error handling
 
-::: info Adapter-Specific Response Handling
-The way you handle responses in middleware differs between adapters:
+::: info Responding from middleware
+Both adapters accept the same three ways to answer a request from middleware:
 
-**Ergenecore:** Supports both approaches:
+- **`return context.send(...)`** - returning a `Response` short-circuits the chain
+- **`return false`** - short-circuits with `403 Forbidden`
+- **`throw`** - an `HttpException` (Ergenecore) or `HTTPException` (Hono) is routed to
+  your `onError` handler
 
-- `context.send()` - Direct response (native feature)
-- `throw new HttpException()` - Throwing HTTP exceptions
-
-**Hono:** Only supports:
-
-- `throw new HTTPException()` - Throwing HTTP exceptions
-- `context.send()` does NOT work in middleware
-
-This guide shows both approaches using code-groups where applicable.
+The one thing that is *not* portable is **omitting `next()`**. See
+[Stopping Middleware Chain](#stopping-middleware-chain).
 :::
 
 ## Creating Middleware
@@ -3993,12 +4031,35 @@ import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    LoggerMiddleware,
-    CorsMiddleware
-  ];
+  public globalMiddlewares() {
+    return [
+      LoggerMiddleware,
+      CorsMiddleware
+    ];
+  }
 }
 ```
+
+::: warning Every entry must be a component
+The names above stand for **your** middlewares — each one a class carrying `@Middleware()`. The
+built-ins an adapter ships (`CorsMiddleware`, `RateLimiterMiddleware`) are undecorated base classes
+meant to be extended, so listing one directly fails at startup with
+`… is not a component. Decorate it with @Middleware()`. Subclass it first:
+
+```typescript
+@Middleware()
+export class GlobalCors extends CorsMiddleware {}
+```
+
+Component identity is not inherited, which is exactly why the subclass needs its own decorator —
+see [Inheritance](/docs/concepts/inheritance).
+:::
+
+::: warning It is a method, not a property
+Global middleware must be returned from a `globalMiddlewares()` **method**. A
+`middlewares = [...]` property compiles but is never read by the framework, so the
+middleware silently never runs.
+:::
 
 ### 2. Pattern-Based Middleware
 
@@ -4007,22 +4068,24 @@ Apply middleware to specific route patterns:
 ```typescript
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    // Apply to all routes
-    LoggerMiddleware,
+  public globalMiddlewares() {
+    return [
+      // Apply to all routes
+      LoggerMiddleware,
 
-    // Apply only to /api/* and /admin/* routes
-    {
-      middleware: AuthMiddleware,
-      routes: { include: ['/api/*', '/admin/*'] }
-    },
+      // Apply only to /api/* and /admin/* routes
+      {
+        middleware: AuthMiddleware,
+        routes: { include: ['/api/*', '/admin/*'] }
+      },
 
-    // Apply to all routes except /health and /metrics
-    {
-      middleware: RateLimiterMiddleware,
-      routes: { exclude: ['/health', '/metrics'] }
-    }
-  ];
+      // Apply to all routes except /health and /metrics
+      {
+        middleware: RateLimiterMiddleware,
+        routes: { exclude: ['/health', '/metrics'] }
+      }
+    ];
+  }
 }
 ```
 
@@ -4281,8 +4344,8 @@ export class AdvancedRateLimiter extends RateLimiterMiddleware {
 
       // Expensive operations cost more
       cost: (ctx) => {
-        if (ctx.getRequest().url.includes('/search')) return 5;
-        if (ctx.getRequest().url.includes('/export')) return 10;
+        if (ctx.req.url.includes('/search')) return 5;
+        if (ctx.req.url.includes('/export')) return 10;
         return 1;
       }
     });
@@ -4344,7 +4407,7 @@ export class AuthMiddleware extends MiddlewareService {
   private userService: UserService;
 
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       throw new HTTPException(401, { message: 'Unauthorized' });
@@ -4370,9 +4433,7 @@ export class AuthMiddleware extends MiddlewareService {
 Middleware executes in the order it's defined:
 
 ```text
-Global Middleware
-  ↓
-Pattern-Based Middleware
+globalMiddlewares()   ← array order, pattern-based entries included
   ↓
 Controller Middleware
   ↓
@@ -4384,11 +4445,16 @@ Route Middleware
   ↓
 Controller Middleware
   ↓
-Pattern-Based Middleware
-  ↓
-Global Middleware
+globalMiddlewares()
 
 ```
+
+::: info Pattern-based entries are not a separate stage
+An entry with a `routes` filter is just an item in the `globalMiddlewares()` array. It runs
+in **array position**, interleaved with unfiltered entries - putting a pattern-based entry
+first makes it run first. Controller-level middleware always follows the whole global list,
+because the config is applied before controllers are registered.
+:::
 
 **Example:**
 
@@ -4396,10 +4462,12 @@ Global Middleware
 // 1. Global
 @Config()
 export class AppConfig extends ConfigService {
-  middlewares = [
-    LoggerMiddleware, // Executes 1st
-    { middleware: AuthMiddleware, routes: { include: ['/api/*'] } } // Executes 2nd
-  ];
+  public globalMiddlewares() {
+    return [
+      LoggerMiddleware, // Executes 1st
+      { middleware: AuthMiddleware, routes: { include: ['/api/*'] } } // Executes 2nd
+    ];
+  }
 }
 
 // 2. Controller-level
@@ -4415,7 +4483,38 @@ export class UserController {
 
 ## Stopping Middleware Chain
 
-Don't call `next()` to stop the middleware chain:
+Return a `Response` (or `false`, or throw) to stop the chain:
+
+::: danger Omitting `next()` is not portable
+Under **Hono**, a middleware that returns without calling `next()` ends the chain. Under
+**Ergenecore** it does not: when a middleware returns `void` or `true` without calling
+`next()`, the adapter continues to the next middleware on your behalf.
+
+Always signal explicitly - `return context.send(...)`, `return false`, or `throw` - so the
+same middleware behaves identically on both adapters.
+:::
+
+### Shorthand: `return false`
+
+Returning `false` short-circuits the chain with a plain `403 Forbidden` on both adapters -
+useful when no response body is needed:
+
+```typescript
+@Middleware()
+export class IpAllowlistMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>): Promise<any> {
+    if (!this.isAllowed(context.getRequestIp())) {
+      return false; // -> 403 Forbidden, handler never runs
+    }
+
+    await next();
+  }
+
+  private isAllowed(ip: string | null) {
+    return ip !== null;
+  }
+}
+```
 
 ::: code-group
 
@@ -4429,7 +4528,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Don't call next() - stop here
+      // Returning a Response stops the chain
       return context.send({
         error: 'Service under maintenance'
       }, 503);
@@ -4451,7 +4550,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Don't call next() - stop here
+      // Returning a Response also works here; throwing routes through onError instead
       throw new HTTPException(503, {
         message: 'Service under maintenance'
       });
@@ -4496,16 +4595,14 @@ next(); // Missing await!
 
 ```typescript
 // ✅ Good: Logger first, then auth
-middlewares = [
-  LoggerMiddleware,
-  AuthMiddleware
-];
+public globalMiddlewares() {
+  return [LoggerMiddleware, AuthMiddleware];
+}
 
 // ❌ Bad: Auth before logger (auth logs won't be captured)
-middlewares = [
-  AuthMiddleware,
-  LoggerMiddleware
-];
+public globalMiddlewares() {
+  return [AuthMiddleware, LoggerMiddleware];
+}
 ```
 
 ## Related Documentation
@@ -4564,7 +4661,7 @@ export class ApiController {
   @Get('/user/:id')
   async getUser(context: Context) {
     const id = context.getParam('id');
-    const format = context.getQuery('format');
+    const format = await context.getQuery('format');
 
     return context.send({
       userId: id,
@@ -4594,7 +4691,7 @@ export class ApiController {
   @Get('/user/:id')
   async getUser(context: Context) {
     const id = context.getParam('id');
-    const format = context.getQuery('format');
+    const format = await context.getQuery('format');
 
     return context.send({
       userId: id,
@@ -5133,7 +5230,7 @@ export class WsAuthMiddleware implements MiddlewareService {
 ### Get WebSocket Value - `getWebSocketValue()`
 
 ::: warning
-Socket data will automaticly injectining in `ws.data.value` by adapter. So you dont need to use this.
+Socket data will automaticly injectining in `ws.data.values` by adapter. So you dont need to use this.
 :::
 
 ## Streaming
@@ -5573,14 +5670,18 @@ return context.send({
 :::
 
 ::: warning Async Methods
-Most Context methods are async. Always use `await`:
+`getBody()`, `getQuery()`, `getQueryAll()`, `getFormData()`, `getParseBody()`,
+`getArrayBuffer()`, `getBlob()` and the cookie helpers return a `Promise`. Forgetting
+`await` does not raise a type error in every position - it silently yields the Promise
+object instead of the value:
 ```typescript
-// ❌ Wrong
-const query = context.getQuery('q');
+// ❌ Wrong - `page` is a Promise, so `|| '1'` never applies and Number() gives NaN
+const page = context.getQuery('page') || '1';
 
 // ✅ Correct
-const query = await context.getQuery('q');
+const page = (await context.getQuery('page')) || '1';
 ```
+`getParam()`, `getAllQueries()`, `getValue()`, `setValue()` and `send()` are synchronous.
 :::
 
 ## Related Documentation
@@ -5691,6 +5792,44 @@ json(): ValidationSchema | Promise<ValidationSchema>
 - **Return Type**: A Zod schema (`z.ZodType`)
 - **Async Support**: Can be `async` for dynamic schemas
 
+### Validating other request parts
+
+`json()` is the most common, but a validator can define any of these - each takes the same
+shape (a Zod schema, or `{ schema, hook }`) and validates a different part of the request:
+
+| Method | Validates | Runtime |
+|:-------|:----------|:--------|
+| `json()` | JSON request body | ✅ |
+| `form()` | `multipart/form-data` / URL-encoded body | ✅ |
+| `query()` | Query string | ✅ |
+| `param()` | Route parameters | ✅ |
+| `header()` | Request headers | ✅ |
+| `response()` | Response shape, **by status code** | ❌ documentation only |
+
+```typescript
+@Middleware({ validator: true })
+export class ListUsersValidator extends ValidationService {
+  public query() {
+    return z.object({
+      page: z.string().transform(Number).pipe(z.number().min(1)),
+    });
+  }
+
+  public param() {
+    return z.object({ id: z.string().uuid() });
+  }
+}
+```
+
+::: warning `response()` is never executed
+It exists so [`@asenajs/asena-openapi`](/docs/packages/openapi) can emit response schemas
+into the spec; the runtime ignores it.
+
+A consequence worth knowing: `@Middleware({ validator: true })` requires at least one of
+the five *runtime* methods. A validator class that defines **only** `response()` fails the
+decorator's check at import time and the process exits.
+:::
+
 ### Basic Example
 
 ```typescript
@@ -5746,7 +5885,7 @@ export class UserValidatorWithHook extends ValidationService {
 
       hook: (result, context) => {
         // result: Zod SafeParseResult - { success, data } or { success, error }
-        // context: adapter Context
+        // context: Asena's Context wrapper
 
         if (!result.success) {
           // Return nothing to let the framework report the failure through onError
@@ -5777,7 +5916,7 @@ export class UserValidatorWithHook extends ValidationService {
 
       hook: (result, context) => {
         // result: Zod SafeParseResult - { success, data } or { success, error }
-        // context: adapter Context
+        // context: Hono's NATIVE context, not Asena's wrapper - see the warning below
 
         if (!result.success) {
           // Return nothing to let the framework report the failure through onError
@@ -5786,13 +5925,25 @@ export class UserValidatorWithHook extends ValidationService {
 
         console.log('Validated user data:', result.data);
 
-        // Store in context for later use
-        context.setValue('validatedEmail', result.data.email);
+        // Hono's own state API - set()/get(), not setValue()/getValue()
+        context.set('validatedEmail', result.data.email);
       }
     };
   }
 }
 ```
+:::
+
+::: warning The hook's `context` differs per adapter
+This is the one place where the two adapters are not interchangeable.
+
+- **Ergenecore** passes Asena's `Context` wrapper, so `setValue()` / `getValue()` /
+  `send()` are available.
+- **Hono** types the hook as `@hono/zod-validator`'s `Hook`, which hands you **Hono's
+  native context**. Use `set()` / `get()` to store state and `json()` to respond.
+
+The values you store are still readable from the handler's Asena context - `setValue`
+and Hono's `set` write to the same per-request store.
 :::
 ### Hook Function Signature
 
@@ -5874,8 +6025,9 @@ When validation fails, Asena answers with **400 Bad Request**.
 
 ### Default response
 
-If your application defines no global error handler, the adapter answers directly with
-Zod's flattened error:
+A `ValidationError` is always thrown. When nothing answers it - your application defines no
+global error handler, or its handler returns nothing - **both** adapters fall back to the same
+envelope, Zod's flattened error:
 
 ```json
 {
@@ -5892,7 +6044,13 @@ Zod's flattened error:
 ```
 
 `target` names the part of the request that failed - `json`, `query`, `form`, `param` or
-`header`. The Hono adapter includes it; Ergenecore omits it.
+`header`.
+
+The failure is also logged like any other 4xx, at DEBUG (or INFO when your logger has no
+`debug`). Before 0.9.1 an application with no `onError` got this response from inside the
+validator, which never threw - so it reached neither `onError` nor the log, the one rejection
+that was invisible at every level. See
+[Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Customizing the response
 
@@ -5971,13 +6129,19 @@ export class ProductController {
   validator: CreateUserValidator
 })
 async create(context: Context) {
-  // Execution order:
-  // 1. AuthMiddleware
-  // 2. RateLimitMiddleware
-  // 3. CreateUserValidator (validation)
-  // 4. create() handler
+  // Ergenecore: AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
+  // Hono:       CreateUserValidator -> AuthMiddleware -> RateLimitMiddleware -> handler
 }
 ```
+
+::: danger Validators and route middleware run in a different order per adapter
+Ergenecore validates **after** the route's middleware chain; Hono registers validators
+**before** route middleware, so validation happens first.
+
+This matters when a middleware populates state the validator depends on - an
+`AuthMiddleware` that calls `context.setValue('user', …)` has not run yet on Hono. Global
+middleware is unaffected: it is top-level on both adapters and always runs first.
+:::
 
 ## Zod Schema Definition
 
@@ -6175,24 +6339,37 @@ export class RegisterUserValidator extends ValidationService {
         path: ['confirmPassword']
       }),
 
+      // The hook receives Zod's SafeParseResult - the data lives at `result.data`
+      // and only when `result.success` is true
       hook: (result, context) => {
-        // Log validation success
+        if (!result.success) {
+          // Returning a Response overrides the adapter's default 400 envelope
+          return context.send({ success: false, issues: result.error.issues }, 400);
+        }
+
         this.logger.info('User registration validated', {
-          username: result.username,
-          email: result.email
+          username: result.data.username,
+          email: result.data.email
         });
 
-        // Store validated data in context
-        context.setValue('registrationData', result);
+        // Stash the parsed data for the handler to pick up with context.getValue()
+        const { confirmPassword, ...userData } = result.data;
 
-        // Remove confirmPassword from result
-        const { confirmPassword, ...userData } = result;
-        return userData;
+        context.setValue('registrationData', userData);
       }
     };
   }
 }
 ```
+
+::: warning The hook cannot transform the payload
+The return value is a **Response override**, not a transformed body. Returning a plain
+object is silently ignored - the handler still receives the original parsed data. To pass
+a reshaped value along, write it to the context with `setValue()` as above.
+
+Note also that Ergenecore invokes the hook **only on failure**, while Hono invokes it on
+every attempt. Guard on `result.success` so the same hook works under both adapters.
+:::
 
 ## Related Documentation
 
@@ -6381,7 +6558,8 @@ import path from 'path';
 
 ## Lifecycle Hooks
 
-The `StaticServeService` base class provides three lifecycle hooks for customizing static file serving behavior:
+The `StaticServeService` base class provides three lifecycle hooks. **All three are
+optional** - override only the ones you need.
 
 ### `rewriteRequestPath(reqPath: string): string`
 
@@ -6418,7 +6596,9 @@ public rewriteRequestPath(reqPath: string): string {
 Called when a file is successfully found and served. Useful for logging, analytics, or custom headers.
 
 **Parameters:**
-- `filePath: string` - The absolute path to the file being served
+- `filePath: string` - The looked-up path. **Not absolute, and not the same across
+  adapters:** Ergenecore passes the rewritten *request* path (no root prefix), Hono passes
+  the root-joined path (e.g. `./public/index.html`).
 - `c: Context` - The request context
 
 **Example:**
@@ -6427,13 +6607,30 @@ Called when a file is successfully found and served. Useful for logging, analyti
 public onFound(filePath: string, c: Context): void {
   console.log(`✅ File served: ${filePath}`);
 
-  // Add custom headers
-  c.header('X-Served-By', 'Asena Static Serve');
-
   // Track analytics
   this.analytics.track('file_served', { path: filePath });
 }
 ```
+
+::: danger Setting response headers here does not work on Ergenecore
+`c.setResponseHeader()` writes into the context's response object, which Ergenecore only
+consults for `send()`/`html()`. Static responses are built directly from the file, so the
+header is dropped. (On Hono it does work, because the wrapper appends to the live response.)
+
+Use the service's `extra` property instead - it is honoured by both adapters:
+
+```typescript
+@StaticServe({ root: path.join(process.cwd(), 'public') })
+export class PublicStaticServe extends StaticServeService {
+  public extra = {
+    cacheControl: 'public, max-age=31536000, immutable',
+    headers: { 'X-Served-By': 'Asena Static Serve' },
+    precompressed: true,                 // prefer .br / .gz variants when present
+    mimes: { '.ts': 'text/typescript' }, // override MIME detection
+  };
+}
+```
+:::
 
 ---
 
@@ -6449,18 +6646,27 @@ Called when a requested file is not found. Useful for logging 404s or implementi
 
 ```typescript
 public onNotFound(reqPath: string, c: Context): void {
-  const pathname = new URL(c.req.url).pathname;
   console.log(`❌ File not found: ${reqPath}`);
-  console.log(`   Accessed from: ${pathname}`);
 
   // Log 404s
   this.logger.warn('Static file not found', { path: reqPath });
-
-  // Send custom 404 response (optional)
-  c.status(404);
-  c.json({ error: 'File not found' });
 }
 ```
+
+::: warning `onNotFound` is observational
+Its return value is discarded and the adapter still answers `404`. To take the request over,
+mark the hook with `@Override()` - Ergenecore then skips its own 404 and lets the request
+fall through to your route handlers:
+
+```typescript
+import { Override } from '@asenajs/asena/decorators';
+
+@Override()
+public onNotFound(reqPath: string, c: Context): void {
+  this.logger.warn('Static file not found', { path: reqPath });
+}
+```
+:::
 
 ---
 
@@ -6562,7 +6768,7 @@ export class SPAStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Cache static assets
     if (filePath.match(/\.(js|css|png|jpg|svg)$/)) {
-      c.header('Cache-Control', 'public, max-age=31536000');
+      c.setResponseHeader('Cache-Control', 'public, max-age=31536000');
     }
   }
 
@@ -6596,7 +6802,7 @@ export class SPAStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Cache static assets
     if (filePath.match(/\.(js|css|png|jpg|svg)$/)) {
-      c.header('Cache-Control', 'public, max-age=31536000');
+      c.setResponseHeader('Cache-Control', 'public, max-age=31536000');
     }
   }
 
@@ -6658,7 +6864,7 @@ export class DownloadStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Force download
     const fileName = path.basename(filePath);
-    c.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    c.setResponseHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   }
 }
 
@@ -6671,7 +6877,7 @@ export class ImageStaticServe extends StaticServeService {
 
   public onFound(filePath: string, c: Context): void {
     // Long cache for images
-    c.header('Cache-Control', 'public, max-age=2592000'); // 30 days
+    c.setResponseHeader('Cache-Control', 'public, max-age=2592000'); // 30 days
   }
 }
 ```
@@ -6699,7 +6905,7 @@ export class DownloadStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Force download
     const fileName = path.basename(filePath);
-    c.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    c.setResponseHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   }
 }
 
@@ -6712,7 +6918,7 @@ export class ImageStaticServe extends StaticServeService {
 
   public onFound(filePath: string, c: Context): void {
     // Long cache for images
-    c.header('Cache-Control', 'public, max-age=2592000'); // 30 days
+    c.setResponseHeader('Cache-Control', 'public, max-age=2592000'); // 30 days
   }
 }
 ```
@@ -6795,17 +7001,17 @@ public onFound(filePath: string, c: Context): void {
 
   // Long cache for immutable assets
   if (ext.match(/\.(js|css|woff2?|ttf|svg|png|jpg|gif)$/)) {
-    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    c.setResponseHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
 
   // Short cache for HTML
   else if (ext === '.html') {
-    c.header('Cache-Control', 'public, max-age=300');
+    c.setResponseHeader('Cache-Control', 'public, max-age=300');
   }
 
   // No cache for others
   else {
-    c.header('Cache-Control', 'no-cache');
+    c.setResponseHeader('Cache-Control', 'no-cache');
   }
 }
 ```
@@ -6885,8 +7091,8 @@ Serve user-uploaded files:
 export class UploadsStaticServe extends StaticServeService {
   public onFound(filePath: string, c: Context): void {
     // Add security headers
-    c.header('X-Content-Type-Options', 'nosniff');
-    c.header('Content-Disposition', 'inline');
+    c.setResponseHeader('X-Content-Type-Options', 'nosniff');
+    c.setResponseHeader('Content-Disposition', 'inline');
   }
 }
 ```
@@ -7058,10 +7264,15 @@ Asena provides **automatic room management** with built-in pub/sub pattern. You 
 - `ws.subscribe(room)` - Automatically joins room and tracks membership
 - `ws.publish(room, data)` - Broadcasts to all room subscribers
 - `ws.unsubscribe(room)` - Leaves room with automatic cleanup
-- `this.sockets` - All connected sockets (managed automatically)
-- `this.rooms` - All rooms and their members (managed automatically)
+- `this.sockets` - All connected sockets of this namespace (managed automatically)
 - `this.to(room, data)` - Broadcast from service level
 - `this.in(data)` - Broadcast to all connected clients
+:::
+
+::: warning Rooms are not enumerable
+Room membership lives in Bun's pub/sub topics, which cannot be listed. There is no
+`this.rooms` map and no `getSocketsByRoom()`. If you need a member count or roster, keep
+your own registry - add the socket in `onOpen`, remove it in `onClose`.
 :::
 
 ### Subscribing to Rooms
@@ -7105,8 +7316,8 @@ Use `ws.publish()` to broadcast messages to all subscribers of a room:
 
 ```typescript
 protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-  const room = ws.data?.room || 'general';
-  const username = ws.data?.username;
+  const room = ws.data?.values.room || 'general';
+  const username = ws.data?.values.username;
 
   try {
     const data = JSON.parse(message);
@@ -7132,8 +7343,8 @@ When a client disconnects or leaves a room, use `unsubscribe()`:
 
 ```typescript
 protected async onClose(ws: Socket<ChatData>): Promise<void> {
-  const room = ws.data?.room || 'general';
-  const username = ws.data?.username;
+  const room = ws.data?.values.room || 'general';
+  const username = ws.data?.values.username;
 
   // Notify room before leaving
   ws.publish(room, JSON.stringify({
@@ -7146,23 +7357,46 @@ protected async onClose(ws: Socket<ChatData>): Promise<void> {
 }
 ```
 
-### Accessing Room Members
+### Counting Room Members
 
-You can access all sockets in a room using the built-in `this.rooms` map:
+Bun's pub/sub topics are write-only - you can publish to a room but not enumerate it. To
+report a member count, track it yourself:
 
 ```typescript
-protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-  const room = ws.data?.room || 'general';
+@WebSocket({ path: '/ws/chat', name: 'ChatSocket' })
+export class ChatSocket extends AsenaWebSocketService<ChatData> {
+  private roomMembers = new Map<string, Set<string>>();
 
-  // Get all sockets in this room
-  const roomMembers = this.getSocketsByRoom(room);
+  protected async onOpen(ws: Socket<ChatData>): Promise<void> {
+    const room = ws.data?.values.room || 'general';
 
-  ws.send(JSON.stringify({
-    type: 'room_info',
-    totalUsers: roomMembers?.length || 0
-  }));
+    ws.subscribe(room);
+
+    if (!this.roomMembers.has(room)) this.roomMembers.set(room, new Set());
+    this.roomMembers.get(room).add(ws.id);
+  }
+
+  protected async onClose(ws: Socket<ChatData>): Promise<void> {
+    const room = ws.data?.values.room || 'general';
+
+    this.roomMembers.get(room)?.delete(ws.id);
+  }
+
+  protected async onMessage(ws: Socket<ChatData>, message: Buffer | string): Promise<void> {
+    const room = ws.data?.values.room || 'general';
+
+    ws.send(JSON.stringify({
+      type: 'room_info',
+      totalUsers: this.roomMembers.get(room)?.size ?? 0
+    }));
+  }
 }
 ```
+
+::: warning Single-pod only
+This registry lives in one process. In a multi-pod deployment each pod sees only its own
+sockets - use a shared store (Redis) if the count must be global.
+:::
 
 ## Broadcasting
 
@@ -7177,10 +7411,8 @@ export class NotificationSocket extends AsenaWebSocketService<void> {
 
   // Public method to broadcast notifications
   broadcastNotification(notification: any) {
-    const message = JSON.stringify(notification);
-
-    // Broadcast to all connected clients
-    this.in(message);
+    // Pass the object as-is - this.in()/this.to() serialize it for you
+    this.in(notification);
   }
 
   // You can also access all sockets via this.sockets (built-in)
@@ -7199,19 +7431,28 @@ Use `this.to(room, data)` to broadcast to a specific room from the service level
 export class ChatSocket extends AsenaWebSocketService<{ room: string }> {
   // Broadcast to a specific room
   notifyRoom(room: string, notification: any) {
-    this.to(room, JSON.stringify(notification));
+    this.to(room, notification);
   }
 
   // Example: Admin sends announcement to a room
   sendAnnouncement(room: string, message: string) {
-    this.to(room, JSON.stringify({
+    this.to(room, {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 }
 ```
+
+::: danger Do not pre-stringify for `this.to()` / `this.in()`
+These two serialize their payload internally. Passing a string that is already JSON gets
+encoded a second time, so the client receives `"{\"type\":\"announcement\"}"` - a quoted
+string, not an object.
+
+The socket-level methods behave the opposite way: `ws.send()` and `ws.publish()` pass the
+value through untouched, so those **do** take a string.
+:::
 
 ### Private Messages
 
@@ -7423,7 +7664,7 @@ interface NotificationData {
 @WebSocket({ path: '/ws/notifications', name: 'NotificationSocket' })
 export class NotificationSocket extends AsenaWebSocketService<NotificationData> {
   protected async onOpen(ws: Socket<NotificationData>): Promise<void> {
-    const userId = ws.data?.userId;
+    const userId = ws.data?.values.userId;
 
     // Subscribe to user's personal notification channel
     ws.subscribe(`user:${userId}`);
@@ -7439,7 +7680,7 @@ export class NotificationSocket extends AsenaWebSocketService<NotificationData> 
   }
 
   protected async onClose(ws: Socket<NotificationData>): Promise<void> {
-    const userId = ws.data?.userId;
+    const userId = ws.data?.values.userId;
 
     // Unsubscribe from channels - Asena handles cleanup
     ws.unsubscribe(`user:${userId}`);
@@ -7504,7 +7745,7 @@ You can also trigger notifications from HTTP endpoints:
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/admin')
 export class AdminController {
@@ -7513,7 +7754,7 @@ export class AdminController {
 
   @Post('/announcement')
   async sendAnnouncement(context: Context) {
-    const { message } = await context.getBody();
+    const { message } = await context.getBody<{ message: string }>();
 
     // Broadcast to all connected clients
     this.notificationSocket.to('announcements', JSON.stringify({
@@ -7522,7 +7763,7 @@ export class AdminController {
       timestamp: new Date().toISOString()
     }));
 
-    return context.json({ success: true });
+    return context.send({ success: true });
   }
 }
 ```
@@ -7652,11 +7893,11 @@ Asena automatically tracks sockets in rooms when you use `subscribe()` and `unsu
 ### 2. Use Broadcasting Methods
 
 ```typescript
-// ✅ Good: Use built-in broadcasting
-this.to('room-1', 'Message to room');  // Broadcast to specific room
-this.in('Message to all');             // Broadcast to all clients
+// ✅ Good: Use built-in broadcasting - pass objects, they are serialized for you
+this.to('room-1', { text: 'Message to room' });  // Broadcast to specific room
+this.in({ text: 'Message to all' });             // Broadcast to all clients
 
-// ✅ Good: Use publish from socket level
+// ✅ Good: Use publish from socket level - this one takes the raw payload
 ws.publish('room-1', 'Message from user');
 
 // ❌ Bad: Manual iteration over sockets
@@ -7716,8 +7957,10 @@ export class UserService {
 
 ```typescript
 // ✅ No circular dependency with Ulak
-import { Service, Inject, ulak } from '@asenajs/asena';
-import type { Ulak } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ulak } from '@asenajs/asena/messaging';
+import type { Ulak } from '@asenajs/asena/messaging';
 
 @Service('UserService')
 export class UserService {
@@ -7817,7 +8060,8 @@ Asena's Event System provides a decoupled, event-driven architecture for your ap
 ### 1. Create an Event Service
 
 ```typescript
-import { EventService, On } from '@asenajs/asena/decorators';
+import { EventService } from '@asenajs/asena/decorators';
+import { On } from '@asenajs/asena/event';
 
 @EventService({ prefix: 'user' })
 export class UserEventService {
@@ -7842,8 +8086,10 @@ export class UserEventService {
 ### 2. Emit Events from Your Services
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/decorators';
-import type { EventEmitter } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { emitter } from '@asenajs/asena/event';
+import type { EventEmitter } from '@asenajs/asena/event';
 
 @Service()
 export class UserService {
@@ -7936,9 +8182,15 @@ Use wildcards to match multiple events with a single handler:
 | Pattern | Matches | Examples |
 |---------|---------|----------|
 | `*` | All events | Any event |
-| `user.*` | All user events | `user.created`, `user.updated`, `user.deleted` |
-| `*.error` | All error events | `user.error`, `db.error`, `auth.error` |
+| `user.*` | All user events, at **any** depth | `user.created`, `user.profile.updated` |
+| `*.error` | All error events, at any depth | `user.error`, `db.pool.error` |
 | `user.*.created` | Nested patterns | `user.admin.created`, `user.guest.created` |
+
+::: warning `*` matches one **or more** segments
+A wildcard is not limited to a single segment: `user.*` also matches
+`user.profile.updated`. It never matches **zero** segments though, so `download.*` does
+not match the bare event `download`.
+:::
 
 ```typescript
 @EventService()
@@ -8045,9 +8297,17 @@ class PaymentEventService { }
 Marks a method as an event handler.
 
 **Parameters:**
-- `params`: Event pattern or configuration object
+- `params`: Event pattern (string shorthand) or configuration object
   - `event: string` - Event pattern to match
+  - `prefix?: boolean` - Whether the `@EventService` prefix is prepended (default `true`;
+    set `false` for an absolute pattern)
   - `skip?: boolean` - Skip this handler (useful for debugging)
+
+::: danger One `@On` per method
+Handler metadata is keyed by **method name**, so stacking several `@On` decorators on one
+method silently keeps only the last one applied (the topmost decorator). To handle several
+patterns, write several methods - or use a wildcard.
+:::
 
 **Method Signature:**
 ```typescript
@@ -8117,8 +8377,10 @@ export class UserEventService {
 Utility function for injecting EventEmitter.
 
 ```typescript
-import { Service, Inject, emitter } from '@asenajs/asena/decorators';
-import type { EventEmitter } from '@asenajs/asena';
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { emitter } from '@asenajs/asena/event';
+import type { EventEmitter } from '@asenajs/asena/event';
 
 @Service()
 class UserService {
@@ -8205,16 +8467,23 @@ Group related events using prefixes:
 ```typescript
 @EventService({ prefix: 'user' })
 class UserEventService {
-  @On('created')       // Handles 'user.created'
-  @On('updated')       // Handles 'user.updated'
-  @On('deleted')       // Handles 'user.deleted'
+  @On('created')
+  onCreated(event: string, data: any) {}   // Handles 'user.created'
+
+  @On('updated')
+  onUpdated(event: string, data: any) {}   // Handles 'user.updated'
+
+  @On('deleted')
+  onDeleted(event: string, data: any) {}   // Handles 'user.deleted'
 }
 
 @EventService({ prefix: 'order' })
 class OrderEventService {
-  @On('placed')        // Handles 'order.placed'
-  @On('cancelled')     // Handles 'order.cancelled'
-  @On('completed')     // Handles 'order.completed'
+  @On('placed')
+  onPlaced(event: string, data: any) {}    // Handles 'order.placed'
+
+  @On('cancelled')
+  onCancelled(event: string, data: any) {} // Handles 'order.cancelled'
 }
 ```
 
@@ -8586,10 +8855,8 @@ export class NotificationService {
   @Inject('EmailService')
   private email!: EmailService;
 
-  // Send notifications for important events
+  // One @On per method - see the warning under "Handler Registration"
   @On('user.created')
-  @On('order.completed')
-  @On('payment.success')
   notifyUser(eventName: string, data: any) {
     // Real-time notification via WebSocket
     this.ws.sendToUser(data.userId, {
@@ -8691,13 +8958,16 @@ handleUserCreated(eventName: string, data: any) {
 Wildcard patterns are slower than exact matches:
 
 ```typescript
-// ✅ Good - Specific patterns
+// ✅ Good - Specific patterns, one per method
 @On('user.created')
+onCreated(event: string, data: any) {}
+
 @On('user.updated')
-@On('user.deleted')
+onUpdated(event: string, data: any) {}
 
 // ⚠️ Use with caution - Matches all user events
 @On('user.*')
+onAnyUserEvent(event: string, data: any) {}
 
 // ⚠️ Use with extreme caution - Matches ALL events
 @On('*')
@@ -8818,6 +9088,7 @@ this.emitter.emit('user.created', {
 ## Related
 
 - [Dependency Injection](/docs/concepts/dependency-injection.md) - Understanding DI in Asena
+- [Inheritance](/docs/concepts/inheritance.md) - Sharing `@On` handlers through a base class
 - [Services](/docs/concepts/services.md) - Creating services
 - [Ulak](/docs/concepts/ulak.md) - WebSocket messaging system
 
@@ -8851,10 +9122,17 @@ Asena's microservice layer lets independent Asena services communicate through a
 
 ```typescript
 import { MessageController } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import { MessagePattern, EventPattern, type MessageContext } from '@asenajs/asena/microservice';
 
 @MessageController('order') // prefix - applied to every handler below
 export class OrderHandler {
+  @Inject('OrderService')
+  private orderService: OrderService;
+
+  @Inject('SearchIndexService')
+  private searchIndex: SearchIndexService;
+
   // Request/Response (orchestration): return value is the reply
   @MessagePattern('create') // handles 'order.create'
   async create(data: CreateOrderDto, context: MessageContext) {
@@ -8940,7 +9218,8 @@ export class CheckoutService {
 
   async checkout(dto: CheckoutDto) {
     // RPC - awaits the remote handler's reply
-    const order = await this.orders.send('create', dto); // → 'order.create'
+    // `send<T>` defaults to `unknown` - name the reply type to use it
+    const order = await this.orders.send<{ id: string }>('create', dto); // → 'order.create'
 
     // Event - fire-and-forget
     await this.orders.emit('created', { id: order.id }); // → 'order.created'
@@ -9178,6 +9457,10 @@ Contract notes:
 
 They are deliberately separate: hiding the local-vs-remote distinction creates false expectations about delivery guarantees.
 
+## Related
+
+- [Inheritance](/docs/concepts/inheritance) - Sharing `@MessagePattern` and `@EventPattern` handlers through a base class, and why an inherited `@EventPattern` opens a real subscription
+
 
 ---
 
@@ -9301,14 +9584,14 @@ export class NotificationWebSocket extends AsenaWebSocketService<{ userId: strin
 
   protected async onOpen(socket: Socket<{ userId: string }>) {
     // Subscribe user to their personal room
-    socket.subscribe(`user:${socket.data.userId}`);
-    console.log(`User ${socket.data.userId} connected`);
+    socket.subscribe(`user:${socket.data.values.userId}`);
+    console.log(`User ${socket.data.values.userId} connected`);
   }
 
   protected async onMessage(socket: Socket<{ userId: string }>, message: string) {
     const data = JSON.parse(message);
     // Use service for business logic
-    await this.userService.handleNotification(socket.data.userId, data);
+    await this.userService.handleNotification(socket.data.values.userId, data);
   }
 }
 ```
@@ -9349,7 +9632,7 @@ For advanced scenarios with transformations:
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
-import { ICoreServiceNames } from '@asenajs/asena';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
 
 
 @Service('NotificationService')
@@ -9372,7 +9655,7 @@ For working with multiple or dynamic namespaces:
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
-import { ICoreServiceNames } from '@asenajs/asena';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
 
 @Service('MultiChannelService')
 export class MultiChannelService {
@@ -9468,6 +9751,14 @@ await ulak.toMany('/chat', ['room-1', 'room-2', 'room-3'], {
   data: { count: 42 }
 });
 ```
+
+::: warning `toMany()` and `broadcastAll()` never reject
+Both use `Promise.allSettled` internally and only log the failures they see, so wrapping
+them in `try/catch` catches nothing. `bulkSend()` behaves the same way - it resolves with a
+`BulkResult` count instead of throwing.
+
+The single-target methods (`broadcast`, `to`, `toSocket`) **do** throw `UlakError`.
+:::
 
 #### `broadcastAll(data: any): Promise<void>`
 
@@ -9576,7 +9867,7 @@ console.log(chat.path); // '/chat'
 Ulak throws structured errors with specific error codes:
 
 ```typescript
-import { UlakError, UlakErrorCode } from '@asenajs/asena';
+import { UlakError, UlakErrorCode } from '@asenajs/asena/messaging';
 
 try {
   await ulak.broadcast('/non-existent', { message: 'test' });
@@ -9600,6 +9891,13 @@ try {
 - `BROADCAST_FAILED` - Failed to broadcast
 - `SOCKET_NOT_FOUND` - Socket ID not found
 - `SERVICE_NOT_INITIALIZED` - Ulak not initialized
+
+Microservice messaging (`send()` / `emit()` / `messages()`) adds four more:
+
+- `NO_TRANSPORT` - No microservice transport is configured
+- `TRANSPORT_NOT_FOUND` - The named transport does not exist
+- `TIMEOUT` - An RPC `send()` exceeded its reply timeout
+- `REMOTE_ERROR` - The remote handler answered with an error
 
 ### Error Handling Best Practices
 
@@ -9639,12 +9937,18 @@ ulak.unregisterNamespace('/old-chat');
 
 ### Disposing Ulak
 
-Clean up all resources when shutting down:
+`dispose()` clears every registered namespace and drops the transport reference:
 
 ```typescript
-// Called automatically on server shutdown
 ulak.dispose();
 ```
+
+::: warning It is not called for you
+`AsenaServer.stop()` stops the cron runner, the health server, the adapter and the
+microservice transports - it does **not** call `ulak.dispose()`. Call it yourself if you
+need the cleanup (long-lived test processes, hot-reload loops); a normal process exit does
+not need it.
+:::
 
 ## Best Practices
 
@@ -9786,7 +10090,7 @@ export class NotificationService {
     });
   }
 
-  private async getFollowers(userId: string) {
+  private async getFollowers(userId: string): Promise<{ id: string }[]> {
     // Database logic
     return [];
   }
@@ -10053,7 +10357,13 @@ Uses 5-field cron format:
 | `0 0 * * 0` | Every Sunday at midnight |
 
 ::: tip Cron Validation
-Asena validates cron expressions at startup using Bun's native `Bun.cron.parse()`. Invalid expressions will throw an error during bootstrap, preventing the server from starting with misconfigured schedules.
+Asena validates cron expressions with Bun's native `Bun.cron.parse()` **inside the
+`@Schedule` decorator**, i.e. when the module is imported - before
+`AsenaServerFactory.create()` is ever reached. An invalid expression throws immediately,
+so the server can never start with a misconfigured schedule.
+
+`Bun.cron.parse()` also accepts the usual nicknames (`@hourly`, `@daily`, `@weekly`,
+`@monthly`, `@yearly`) in place of the 5-field form.
 :::
 
 ## AsenaSchedule Interface
@@ -10157,8 +10467,11 @@ export class CronController {
 | Property/Method | Type | Description |
 |:-----------------|:-----|:------------|
 | `getJobNames()` | `string[]` | Get all registered job names |
+| `registerJob(name, cron, fn)` | `void` | Register a job programmatically |
+| `startAll()` / `stopAll()` | `void` | Start or stop every registered job |
+| `clearJobs()` | `void` | Stop and drop all registered jobs |
 | `jobCount` | `number` | Number of registered jobs |
-| `hasRunningJobs` | `boolean` | Whether any jobs are currently running |
+| `hasRunningJobs` | `boolean` | Whether any job is **scheduled** (started and not stopped) - not whether one is executing right now |
 
 ::: info Lifecycle
 CronRunner starts all registered jobs when the server is ready and stops them during graceful shutdown. You don't need to manage the start/stop lifecycle manually.
@@ -10443,7 +10756,7 @@ Bun automatically bundles linked CSS, JavaScript, and TypeScript files.
 
 ## Production Build
 
-When you run `asena build`, HTML import paths are automatically rewritten so they resolve correctly from the output directory. However, you must configure `include` in your `asena.config.ts` to copy the HTML files to the build output.
+When you run `asena build`, HTML import paths are automatically rewritten so they resolve correctly from the output directory. However, you must configure `include` in your `asena-config.ts` to copy the HTML files to the build output.
 
 ### Required Configuration
 
@@ -10497,7 +10810,7 @@ my-app/
 │   │       ├── settings.html
 │   │       └── app.ts
 │   └── index.ts
-├── asena.config.ts          # include: ['src/frontend/pages']
+├── asena-config.ts          # include: ['src/frontend/pages']
 └── dist/                    # After build:
     ├── index.asena.js
     └── src/frontend/pages/  # Copied by include
@@ -10649,7 +10962,7 @@ Accepts optional `ComponentParams`:
 PostProcessor runs at a specific point in the component initialization chain:
 
 ```
-Constructor → @Inject (DI) → @PostConstruct → postProcess()
+Constructor → @Inject (DI) → @Strategy → @PostConstruct → postProcess()
 ```
 
 1. Component is instantiated (`new`)
@@ -10729,10 +11042,11 @@ export class ComponentRegistryPostProcessor implements ComponentPostProcessor {
 The `@asenajs/asena-openapi` package uses a PostProcessor to automatically generate OpenAPI specs from your existing controllers and validators. Here's a simplified version:
 
 ```typescript
-import { PostProcessor, PostConstruct } from '@asenajs/asena/decorators';
+import { PostProcessor } from '@asenajs/asena/decorators';
+import { PostConstruct } from '@asenajs/asena/decorators/ioc';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ComponentPostProcessor } from '@asenajs/asena/ioc/types';
-import { extractControllerRouteInfo, isController } from '@asenajs/asena/utils';
+import { extractControllerRouteInfo, isController, isValidator } from '@asenajs/asena/utils';
 
 @PostProcessor()
 export class OpenApiPostProcessor implements ComponentPostProcessor {
@@ -10762,7 +11076,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
       this.controllers.push({ instance, Class });
     }
 
-    if (this.isValidator(Class)) {
+    if (isValidator(Class)) {
       this.validators.set(Class.name, instance);
     }
 
@@ -10909,6 +11223,272 @@ export class HeavyProcessor implements ComponentPostProcessor {
 
 ---
 
+# Inheritance
+Section: Concepts
+Source: https://asena.sh/raw/concepts/inheritance.md
+
+# Inheritance
+
+Asena components are ordinary TypeScript classes, so they can extend a base class. This is the way to share code across services: the base class ships in a package, and the concrete subclass lives in the consuming application's `src/` where the component scan can find it.
+
+```typescript
+// packages/platform — shared, no decorator of its own
+export abstract class HealthControllerBase {
+  @Get('/live')
+  public live(context: Context) {
+    return context.send({ status: 'ok' });
+  }
+}
+
+// services/orders/src/controllers — the decorated concrete class
+@Controller('/probe')
+export class ProbeController extends HealthControllerBase {}
+```
+
+`GET /probe/live` works. The route is declared on the base class and picked up by the subclass.
+
+## The rule, in one sentence
+
+> **What changes the behaviour of a request travels with the route. What says where the route lives, or what a class is, belongs to the concrete class.**
+
+Everything below follows from that. It is the same split Spring and JAX-RS use.
+
+::: warning An undecorated subclass is not a component
+`@Controller`, `@Service`, `@Middleware`, `@Config`, `@MessageController` and friends mark a class as a component, and that marking belongs to the class that carries it. A subclass of a `@Controller` is **not** a controller unless you decorate it too — and since 0.9.0 it is not registered at all.
+
+Before 0.9.0 such a class was registered under its *base's* name. The container promotes a duplicate name to an array, so every `@Inject(Base)` started handing out `[Base, Sub]` and failed on first property access, a long way from the missing decorator. If a class disappears after upgrading, it was missing its decorator all along.
+:::
+
+## What is inherited
+
+Everything declared on a method or a field is collected from the whole prototype chain:
+
+| Decorator | Inherited | Notes |
+|:----------|:----------|:------|
+| `@Get` / `@Post` / `@Put` / `@Delete` / `@Patch` / `@All` | ✅ | Registered under the **subclass's** `@Controller` prefix |
+| `@Page` | ✅ | Registered under the subclass's `@FrontendController` base path |
+| `@On` | ✅ | Uses the subclass's `@EventService` prefix |
+| `@MessagePattern` / `@EventPattern` | ✅ | Uses the subclass's `@MessageController` prefix and transport |
+| `@Inject` | ✅ | Fields declared on any ancestor are injected |
+| `@Strategy` | ✅ | |
+| `@Implements` | ✅ | A subclass joins its base's interface registration, so a `@Strategy` list picks it up — see below |
+| `@PostConstruct` | ✅ | Runs once per method, even when the chain is several levels deep |
+| `@Override` | ✅ | Marks accumulate across the chain; a subclass cannot un-mark an inherited one |
+| `@Hidden` on a method ([openapi](/docs/packages/openapi)) | ✅ | A hidden base-class route stays out of the spec |
+| `@Transaction` ([drizzle](/docs/packages/drizzle)) | ✅ | A base class's transactional methods run inside a transaction |
+| Controller-level `middlewares` | ✅ | See below — a subclass may add, never silently drop |
+| Plain methods, getters, statics | ✅ | Normal JavaScript inheritance |
+
+And what is **not** inherited, because it describes the class rather than the request:
+
+| Metadata | Why |
+|:---------|:----|
+| `@Controller` / `@WebSocket` / `@FrontendController` path | The route mounts under the concrete class's prefix |
+| Component name, scope | Identity — two classes must not resolve to one name |
+| `@EventService` / `@MessageController` prefix and transport | Same reason as the path |
+| Component type (`CONTROLLER`, `SERVICE`, …) | A class is what its own decorator says it is |
+| `@Hidden` on a class | Re-exposing a hidden base under a new `@Controller` is a legitimate thing to write |
+
+## `@Implements` is inherited; the component name is not
+
+These look like the same kind of metadata and behave differently, on purpose.
+
+A component **name** must be unique — two classes resolving to one name is a collision, which is
+why an undecorated subclass is not registered at all. An **interface key** is deliberately
+multi-valued: registering several classes under one key is the whole mechanism behind
+[`@Strategy`](/docs/concepts/dependency-injection), whose consumer side injects everything found
+there as an array. `@Implements` is the producer side of that same mechanism.
+
+So a subclass joins its base's interface registration without redeclaring anything, exactly as a
+Java or Spring subclass remains an instance of its base's interfaces:
+
+```typescript
+@Service()
+@Implements('IPaymentGateway')
+export class StripeGateway implements PaymentGateway { /* … */ }
+
+@Service()
+export class StripeGatewayWithAudit extends StripeGateway { /* … */ }
+
+@Service()
+export class Checkout {
+  // Receives BOTH implementations - the subclass never declares @Implements
+  @Strategy('IPaymentGateway')
+  private gateways: PaymentGateway[];
+}
+```
+
+::: warning `@Inject` on an interface key returns an array
+An interface key holding more than one implementation is normal. Reach for it with `@Strategy`,
+which expects a list. `@Inject('IPaymentGateway')` hands back the array too, and the failure
+surfaces later as `… is not a function` on first use.
+:::
+
+## Guards follow the routes they protect
+
+A controller's class-level `middlewares` are unioned across the chain, ancestors first:
+
+```typescript
+@Controller({ path: '/admin', middlewares: [AuthMiddleware] })
+abstract class AdminBase {
+  @Get('/users')
+  public listUsers(context: Context) {
+    return context.send(allUsers());
+  }
+}
+
+@Controller('/v2/admin')
+export class AdminV2 extends AdminBase {}
+```
+
+`GET /v2/admin/users` runs `AuthMiddleware`, even though `AdminV2` never mentions it. A subclass may **add** middlewares; it cannot silently drop an inherited one, because a route arriving without its guard is never the safe default.
+
+To publish a base class's routes *without* its guards, move the routes to an undecorated base class and let each concrete controller declare its own `middlewares`.
+
+Repositories behave the same way — `@Repository` and `@Database` from [`@asenajs/asena-drizzle`](/docs/packages/drizzle) keep everything the decorated class inherited, including getters and statics.
+
+## How overrides resolve
+
+The unit of overriding is the **method name**, exactly as in JAX-RS ([spec §3.6](https://jakarta.ee/specifications/restful-ws/)) and Spring.
+
+```typescript
+abstract class Base {
+  @Get('/value')
+  public value(context: Context) {
+    return context.send({ from: 'base' });
+  }
+}
+
+@Controller('/example')
+class Example extends Base {
+  @Get('/value')
+  public override value(context: Context) {
+    return context.send({ from: 'subclass' });
+  }
+}
+```
+
+One route is registered and it answers `{ from: 'subclass' }`. This is a plain override, not a conflict — nothing is reported.
+
+The same rule applies to `@On`, `@MessagePattern`, `@EventPattern` and `@Page`: same method name means the subclass replaces the inherited entry and keeps every other one.
+
+::: tip Redeclaring the decorator is optional
+An override that does not repeat `@Get` still serves the inherited route — the metadata comes from the base class, the implementation from the subclass. Repeat the decorator only when you want to change the path or options.
+:::
+
+## Conflicts that fail the build
+
+Overriding is by method name; conflict detection is by **resolved path or pattern**. They are separate checks, and only the second one throws.
+
+### Two methods on the same route
+
+```typescript
+abstract class Base {
+  @Get('/live')
+  public live(context: Context) { /* ... */ }
+}
+
+@Controller('/probe')
+class Probe extends Base {
+  // Different method name, same path as the inherited route
+  @Get('/live')
+  public health(context: Context) { /* ... */ }
+}
+```
+
+```
+Error: Duplicate route detected: GET /probe/live — already registered by
+Probe.live(), conflicts with Probe.health()
+```
+
+The server refuses to start. Spring reports the same situation as `Ambiguous mapping`. Fix it by renaming the subclass method to match the inherited one, which turns the conflict into an override.
+
+The same error appears when two controllers extend one route-carrying base class **and share a prefix**. Give them distinct prefixes, or move the shared routes out of the base class.
+
+### Two handlers on the same message pattern
+
+`@MessagePattern` is request/response, so two handlers on one pattern is ambiguous — nothing decides which one produces the reply:
+
+```
+Error: Duplicate message pattern detected: "order.get" on transport "default" —
+already registered by OrderController.get(), conflicts with OrderController.fetch()
+```
+
+`@EventPattern` and `@On` are exempt. Several handlers on one pattern is fan-out, which is the point of an event.
+
+## Inherited handlers are logged at startup
+
+Inheritance is invisible in the source of the class you are reading, so the server reports what each component picked up:
+
+```
+Controller ProbeController inherits routes: live, guarded
+[Microservice] OrderController inherits handlers: onPaymentCompleted
+EventService AuditNotifier inherits handlers: onUserCreated
+```
+
+Nothing is logged for a component that declares all of its own handlers.
+
+::: warning An inherited @EventPattern opens a real subscription
+`@EventPattern` and `@MessagePattern` register against the configured microservice transport — Redis, Kafka, or whatever `transport()` returns. Extending a base class that declares them makes your service **consume those patterns**, with at-least-once delivery on durable transports.
+
+That is the intended semantic: extending a class means adopting its behaviour. But check the startup log after adding a base class you did not write, and keep inherited handlers idempotent like any other.
+:::
+
+## Practical pattern: a shared platform package
+
+Asena never scans `node_modules`, so shared components have to reach the container through a decorated class in the application's own source. The base class carries the behaviour; the subclass carries the decorator and the prefix.
+
+```typescript
+// @acme/platform
+export abstract class CrudControllerBase<T> {
+  @Inject(AuditService)
+  protected auditService: AuditService;
+
+  @Get('/')
+  public async list(context: Context) {
+    return context.send(await this.findAll());
+  }
+
+  @Get('/:id')
+  public async byId(context: Context) {
+    return context.send(await this.findOne(context.getParam('id')));
+  }
+
+  protected abstract findAll(): Promise<T[]>;
+  protected abstract findOne(id: string): Promise<T | null>;
+}
+```
+
+```typescript
+// services/orders/src/controllers/OrderController.ts
+@Controller('/api/orders')
+export class OrderController extends CrudControllerBase<Order> {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  protected findAll() {
+    return this.orderService.findAll();
+  }
+
+  protected findOne(id: string) {
+    return this.orderService.findById(id);
+  }
+}
+```
+
+`GET /api/orders` and `GET /api/orders/:id` are served by the base class implementation, running against the subclass instance — `this.orderService` and `this.auditService` are both injected.
+
+## Related
+
+- [Controllers](/docs/concepts/controllers) — routing and the `@Controller` prefix
+- [Dependency Injection](/docs/concepts/dependency-injection) — how `@Inject` resolves along the chain
+- [Microservices](/docs/concepts/microservices) — `@MessageController` prefixes and transports
+- [Event System](/docs/concepts/event-system) — in-process `@On` handlers
+- [Drizzle](/docs/packages/drizzle) — `@Repository` and `@Database` inheritance
+
+
+---
+
 # Adapters Overview
 Section: Adapters
 Source: https://asena.sh/raw/adapters/overview.md
@@ -10998,7 +11578,7 @@ Benchmark conditions: 12 threads, 400 connections, 120s duration, Hello World en
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
 const adapter = createErgenecoreAdapter();
@@ -11015,73 +11595,73 @@ await server.start();
 ### Hono Setup
 
 ```typescript
-import { AsenaServer } from '@asenajs/asena';
+import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
-import { DefaultLogger } from '@asenajs/asena/logger';
+import { AsenaLogger } from '@asenajs/asena-logger';
 
-const [adapter, logger] = createHonoAdapter(new DefaultLogger());
+// createHonoAdapter returns a tuple; createErgenecoreAdapter returns the adapter alone
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
-await new AsenaServer(adapter)
-  .logger(logger)
-  .port(3000)
-  .start(true);
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000
+});
+
+await server.start();
 ```
 
-## Context API Differences
+## Context API
 
-Both adapters provide a similar Context API, but with some differences:
+Both adapters implement the same `AsenaContext` interface, so handler code is identical -
+only the import path differs.
 
-### Ergenecore Context
+::: code-group
 
-```typescript
-import type { Context } from '@asenajs/ergenecore/types';
+```typescript [Ergenecore]
+import type { Context } from '@asenajs/ergenecore';
 
-// Get parameters
+// Get parameters - getParam is sync, getQuery/getBody are async
 const id = context.getParam('id');
-const page = context.getQuery('page');
-const body = await context.getBody();
+const page = await context.getQuery('page');
+const body = await context.getBody<{ name: string }>();
 
 // Send response
-return context.send({ data }, 200);
+return context.send({ id, page, body }, 200);
 ```
 
-### Hono Context
-
-```typescript
+```typescript [Hono]
 import type { Context } from '@asenajs/hono-adapter';
 
-// Get parameters
+// Get parameters - getParam is sync, getQuery/getBody are async
 const id = context.getParam('id');
-const page = context.getQuery('page');
-const body = await context.getBody();
+const page = await context.getQuery('page');
+const body = await context.getBody<{ name: string }>();
 
 // Send response
-return context.json({ data }, 200);
+return context.send({ id, page, body }, 200);
 ```
+
+:::
+
+The differences are in what `context.req` gives you: a native `Request` on Ergenecore,
+a `HonoRequest` on Hono. See [Context API](/docs/concepts/context) for the full surface.
 
 ## Migration Between Adapters
 
-::: warning
-Migrating between adapters requires updating your Import and maybe some context calls, but your controllers, services, and business logic remain unchanged.
+::: tip
+Migrating between adapters means changing the adapter factory and the `Context` import
+path. Controllers, services and business logic stay unchanged.
 :::
 
 ### From Hono to Ergenecore
 
 ```typescript
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/hono-adapter';
-
-// Before (Hono)
-@Get('/:id')
-async getUser(context: Context) {
-  const id = context.getParam('id');
-  return context.json({ id });
-}
-
-// After (Ergenecore)
-import { Get } from '@asenajs/asena/decorators/http';
+// Before: import type { Context } from '@asenajs/hono-adapter';
 import type { Context } from '@asenajs/ergenecore';
 
+// The handler body itself does not change
 @Get('/:id')
 async getUser(context: Context) {
   const id = context.getParam('id');
@@ -11089,12 +11669,22 @@ async getUser(context: Context) {
 }
 ```
 
+The bootstrap file changes too, because the factories differ:
+
+```typescript
+// Before (Hono) - returns a tuple
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
+
+// After (Ergenecore) - returns the adapter alone
+const adapter = createErgenecoreAdapter();
+```
+
 ## Advanced Adapter Configuration
 
 ### Ergenecore Advanced Setup
 
 ```typescript
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 
 const adapter = createErgenecoreAdapter({
   hostname: '0.0.0.0',
@@ -11110,8 +11700,10 @@ const adapter = createErgenecoreAdapter({
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-const [adapter, asenaLogger] = createHonoAdapter(logger, {
-  // Hono-specific options
+// Single argument: either a bare logger, or an options object containing one
+const [adapter, asenaLogger] = createHonoAdapter({
+  logger,
+  strict: false, // match '/health' and '/health/' alike - useful behind a reverse proxy
 });
 ```
 
@@ -11246,7 +11838,8 @@ bun add @asenajs/ergenecore
 
 **Requirements:**
 - Bun v1.3.12 or higher
-- TypeScript v5.8.2 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- TypeScript v5.9.3 or higher
 
 ## Quick Start
 
@@ -11254,7 +11847,7 @@ bun add @asenajs/ergenecore
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { logger } from './logger';
 
 // Create adapter
@@ -11275,7 +11868,7 @@ await server.start();
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -11306,7 +11899,7 @@ Ergenecore provides three factory functions for creating adapter instances with 
 Creates a new Ergenecore adapter instance with custom configuration.
 
 ```typescript
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 
 const adapter = createErgenecoreAdapter({
   hostname: 'localhost',
@@ -11319,18 +11912,19 @@ const adapter = createErgenecoreAdapter({
 
 | Option              | Type                         | Default     | Description                    |
 |:--------------------|:-----------------------------|:------------|:-------------------------------|
-| `port`              | `number`                     | `3000`      | Server port (passed to AsenaServerFactory) |
-| `hostname`          | `string`                     | `undefined` | Server hostname (binds to all interfaces if not set) |
+| `port`              | `number`                     | —           | **Ignored.** `AsenaServer.start()` overwrites it with the port from `AsenaServerFactory.create({ port })`. |
+| `hostname`          | `string`                     | `undefined` | Server hostname. On Ergenecore this is the **only** way to set it - `serveOptions.hostname` is overwritten. |
 | `logger`            | `ServerLogger`               | `undefined` | Custom logger instance         |
 | `enableWebSocket`   | `boolean`                    | `true`      | Enable WebSocket support       |
 | `websocketAdapter`  | `ErgenecoreWebsocketAdapter` | Auto        | Custom WebSocket adapter       |
+| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 ### createProductionAdapter(options?)
 
 Creates a production-optimized adapter with sensible defaults.
 
 ```typescript
-import { createProductionAdapter } from '@asenajs/ergenecore/factory';
+import { createProductionAdapter } from '@asenajs/ergenecore';
 
 const adapter = createProductionAdapter({
   hostname: '0.0.0.0',
@@ -11339,24 +11933,33 @@ const adapter = createProductionAdapter({
 ```
 
 **Production Defaults:**
-- WebSocket enabled
-- Optimized for performance
-- Use with production logger
+- WebSocket enabled (which is already the default)
+
+::: info It is an alias
+`createProductionAdapter(options)` forwards to `createErgenecoreAdapter(options)` with
+`enableWebSocket` defaulted to `true` - and that is already the base default. There is no
+additional performance tuning; the name only documents intent.
+:::
 
 ### createDevelopmentAdapter(options?)
 
 Creates a development-friendly adapter with verbose logging.
 
 ```typescript
-import { createDevelopmentAdapter } from '@asenajs/ergenecore/factory';
+import { createDevelopmentAdapter } from '@asenajs/ergenecore';
 
 const adapter = createDevelopmentAdapter();
 ```
 
 **Development Defaults:**
-- Port 3000
-- WebSocket enabled
-- Console logging enabled
+- WebSocket **forced** on - unlike the other two factories, passing
+  `enableWebSocket: false` here has no effect
+- Same default console logger as `createErgenecoreAdapter`
+
+::: tip Prefer `createErgenecoreAdapter`
+The three factories are near-identical. Use the plain one unless you specifically want the
+forced-WebSocket behaviour.
+:::
 
 ## Built-in Middleware
 
@@ -11419,9 +12022,9 @@ export class DynamicCors extends CorsMiddleware {
 
 | Option           | Type                          | Default    | Description                     |
 |:-----------------|:------------------------------|:-----------|:--------------------------------|
-| `origin`         | `string \| string[] \| function` | `'*'`   | Allowed origins                 |
+| `origin`         | `'*' \| string[] \| (origin: string) => boolean` | `'*'` | Allowed origins. A **bare origin string is not supported** here - wrap it in an array. |
 | `credentials`    | `boolean`                     | `false`    | Allow credentials               |
-| `methods`        | `string[]`                    | All        | Allowed HTTP methods            |
+| `methods`        | `string[]`                    | `['GET','POST','PUT','PATCH','DELETE','OPTIONS']` | Allowed HTTP methods |
 | `allowedHeaders` | `string[]`                    | `['Content-Type', 'Authorization']` | Allowed request headers |
 | `exposedHeaders` | `string[]`                    | `[]`       | Exposed response headers        |
 | `maxAge`         | `number`                      | `86400`    | Preflight cache duration (sec)  |
@@ -11435,7 +12038,9 @@ import { ConfigService } from '@asenajs/ergenecore';
 // Global CORS
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 
 // Per-route CORS
@@ -11501,10 +12106,10 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
       refillRate: 50 / 60,
 
       // Rate limit by user ID instead of IP
-      keyGenerator: (ctx) => ctx.state.user?.id || 'anonymous',
+      keyGenerator: (ctx) => ctx.getValue('user')?.id || 'anonymous',
 
       // Skip rate limiting for admin users
-      skip: (ctx) => ctx.state.user?.role === 'admin',
+      skip: (ctx) => ctx.getValue('user')?.role === 'admin',
 
       // Expensive operations cost more tokens
       cost: (ctx) => ctx.req.url.includes('/search') ? 5 : 1,
@@ -11527,7 +12132,7 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | IP-based                                 | Client identifier function     |
+| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
@@ -11553,7 +12158,9 @@ import { ConfigService } from '@asenajs/ergenecore';
 // Global rate limiter
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [ApiRateLimiter];
+  globalMiddlewares() {
+    return [ApiRateLimiter];
+  }
 }
 
 // Per-controller
@@ -11600,7 +12207,7 @@ Ergenecore is built exclusively with:
 Always import Context from Ergenecore's types:
 
 ```typescript
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 ```
 
 ::: info
@@ -11618,7 +12225,7 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization');
+    const token = context.headers['authorization'];
     if (!token) {
       return context.send({ error: 'Unauthorized' }, 401);
     }
@@ -11662,20 +12269,61 @@ Extend `ConfigService` for server configuration:
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/ergenecore';
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error);
-    return context.send({ error: error.message }, 500);
+    return context.send({ error: 'Something went wrong' }, 500);
+  }
+
+  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
 
+### The two handlers do not overlap
+
+`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
+route** — a routing outcome, not a failure — so neither handler has to ask which case it is looking
+at. An unmatched route never reaches `onError`.
+
+`request.path` is the path only, with no origin and no query string, and `request.method` is
+normalised by the adapter, so the same handler body works unchanged on the Hono adapter. With no
+`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
+
+A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
+`onError`:
+
+```typescript
+throw new HttpException(404, { message: 'User not found' });
+```
+
+::: warning `onNotFound` also catches missing static files
+A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
+body. The per-route `StaticServeService.onNotFound` still runs first when you declare one.
+:::
+
+### Every thrown error reaches `onError` first
+
+Including `HttpException`. The adapter used to answer an `HttpException` straight from
+`getResponse()` at several points and only consult your handler for everything else, so an
+application could reshape its own 4xx envelopes on the Hono adapter but not here. Your handler now
+sees all of them, and the adapter falls back to `getResponse()` (or a generic 500) only when there
+is no handler, when it returns nothing, or when it throws.
+
+With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+thrown message is deliberately not echoed to the caller — it is written to the log with its stack
+instead.
+
 ::: info
-For configuration, see [Configuration](/docs/guides/configuration).
+For configuration, see [Configuration](/docs/guides/configuration), and for the full picture of
+both hooks see [Error Handling](/docs/guides/error-handling).
 :::
 
 ## Best Practices
@@ -11684,10 +12332,10 @@ For configuration, see [Configuration](/docs/guides/configuration).
 
 ```typescript
 // ✅ Good: Type-only import
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 // ❌ Bad: Runtime import for types
-import { Context } from '@asenajs/ergenecore/types';
+import { Context } from '@asenajs/ergenecore';
 ```
 
 ### 2. Leverage Built-in Middleware
@@ -11696,7 +12344,9 @@ import { Context } from '@asenajs/ergenecore/types';
 // ✅ Good: Use built-in CORS and rate limiting
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 }
 ```
 
@@ -11704,16 +12354,39 @@ export class ServerConfig extends ConfigService {
 
 ```typescript
 // ✅ Good: Extend base classes
-import { MiddlewareService, ValidationService, ConfigService } from '@asenajs/ergenecore';
+import { Config, Middleware } from '@asenajs/asena/decorators';
+import {
+  ConfigService,
+  MiddlewareService,
+  ValidationService,
+  type Context,
+  type ValidationSchema,
+} from '@asenajs/ergenecore';
+import { z } from 'zod';
 
+// MiddlewareService requires handle() - it is the only abstract member
 @Middleware()
-export class MyMiddleware extends MiddlewareService { }
+export class MyMiddleware extends MiddlewareService {
+  public async handle(context: Context, next: () => Promise<void>) {
+    await next();
+  }
+}
 
+// ValidationService has no abstract members; define the request parts you validate
 @Middleware({ validator: true })
-export class MyValidator extends ValidationService { }
+export class MyValidator extends ValidationService {
+  public json(): ValidationSchema {
+    return z.object({ name: z.string() });
+  }
+}
 
+// ConfigService has no abstract members; override only the hooks you need
 @Config()
-export class MyConfig extends ConfigService { }
+export class MyConfig extends ConfigService {
+  public onError(error: Error, context: Context) {
+    return context.send({ error: error.message }, 500);
+  }
+}
 ```
 
 ### 4. Use Factory Functions
@@ -11733,7 +12406,7 @@ const adapter = process.env.NODE_ENV === 'production'
 
 ```typescript
 // Solution: Use type-only import
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 ```
 
 **Issue: Middleware not executing**
@@ -11841,6 +12514,7 @@ bun add @asenajs/hono-adapter
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.3.12 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 - TypeScript v5.8.2 or higher
 
 ## Quick Start
@@ -11850,9 +12524,10 @@ bun add @asenajs/hono-adapter
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
+import { AsenaLogger } from '@asenajs/asena-logger';
 
-// Create adapter (returns tuple: [adapter, logger])
-const [adapter, logger] = createHonoAdapter();
+// Create adapter (returns tuple: [adapter, logger]) - a logger is required
+const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
 // Create and start server
 const server = await AsenaServerFactory.create({
@@ -11876,13 +12551,13 @@ export class UserController {
   @Get({ path: '/:id' })
   async getById(context: Context) {
     const id = context.req.param('id');
-    return context.json({ id, name: 'John Doe' });
+    return context.send({ id, name: 'John Doe' });
   }
 
   @Post({ path: '/' })
   async create(context: Context) {
     const body = await context.req.json();
-    return context.json({ created: true, data: body }, 201);
+    return context.send({ created: true, data: body }, 201);
   }
 }
 ```
@@ -11924,6 +12599,7 @@ const [adapter, logger] = createHonoAdapter({
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
 | `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
+| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 **Returns:** Tuple: `[adapter, logger]`
 
@@ -12006,7 +12682,7 @@ export class DynamicCors extends CorsMiddleware {
 |:-----------------|:------------------------------|:-----------|:--------------------------------|
 | `origin`         | `string \| string[] \| function` | `'*'`   | Allowed origins                 |
 | `credentials`    | `boolean`                     | `false`    | Allow credentials               |
-| `methods`        | `string[]`                    | All        | Allowed HTTP methods            |
+| `methods`        | `string[]`                    | `['GET','POST','PUT','PATCH','DELETE','OPTIONS']` | Allowed HTTP methods |
 | `allowedHeaders` | `string[]`                    | `['Content-Type', 'Authorization']` | Allowed request headers |
 | `exposedHeaders` | `string[]`                    | `[]`       | Exposed response headers        |
 | `maxAge`         | `number`                      | `86400`    | Preflight cache duration (sec)  |
@@ -12020,7 +12696,9 @@ import { ConfigService } from '@asenajs/hono-adapter';
 // Global CORS
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 
 // Per-route CORS
@@ -12028,7 +12706,7 @@ export class ServerConfig extends ConfigService {
 export class ApiController {
   @Get({ path: '/public', middlewares: [RestrictedCors] })
   async publicData(context: Context) {
-    return context.json({ data: 'public' });
+    return context.send({ data: 'public' });
   }
 }
 ```
@@ -12112,7 +12790,7 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | IP-based                                 | Client identifier function     |
+| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
@@ -12138,7 +12816,9 @@ import { ConfigService } from '@asenajs/hono-adapter';
 // Global rate limiter
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [ApiRateLimiter];
+  globalMiddlewares() {
+    return [ApiRateLimiter];
+  }
 }
 
 // Per-controller
@@ -12151,7 +12831,7 @@ export class AuthController {
   @Post({ path: '/login', middlewares: [StrictRateLimiter] })
   async login(context: Context) {
     const body = await context.req.json();
-    return context.json({ token: 'abc123' });
+    return context.send({ token: 'abc123' });
   }
 }
 ```
@@ -12166,13 +12846,15 @@ RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal 
 
 The `@Override` decorator allows middleware to work directly with Hono's native context without Asena wrappers. This is **unique to Hono Adapter** and enables seamless integration with Hono ecosystem middleware.
 
+Extend `AsenaMiddlewareService` rather than the adapter's `MiddlewareService` here: the adapter class binds `handle()` to Asena's wrapped Context, so declaring a Hono `Context` parameter on it is a signature mismatch. `AsenaMiddlewareService` leaves the context type open, which is exactly what `@Override` needs.
+
 ```typescript
 import { Middleware, Override } from '@asenajs/asena/decorators';
-import { MiddlewareService } from '@asenajs/hono-adapter';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class NativeHonoMiddleware extends MiddlewareService {
+export class NativeHonoMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's native context directly - no wrapper!
@@ -12181,6 +12863,7 @@ export class NativeHonoMiddleware extends MiddlewareService {
     await next();
 
     const duration = Date.now() - startTime;
+    // Hono's own API - this is the native context, not Asena's wrapper
     context.header('X-Response-Time', `${duration}ms`);
   }
 }
@@ -12196,13 +12879,13 @@ export class NativeHonoMiddleware extends MiddlewareService {
 
 ```typescript
 import { Middleware, Override } from '@asenajs/asena/decorators';
-import { MiddlewareService } from '@asenajs/hono-adapter';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import { compress } from 'hono/compress';
 import { logger } from 'hono/logger';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class CompressionMiddleware extends MiddlewareService {
+export class CompressionMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's compress middleware directly
@@ -12211,7 +12894,7 @@ export class CompressionMiddleware extends MiddlewareService {
 }
 
 @Middleware()
-export class LoggerMiddleware extends MiddlewareService {
+export class LoggerMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's logger middleware directly
@@ -12251,7 +12934,7 @@ export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
     const token = context.req.header('authorization');
     if (!token) {
-      return context.json({ error: 'Unauthorized' }, 401);
+      return context.send({ error: 'Unauthorized' }, 401);
     }
     await next();
   }
@@ -12296,11 +12979,13 @@ import { ConfigService, type Context } from '@asenajs/hono-adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
     console.error('Error:', error);
-    return context.json({ error: error.message }, 500);
+    return context.send({ error: error.message }, 500);
   }
 }
 ```
@@ -12316,8 +13001,8 @@ Extend `StaticServeService` for serving static files:
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import { StaticServe, StaticServeService } from '@asenajs/asena/static';
-import type { Context } from '@asenajs/hono-adapter/types';
+import { StaticServe } from '@asenajs/asena/decorators';
+import { StaticServeService, type Context } from '@asenajs/hono-adapter';
 
 @StaticServe({ root: './public' })
 export class StaticMiddleware extends StaticServeService {
@@ -12377,13 +13062,13 @@ export class UserController {
   @Get({ path: '/:id' })
   async getUser(context: Context) {
     const id = context.req.param('id');
-    return context.json({ id, name: 'John' });
+    return context.send({ id, name: 'John' });
   }
 
   @Post({ path: '/' })
   async create(context: Context) {
     const body = await context.req.json();
-    return context.json({ created: true, data: body }, 201);
+    return context.send({ created: true, data: body }, 201);
   }
 }
 ```
@@ -12407,14 +13092,21 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { AsenaServerFactory } from "@asenajs/asena";
 import { createHonoAdapter } from "@asenajs/hono-adapter";
 import { UserController } from "./controllers/UserController";
+import { logger } from "./logger";
 
 describe("UserController", () => {
   let server;
   let baseUrl;
 
   beforeEach(async () => {
-    const port = Math.floor(Math.random() * 55000) + 10000;
-    const [adapter, logger] = createHonoAdapter();
+    // 10000-31999: below the kernel's ephemeral floor (net.ipv4.ip_local_port_range,
+    // 32768-60999). A server port drawn from that range collides with the outbound
+    // sockets the suite itself holds open - TIME_WAIT included - and Bun.serve then
+    // fails with EADDRINUSE, randomly, in whichever test happened to draw it.
+    const port = 10000 + Math.floor(Math.random() * 22000);
+    // createHonoAdapter returns a tuple and requires a logger - calling it with no argument
+    // yields [adapter, undefined], and AsenaServerFactory.create throws on the undefined logger
+    const [adapter] = createHonoAdapter({ logger });
 
     server = await AsenaServerFactory.create({
       adapter,
@@ -12490,7 +13182,9 @@ import { Context } from '@asenajs/hono-adapter';
 // ✅ Good: Use built-in CORS and rate limiting
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors, ApiRateLimiter];
+  globalMiddlewares() {
+    return [GlobalCors, ApiRateLimiter];
+  }
 }
 ```
 
@@ -12499,7 +13193,7 @@ export class ServerConfig extends ConfigService {
 ```typescript
 // ✅ Good: Use @Override for Hono ecosystem middleware
 @Middleware()
-export class HonoCompress extends MiddlewareService {
+export class HonoCompress extends AsenaMiddlewareService {
   @Override()
   async handle(c: HonoContext, next: Next) {
     return compress()(c, next);
@@ -12513,7 +13207,7 @@ export class HonoCompress extends MiddlewareService {
 // ✅ Good: Use Hono's native context methods
 const id = context.req.param('id');
 const body = await context.req.json();
-return context.json({ data });
+return context.send({ data });
 
 // Also works: Asena's unified API
 const id = context.getParam('id');
@@ -12549,12 +13243,14 @@ export class MyMiddleware extends MiddlewareService {
 **Issue: Hono-specific middleware not working**
 
 ```typescript
-// Solution: Use @Override decorator for native Hono middleware
+// Solution: Use @Override decorator for native Hono middleware, and extend
+// AsenaMiddlewareService so the Hono Context parameter type-checks
 import { Override } from '@asenajs/asena/decorators';
+import { AsenaMiddlewareService } from '@asenajs/asena/middleware';
 import type { Context as HonoContext, Next } from 'hono';
 
 @Middleware()
-export class MyHonoMiddleware extends MiddlewareService {
+export class MyHonoMiddleware extends AsenaMiddlewareService {
   @Override()
   async handle(context: HonoContext, next: Next) {
     // Use Hono's native context
@@ -12599,7 +13295,10 @@ bun add @asenajs/asena-logger
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
+- TypeScript v5.8.3 or higher
+
+The package has no peer dependency on `@asenajs/asena` - it only implements the
+`ServerLogger` shape, so it works with any version.
 
 ## Quick Start
 
@@ -12607,7 +13306,7 @@ bun add @asenajs/asena-logger
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 // Create logger
@@ -12630,14 +13329,14 @@ await server.start();
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createHonoAdapter } from '@asenajs/hono-adapter/factory';
+import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 // Create logger
 export const logger = new AsenaLogger();
 
-// Create adapter
-const adapter = createHonoAdapter();
+// Create adapter - returns a tuple, and the logger is required
+const [adapter] = createHonoAdapter({ logger });
 
 // Create and start server
 const server = await AsenaServerFactory.create({
@@ -12660,6 +13359,17 @@ The most common pattern in Asena is to export the logger and use it directly:
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 export const logger = new AsenaLogger();
+```
+
+The constructor also takes an optional Winston logger and an options object, which is the
+simplest way to change the level or add transports without building a Winston logger
+yourself:
+
+```typescript
+export const logger = new AsenaLogger(undefined, {
+  level: 'debug',
+  transports: [/* extra Winston transports */],
+});
 ```
 
 ```typescript
@@ -12699,8 +13409,9 @@ You can also inject the logger using the IoC container:
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
-import { Inject, ICoreServiceNames } from '@asenajs/asena/decorators/ioc';
-import type { ServerLogger } from '@asenajs/asena/adapter';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
+import type { ServerLogger } from '@asenajs/asena/logger';
 
 @Service()
 export class UserService {
@@ -12794,13 +13505,20 @@ logger.profile('expensive-operation'); // Logs: "expensive-operation 1234ms"
 
 AsenaLogger supports the following log levels (in order of priority):
 
-| Level     | Priority | Description                     | Color  |
-|:----------|:---------|:--------------------------------|:-------|
-| `error`   | 0        | Error conditions                | Red    |
-| `warn`    | 1        | Warning conditions              | Yellow |
-| `info`    | 2        | Informational messages          | Green  |
-| `verbose` | 3        | Detailed informational messages | Cyan   |
-| `debug`   | 4        | Debug-level messages            | Blue   |
+AsenaLogger uses Winston's default `npm` levels:
+
+| Level     | Priority | Description                     | Color      |
+|:----------|:---------|:--------------------------------|:-----------|
+| `error`   | 0        | Error conditions                | Red        |
+| `warn`    | 1        | Warning conditions              | Yellow     |
+| `info`    | 2        | Informational messages          | Green      |
+| `http`    | 3        | HTTP-level messages             | uncoloured |
+| `verbose` | 4        | Detailed informational messages | uncoloured |
+| `debug`   | 5        | Debug-level messages            | Blue       |
+| `silly`   | 6        | Everything                      | uncoloured |
+
+Only `error`, `warn`, `info` and `debug` have a colour mapping; other levels print
+uppercased and uncoloured.
 
 ## Output Format
 
@@ -12830,8 +13548,8 @@ import { logger } from '../logger';
 export class RequestLoggerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const start = Date.now();
-    const method = context.getRequest().method;
-    const url = context.getRequest().url;
+    const method = context.req.method;
+    const url = context.req.url;
 
     logger.info('Request started', { method, url });
 
@@ -12856,8 +13574,8 @@ export class ServerConfig extends ConfigService {
     logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.getRequest().url,
-      method: context.getRequest().method
+      url: context.req.url,
+      method: context.req.method
     });
 
     return context.send({ error: 'Internal server error' }, 500);
@@ -12876,6 +13594,11 @@ import { logger } from '../logger';
 export class ReportService {
   @Inject(AnalyticsRepository)
   private analyticsRepo: AnalyticsRepository;
+
+  private async processData(data: unknown) {
+    // your own aggregation logic
+    return data;
+  }
 
   async generateReport(userId: string) {
     logger.profile('generate-report');
@@ -13030,8 +13753,8 @@ bun add mysql2          # For MySQL
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
-- [drizzle-orm](https://orm.drizzle.team) v0.44 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
 
@@ -13150,18 +13873,19 @@ Without the database type parameter, TypeScript cannot infer the correct query b
 |----------|--------|-------------|
 | PostgreSQL | `pg` | `NodePgDatabase<typeof Schemas>` |
 | MySQL | `mysql2` | `MySql2Database<typeof Schemas>` |
-| SQLite | `bun:sqlite` | `BunSQLDatabase<typeof Schemas>` |
+| BunSQL (PostgreSQL) | Bun native (`type: 'bun-sql'`) | `BunSQLDatabase<typeof Schemas>` |
 
 **Complete Example:**
 ```typescript
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { users } from './schema';
 
-@Repository(users)
+@Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<typeof Schemas>> {
   // Type-safe methods with IntelliSense
   async findByEmail(email: string) {
-    return this.query().where(eq(users.email, email)).limit(1);
+    // findOne() is inherited; `this.db` is the raw drizzle connection for anything else
+    return this.findOne(eq(users.email, email));
   }
 }
 ```
@@ -13223,16 +13947,16 @@ The `@Database` decorator configures a database connection:
     database: string;
     user: string;
     password: string;
+    ssl?: boolean;
     connectionString?: string; // Optional: overrides individual config
-    // PostgreSQL pool options (optional)
-    max?: number;
-    idleTimeoutMillis?: number;
-    connectionTimeoutMillis?: number;
+    name?: string;             // Optional: shown in the connection log
   },
-  name?: string; // Optional: service name (recommended for multiple databases)
+  name?: string;               // Optional: service name (recommended for multiple databases)
+  logger?: ServerLogger;       // Optional: where the adapter logs connection events
   drizzleConfig?: {
-    logger?: boolean; // Enable SQL query logging
-    schema?: any;     // Your Drizzle schema
+    logger?: boolean;      // Enable SQL query logging
+    schema?: any;          // Your Drizzle schema
+    configPath?: string;   // Path to a drizzle config file
   }
 })
 ```
@@ -13597,7 +14321,7 @@ export const posts = pgTable('posts', {
 @Repository({ table: posts, databaseService: 'MainDatabase' })
 export class PostRepository extends BaseRepository<typeof posts> {
   async findPostsWithAuthors() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     return db
       .select({
@@ -13616,7 +14340,7 @@ export class PostRepository extends BaseRepository<typeof posts> {
 @Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users> {
   async complexQuery() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     // Use Drizzle's full API
     return db
@@ -13628,7 +14352,7 @@ export class UserRepository extends BaseRepository<typeof users> {
   }
 
   async rawSQL() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     // Execute raw SQL if needed
     return db.execute(sql`
@@ -13741,7 +14465,7 @@ async writeAuditLog(event: AuditEvent) {
 
 ### Isolation & Access Mode
 
-`isolationLevel` and `accessMode` are forwarded straight to Drizzle's `db.transaction(cb, config)`:
+`isolationLevel` and `accessMode` are forwarded to Drizzle's `db.transaction(cb, config)` on the top-level paths (`REQUIRED` starting a new transaction, and `REQUIRES_NEW`). A `NESTED` call **inside** an existing transaction opens a SAVEPOINT with no config, so it inherits the outer transaction's isolation:
 
 ```typescript
 @Transaction({
@@ -13835,7 +14559,7 @@ export class UserService {
 @Service()
 export class UserService {
   async createUser(data: any) {
-    const db = getDatabase();
+    const db = this.db;
     const existing = await db.select().from(users)...
   }
 }
@@ -13873,7 +14597,7 @@ const allUsers = await userRepository.findAll(); // Could be millions!
 @Repository({ table: users, databaseService: 'MainDB' })
 export class UserRepository extends BaseRepository<typeof users> {
   async findRecentActiveUsers(days: number = 7) {
-    const db = this.getDatabase();
+    const db = this.db;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
@@ -13894,6 +14618,7 @@ export class UserRepository extends BaseRepository<typeof users> {
 
 - [Services](/docs/concepts/services)
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration)
 - [Drizzle ORM Documentation](https://orm.drizzle.team/)
 
@@ -13935,7 +14660,7 @@ bun add @asenajs/asena-openapi
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 - [Zod](https://zod.dev) v4.3 or higher
 
 ## Quick Start
@@ -14184,7 +14909,7 @@ GET /api/users (SERVER)
 - **W3C Context Propagation** — Extract incoming `traceparent`, inject outgoing context
 - **Route Exclusion** — `ignoreRoutes` with exact and wildcard matching
 - **Custom Sampling** — `ratioBasedSampler` helper for production
-- **Zero Runtime Dependencies** — Only peer deps (asena, reflect-metadata, OpenTelemetry)
+- **Minimal Dependencies** — One runtime dependency (`@opentelemetry/context-async-hooks`); everything else is a peer dep
 
 ## Installation
 
@@ -14200,7 +14925,7 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 
 ::: info Requirements
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 :::
 
 ## Quick Start
@@ -14253,7 +14978,7 @@ export class AppOtelMiddleware extends OtelTracingMiddleware {}
 ```
 
 ::: warning Important
-Asena's IoC container only scans the `src` folder defined in your `asena.config.ts`. Since `OtelTracingMiddleware` lives in `node_modules`, the container cannot discover it automatically. You **must** create a local class extending it with `@Middleware()` so that Asena can register and use it. Without this step, the container will throw an error because it cannot find the middleware.
+Asena's IoC container only scans the `src` folder defined in your `asena-config.ts`. Since `OtelTracingMiddleware` lives in `node_modules`, the container cannot discover it automatically. You **must** create a local class extending it with `@Middleware()` so that Asena can register and use it. Without this step, the container will throw an error because it cannot find the middleware.
 :::
 
 ### 3. Register the Middleware in Your Config
@@ -14561,10 +15286,10 @@ import { RedisMicroserviceTransport } from '@asenajs/asena-redis';
 export class AppConfig extends ConfigService {
   public transport() {
     return {
-      microservice: new RedisMicroserviceTransport({
-        url: 'redis://localhost:6379',
-        serviceName: 'order-service',
-      }),
+      microservice: new RedisMicroserviceTransport(
+        { url: 'redis://localhost:6379' }, // connection
+        { serviceName: 'order-service' },  // required options
+      ),
       interceptors: [otelMessaging({ system: 'redis' })],
     };
   }
@@ -14586,10 +15311,15 @@ Use `InMemorySpanExporter` and `InMemoryMetricExporter` for testing:
 ```typescript
 import { Otel, OtelTracingPostProcessor } from '@asenajs/asena-otel';
 import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
-import { InMemoryMetricExporter, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 
 const spanExporter = new InMemorySpanExporter();
-const metricExporter = new InMemoryMetricExporter();
+// InMemoryMetricExporter requires an aggregation temporality
+const metricExporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
 const metricReader = new PeriodicExportingMetricReader({
   exporter: metricExporter,
   exportIntervalMillis: 100,
@@ -14724,7 +15454,7 @@ bun add @asenajs/asena-redis redis
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 
 ## Quick Start
 
@@ -15032,10 +15762,37 @@ A background sweep (`XPENDING` + `XCLAIM`) rescues entries from crashed replicas
 
 - **Events: at-least-once.** Messages survive restarts and deploys (within the `maxStreamLength` trim window). Duplicate delivery is possible — [write idempotent handlers](/docs/concepts/microservices#idempotent-handlers).
 - **RPC: at-most-once per attempt.** Handler errors are final; retrying is the caller's decision.
+- **Replies are not durable.** A reply is a plain `PUBLISH` on the caller's reply channel and the request entry is ACKed either way — Redis pub/sub has no replay, so a reply published while the caller has no live subscription on that channel is **dropped and never redelivered**. The caller sees a `TIMEOUT`. This is the one place where the transport is deliberately lossy; see [Reply loss across an outage](#reply-loss-across-an-outage) for exactly when it bites.
+- **Readiness means "this instance can complete a `send()`", not "a socket is open".** `isConnected` requires the publisher connection **and** a reply subscription Redis is actually serving — the socket open *and* its `SUBSCRIBE` acknowledged since the last reconnect. Those are different facts: Bun's `RedisClient` reconnects on its own but does not restore subscriptions, so the replay costs a further round trip after the socket reports open, and the publisher is typically back before it finishes. Expect an instance to stay `503` a little past its reconnect; that is the honest signal, and it is what keeps a load balancer from releasing traffic at a pod whose replies are still being dropped.
 - **Reconnect:** on connection loss the transport reports `isConnected: false`, retries with capped backoff, and continues where it left off — Streams hold the messages meanwhile. If the consumer group itself was lost (Redis restart without persistence, `FLUSHALL`), the transport re-creates it automatically from the beginning of the stream, so surviving entries are replayed — but data already trimmed or flushed from the stream is gone.
 - **Connection poisoning defense:** Bun's `RedisClient` loses in-flight commands when a socket dies and afterwards resolves replies against the wrong promises. The transport guards both of its command connections against this — the blocking consumer via a wedge watchdog, the publisher via connection-loss detection plus the `commandTimeout` bound — and replaces a poisoned connection with a fresh one. The publisher is always a transport-owned duplicate, so a shared `AsenaRedisService` client is never touched.
 - **Retry latency is sweep-driven, not immediate.** A failed event is redelivered by the sweep once its idle time exceeds `claimIdleMs` — with defaults the first retry lands after ~60–90s and a poison message reaches the DLQ after `maxRetries` sweep cycles (minutes, not seconds). Coming from BullMQ/NestJS-style immediate retries, plan for this or lower `claimIdleMs`.
 - **No ordering guarantee.** Entries within a read batch are dispatched in parallel; consumers must not rely on event order.
+
+### Reply Loss Across an Outage
+
+Readiness is honest about the reply channel, but it does **not** make the reply channel durable. A reply is lost whenever it is published at a moment when the caller has no subscription on its reply channel:
+
+| Situation | Outcome |
+|---|---|
+| `send()` in flight when the connection drops | **Lost.** The responder publishes into an empty channel and ACKs the request; the caller gets a `TIMEOUT` after `requestTimeout`. |
+| `send()` issued while the instance reports `503` | Your own choice — the endpoint told you it could not serve. |
+| `send()` issued after the instance reports `200` | Delivered. This is what readiness now guarantees; before it did not. |
+
+So an RPC that spans a Redis outage must be treated as **retryable, not reliable**. Make handlers idempotent and retry the `TIMEOUT` at the caller, or use `emit()` (Streams, at-least-once) where losing the call is unacceptable.
+
+Two narrower residuals are worth knowing about:
+
+- Readiness is driven by connection events, so a health check that lands between the socket being marked open and the connect event being dispatched can read `200` for at most one event-loop turn.
+- A **custom** `RedisClientAdapter` that implements `onConnected` but neither `onResubscribed` nor subscription restoration of its own is taken at its word on connect. Both built-in adapters (`BunRedisAdapter`, `NodeRedisAdapter`) report honestly.
+
+::: warning Liveness must be more forgiving than readiness
+`isConnected` feeds Asena's health endpoint: `503` now means "the publisher is down **or** this instance's reply channel is not being served", i.e. a `send()` issued right now cannot complete. Wire it into your orchestrator's **readiness** probe. Because an instance stays `503` until its reply subscription is acknowledged — not merely until its socket reconnects — a liveness probe sharing the same thresholds will restart pods that were about to recover on their own.
+:::
+
+::: info Durable replies are not in 0.9.0
+Moving replies onto a Stream would close the loss entirely, at the cost of a per-request write and trim. It is deliberately deferred; the table above is the current contract.
+:::
 
 ## Best Practices
 
@@ -15078,6 +15835,10 @@ async health(context: Context) {
   return context.send({ redis: redisOk ? 'up' : 'down' });
 }
 ```
+
+::: warning `testConnection()` is not a microservice readiness check
+It `PING`s the cache client and says nothing about whether this instance's **reply channel** is being served, which is what decides whether a `send()` can complete. For an instance running `RedisMicroserviceTransport`, the readiness signal is the transport's `isConnected` (already wired into Asena's health endpoint) — see [Delivery Guarantees](#delivery-guarantees).
+:::
 
 ## Related Documentation
 
@@ -15127,7 +15888,7 @@ bun add @asenajs/asena-kafka kafkajs
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.8.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
 - [kafkajs](https://kafka.js.org) v2.2 or higher
 
 ::: warning Broker compatibility
@@ -15510,7 +16271,7 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 | `maxWaitTimeInMs` | `1000` | Idle fetch long-poll (boot readiness / shutdown responsiveness) |
 | `eventPartitions` / `requestPartitions` / `replyPartitions` | `4` | Partition counts for transport-created topics |
 | `replicationFactor` | `-1` | Broker default |
-| `healthCheckIntervalMs` | `5000` | Active broker probe driving `isConnected` — health endpoint reports 503 while a probe fails |
+| `healthCheckIntervalMs` | `5000` | Interval of the active broker probe. A failed probe is **one** of the inputs to `isConnected` — the reply consumer's fetch loop is the other (see [Delivery Guarantees](#delivery-guarantees)) |
 | `external` | — | Foreign-topic interop: `{ topics: (string \| { name, keyHeader? })[], fromBeginning? }` — see [External Topics](#external-topics-interop) |
 
 ### Delivery Guarantees
@@ -15518,7 +16279,9 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 - **Events: at-least-once.** Messages survive restarts and deploys. Duplicate delivery is possible — [write idempotent handlers](/docs/concepts/microservices#idempotent-handlers) keyed on `context.messageId` (one id per emit, identical for every group and every redelivery).
 - **RPC: at-most-once per attempt.** Handler errors are final. Requests older than the caller's own timeout are **dropped without execution** — a restarting service never burns through a backlog of dead RPCs.
 - **First boot starts at latest.** A brand-new consumer group ignores messages produced before the service ever existed — deploy consumers before producers. The start position is pinned to a committed offset immediately, so later crash-restarts can never skip records.
-- **Reconnect:** on broker loss the transport reports `isConnected: false` (health endpoint 503) via an active metadata probe, kafkajs reconnects with its built-in retry, and consumption resumes from committed offsets.
+- **Reconnect:** on broker loss the transport reports `isConnected: false` (health endpoint 503), kafkajs reconnects with its built-in retry, and consumption resumes from committed offsets.
+- **Readiness means "can serve", not "a broker answers".** `isConnected` requires **both** a passing metadata probe **and** a reply consumer that has rejoined its group and is fetching. The probe alone goes green within about a second of a broker coming back, while the ephemeral reply group can still be rejoining ~20 seconds later — and until it fetches, nothing consumes replies, so every `send()` on that instance times out. Expect an instance to stay 503 for as long as its reply consumer takes to rejoin after an outage; that is the honest signal, and it is what keeps an orchestrator from routing RPC traffic at an instance that cannot complete it. A stall is detected from the fetch loop going quiet for 5 s, so readiness can lag a fresh stall by up to that much — kafkajs's own `CRASH` takes ~7.5 s.
+- **Replies survive a rejoin.** The reply consumer's start position is committed as an offset, so a rejoin resumes where it left off instead of re-resolving `latest`. A reply produced while the consumer was away is delivered late, never skipped.
 - **Ordering:** with the default multi-partition event topic, publish order is not preserved end-to-end. Use `eventPartitions: 1` for strict ordering at the cost of parallelism.
 - **Rolling deploys:** kafkajs uses eager rebalancing — every membership change briefly pauses the group. Graceful shutdown leaves the group cleanly (short pause); SIGKILL costs a full `sessionTimeout`.
 
@@ -15638,7 +16401,7 @@ Kafka guarantees order within a partition, not across a topic. Give related mess
 
 ### 4. Watch the Health Endpoint
 
-The transport's `isConnected` feeds Asena's health endpoint — `503` means the broker probe is failing. Wire it into your orchestrator's readiness checks.
+The transport's `isConnected` feeds Asena's health endpoint — `503` means either the broker probe is failing **or** the reply consumer is not fetching, i.e. this instance cannot complete a `send()`. Wire it into your orchestrator's readiness checks. After a broker outage an instance stays 503 until its reply consumer has rejoined, which can take tens of seconds; a liveness probe must be more forgiving than the readiness probe, or the orchestrator will restart pods that were about to recover on their own.
 
 ## Troubleshooting
 
@@ -15666,7 +16429,12 @@ Thrown at construction, on purpose. kafkajs cannot heartbeat while your handler 
 
 ### Health endpoint returns 503
 
-The active metadata probe is failing — the broker is unreachable, credentials are wrong, or TLS is misconfigured. `isConnected` recovers automatically once probes succeed again.
+Two independent causes, both recovering on their own:
+
+1. **The active metadata probe is failing** — the broker is unreachable, credentials are wrong, or TLS is misconfigured.
+2. **The reply consumer is not fetching** — normal for tens of seconds after a broker outage, while kafkajs works through its retry backoff and the ephemeral reply group rejoins. Until it does, this instance cannot complete a `send()`, so 503 is the correct answer.
+
+If 503 persists past a rejoin, check the logs for `reply consumer recreate failed`.
 
 ### Connecting to Kafka 4.0 fails
 
@@ -15717,7 +16485,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Project Scaffolding** - Create new projects with complete setup
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
-- **Development Mode** - Hot reload and automatic compilation
+- **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
 ## Key Features
@@ -15837,7 +16605,7 @@ Check that the CLI is installed correctly:
 asena --version
 ```
 
-You should see the version number (e.g., `0.2.0`).
+You should see the version number (e.g., `0.7.1`).
 
 View available commands:
 
@@ -16012,18 +16780,29 @@ When using interactive mode without CLI arguments:
 ```
 my-asena-app/
 ├── src/
-│   ├── controllers/    # Route controllers
-│   ├── services/       # Business logic
-│   ├── middlewares/    # Middleware files
-│   ├── config/         # Server configuration classes
-│   ├── namespaces/     # WebSocket namespaces
-│   └── index.ts        # Application entry point
-├── tests/              # Test files
-├── public/             # Static assets
-├── asena.config.ts     # Configuration
+│   ├── controllers/
+│   │   └── AsenaController.ts   # Sample controller
+│   ├── logger/
+│   │   └── logger.ts            # Only when the logger option is enabled
+│   └── index.ts                 # Application entry point
+├── .asena/
+│   ├── config.json              # Adapter + suffix settings used by `asena generate`
+│   └── config.schema.json
+├── asena-config.ts              # Build configuration
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+├── .gitignore
+├── eslint.config.cjs            # Only when ESLint is enabled
+├── .prettierrc.js               # Only when Prettier is enabled
+└── .prettierignore              # Only when Prettier is enabled
 ```
+
+::: info Directories are created on demand
+`asena create` does not pre-create `services/`, `middlewares/`, `config/`, `namespaces/`,
+`tests/` or `public/`. `asena generate` creates the folder it needs the first time you use
+it. Folder layout is a convention only - the component scanner walks the whole
+`sourceFolder` tree and finds components wherever they live.
+:::
 
 ## asena generate
 
@@ -16047,6 +16826,7 @@ Quickly and consistently create project components with proper structure and imp
 | Controller | `asena generate controller` | `asena g c`   | Generates a controller      |
 | Service    | `asena generate service`    | `asena g s`   | Generates a service         |
 | Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
+| Validator  | `asena generate validator`  | `asena g v`   | Generates a Zod validator   |
 | Config     | `asena generate config`     | `asena g config` | Generates a server config |
 | WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
 
@@ -16070,16 +16850,18 @@ asena generate controller
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
-@Controller('/user')
+@Controller()
 export class UserController {
-  @Get({ path: '/' })
-  async index(context: Context) {
-    return context.send({ message: 'Hello from UserController!' });
-  }
+
 }
 ```
+
+::: tip The body is intentionally empty
+The generator scaffolds the class and its imports only - add the path and your routes
+yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler.
+:::
 
 #### Generate Service
 
@@ -16101,10 +16883,7 @@ import { Service } from '@asenajs/asena/decorators';
 
 @Service()
 export class UserService {
-  async getUsers() {
-    // Add your business logic here
-    return [];
-  }
+
 }
 ```
 
@@ -16129,12 +16908,19 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
-  async handle(context: Context, next: () => Promise<void>) {
-    // Add your middleware logic here
+
+  public async handle(context: Context, next: () => Promise<void>) {
+    context.setValue('testValue', 'test');
     await next();
   }
+
 }
 ```
+
+::: warning Replace the placeholder body
+The scaffolded `handle()` is a smoke-test stub. Real middleware should be `async`, take
+`next: () => Promise<void>`, and `await next()`.
+:::
 
 #### Generate Config
 
@@ -16157,10 +16943,13 @@ import { ConfigService, type Context } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  onError(error: Error, context: Context): Response {
-    console.error('Error:', error);
-    return context.send({ error: 'Internal server error' }, 500);
+
+  public onError(error: Error, context: Context): Response | Promise<Response> {
+    console.error('Error:', error.message);
+
+    return context.send({ error: error.message }, 500);
   }
+
 }
 ```
 
@@ -16180,27 +16969,34 @@ asena generate websocket
 **Generated:** `src/namespaces/ChatNamespace.ts`
 
 ```typescript
-import { Websocket } from '@asenajs/asena/decorators';
-import { WebsocketService, type Context } from '@asenajs/ergenecore';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
-@Websocket({ namespace: '/chat' })
-export class ChatNamespace extends WebsocketService {
-  onConnect(context: Context): void {
-    console.log('Client connected to /chat');
+@WebSocket({ path: '/chat', name: 'ChatNamespace' })
+export class ChatNamespace extends AsenaWebSocketService {
+
+  protected async onOpen(ws: Socket): Promise<void> {
+    console.log('Client connected');
   }
 
-  onMessage(context: Context, message: any): void {
+  protected async onMessage(ws: Socket, message: string): Promise<void> {
     console.log('Message received:', message);
   }
 
-  onDisconnect(context: Context): void {
-    console.log('Client disconnected from /chat');
+  protected async onClose(ws: Socket): Promise<void> {
+    console.log('Client disconnected');
   }
+
 }
 ```
 
+::: info Adapter-agnostic
+WebSocket namespaces are generated the same way for both adapters - the base class and
+`Socket` type come from `@asenajs/asena/web-socket`, not from the adapter package.
+:::
+
 ::: tip Adapter-Specific Generation
-The CLI automatically detects your adapter (Ergenecore or Hono) from `asena.config.ts` and generates appropriate imports and base classes.
+The CLI automatically detects your adapter (Ergenecore or Hono) from `asena-config.ts` and generates appropriate imports and base classes.
 :::
 
 ## asena dev start
@@ -16211,7 +17007,7 @@ Start the application in development mode with automatic building.
 
 - **Automatic Build** - Builds the project before starting
 - **Component Registration** - Automatically registers all controllers, services, and middlewares
-- **Hot Reload** - Restarts server on file changes (when used with `--watch`)
+- **Single Build + Run** - Builds once, then runs the bundle. `asena dev start` takes no options and does **not** watch for changes; use the scaffolded `bun run dev:hot` (`bun run --hot src/index.ts`) while iterating.
 
 ### Usage
 
@@ -16239,7 +17035,7 @@ Build completed successfully.
 ```
 
 ::: info Controller Names in Output
-Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena.config.ts`.
+Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
 
 ## asena build
@@ -16248,7 +17044,7 @@ Build the project for production deployment.
 
 ### Features
 
-- **Configuration Processing** - Reads and processes `asena.config.ts`
+- **Configuration Processing** - Reads and processes `asena-config.ts`
 - **Code Generation** - Creates a temporary build file combining all components
 - **Import Management** - Automatically organizes imports based on project structure
 - **Server Integration** - Integrates all components with AsenaServer
@@ -16262,17 +17058,17 @@ asena build
 
 ### Build Process
 
-1. Reads `asena.config.ts`
+1. Reads `asena-config.ts`
 2. Scans source folder for controllers, services, middlewares, configs, and websockets
 3. Generates a temporary build file with all imports
 4. Bundles the application using Bun's bundler
-5. Outputs compiled files to `buildOptions.outdir` (default: `dist/`)
+5. Outputs compiled files to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
 
 ### Build Output
 
 ```
 Build completed successfully.
-Output: dist/index.js
+Output: dist/index.asena.js
 ```
 
 ::: tip Production Deployment
@@ -16288,7 +17084,7 @@ Initialize an existing project with Asena configuration.
 
 ### Features
 
-- **Configuration Generation** - Creates `asena.config.ts`
+- **Configuration Generation** - Creates `asena-config.ts`
 - **Default Values** - Provides sensible defaults for quick start
 - **No Need if Using `create`** - Not required if you used `asena create`
 
@@ -16300,7 +17096,7 @@ asena init
 
 ### Generated Configuration
 
-Creates `asena.config.ts`:
+Creates `asena-config.ts`:
 
 ```typescript
 import { defineConfig } from '@asenajs/asena-cli';
@@ -16308,18 +17104,23 @@ import { defineConfig } from '@asenajs/asena-cli';
 export default defineConfig({
   sourceFolder: 'src',
   rootFile: 'src/index.ts',
+  // include: ['public'], // Directories/files to copy into outdir during build
   buildOptions: {
     outdir: 'dist',
-    sourcemap: 'linked',
-    target: 'bun',
     minify: {
       whitespace: true,
       syntax: true,
-      identifiers: false,
+      identifiers: false, //It's better for you to make this false for better debugging during the running phase of the application.
+      keepNames: true
     },
   },
 });
 ```
+
+::: tip Why `identifiers: false` and `keepNames: true`
+Component registration is name-based. Minifying identifiers would rename your classes and
+break `@Inject('UserService')` lookups at runtime.
+:::
 
 ::: info When to Use `asena init`
 Use `asena init` when:
@@ -16344,7 +17145,7 @@ Use `asena init` when:
 | `asena dev start`    | -               | Start development server             |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
-| `asena --version`    | `asena -v`      | Show CLI version                     |
+| `asena --version`    | `asena -V`      | Show CLI version                     |
 | `asena --help`       | `asena -h`      | Show help                            |
 
 ## Related Documentation
@@ -16373,7 +17174,7 @@ Source: https://asena.sh/raw/cli/configuration.md
 
 # CLI Configuration
 
-All Asena projects come with an `asena.config.ts` file for project configuration. This file controls how the CLI builds, develops, and manages your project.
+All Asena projects come with an `asena-config.ts` file for project configuration. This file controls how the CLI builds, develops, and manages your project.
 
 ## defineConfig Helper
 
@@ -16383,7 +17184,8 @@ Use the `defineConfig` helper for type-safe configuration:
 import { defineConfig } from '@asenajs/asena-cli';
 
 export default defineConfig({
-  // Your configuration here
+  sourceFolder: 'src',
+  rootFile: 'src/index.ts',
 });
 ```
 
@@ -16474,7 +17276,7 @@ export default defineConfig({
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 const logger = new AsenaLogger();
@@ -16542,7 +17344,7 @@ include: [
 ### buildOptions
 
 **Type:** `BuildOptions` (optional)
-**Default:** `{ outdir: './out' }` if not specified
+**Default:** `{ outdir: './out' }` when `buildOptions` is omitted. The `asena-config.ts` that `asena create` / `asena init` scaffolds sets `outdir: 'dist'` explicitly, which is why most projects build into `dist/`.
 
 Configuration options for Bun's bundler. Asena exposes only backend-relevant build options from Bun's `BuildConfig`.
 
@@ -16784,11 +17586,11 @@ export default defineConfig({
 
 ```bash
 # Development
-cp asena.config.dev.ts asena.config.ts
+cp asena.config.dev.ts asena-config.ts
 asena dev start
 
 # Production
-cp asena.config.prod.ts asena.config.ts
+cp asena.config.prod.ts asena-config.ts
 asena build
 ```
 
@@ -16943,7 +17745,7 @@ export default defineConfig({
 // ✅ Good: Clear separation
 // - asena.config.dev.ts
 // - asena.config.prod.ts
-// - asena.config.ts (active config)
+// - asena-config.ts (active config)
 ```
 
 ### 4. Document Custom Configuration
@@ -17419,7 +18221,7 @@ This creates `src/controllers/UserController.ts`. Let's modify it:
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -17450,7 +18252,7 @@ export class UserController {
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/hono-adapter/types';
+import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
 export class UserController {
@@ -17502,7 +18304,7 @@ curl http://localhost:3000/users/1
 ```
 
 ::: info Controller Names in Output
-Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena.config.ts`.
+Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
 
 ## Step 5: Create a Service
@@ -17563,7 +18365,7 @@ Update your controller to use the service:
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 
 @Controller('/users')
@@ -17591,7 +18393,7 @@ export class UserController {
 
   @Post({ path: '/' })
   async createUser(context: Context) {
-    const { name, email } = await context.getBody();
+    const { name, email } = await context.getBody<{ name: string; email: string }>();
     const user = await this.userService.createUser(name, email);
     return context.send({ user }, 201);
   }
@@ -17625,10 +18427,10 @@ Output:
 
 ```
 Build completed successfully.
-Output: dist/index.js
+Output: dist/index.asena.js
 ```
 
-The build files are in the `dist/` directory (configured in `asena.config.ts`).
+The build files are in the `dist/` directory (configured in `asena-config.ts`).
 
 Run the production build:
 
@@ -17664,8 +18466,8 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 export class LoggerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const start = Date.now();
-    const method = context.getRequest().method;
-    const url = context.getRequest().url;
+    const method = context.req.method;
+    const url = context.req.url;
 
     console.log(`[${method}] ${url} - Started`);
 
@@ -17680,7 +18482,7 @@ export class LoggerMiddleware extends MiddlewareService {
 Apply it to your controller:
 
 ```typescript
-@Controller('/users', { middlewares: [LoggerMiddleware] })
+@Controller({ path: '/users', middlewares: [LoggerMiddleware] })
 export class UserController {
   // ... your routes
 }
@@ -17702,7 +18504,7 @@ my-asena-app/
 │   │   └── LoggerMiddleware.ts   # Your middleware
 │   └── index.ts                  # Entry point
 ├── dist/                         # Build output
-├── asena.config.ts               # CLI configuration
+├── asena-config.ts               # CLI configuration
 ├── package.json
 └── tsconfig.json
 ```
@@ -17751,13 +18553,12 @@ export class AppConfig implements ConfigService {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: 'localhost',
-        port: 3000,
         development: true,
+        // port comes from AsenaServerFactory.create({ port }) - see Network Configuration
       },
       wsOptions: {
         perMessageDeflate: true,
-        maxPayloadLimit: 1024 * 1024, // 1MB
+        idleTimeout: 120,
       },
     };
   }
@@ -17782,13 +18583,12 @@ export class AppConfig implements ConfigService {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: 'localhost',
-        port: 3000,
         development: true,
+        // port comes from AsenaServerFactory.create({ port }) - see Network Configuration
       },
       wsOptions: {
         perMessageDeflate: true,
-        maxPayloadLimit: 1024 * 1024, // 1MB
+        idleTimeout: 120,
       },
     };
   }
@@ -17843,14 +18643,22 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
   onError?(error: Error, context: C): Response | Promise<Response>;
 
   /**
+   * Answers a request that matched no route
+   */
+  onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>;
+
+  /**
    * Global middleware configuration with pattern-based filtering
    */
   globalMiddlewares?(): Promise<GlobalMiddlewareEntry[]> | GlobalMiddlewareEntry[];
 
   /**
-   * WebSocket transport for multi-pod messaging
+   * WebSocket and/or microservice transport configuration
    */
-  transport?(): WebSocketTransport | Promise<WebSocketTransport>;
+  transport?():
+    | WebSocketTransport
+    | AsenaTransportConfig
+    | Promise<WebSocketTransport | AsenaTransportConfig>;
 }
 ```
 
@@ -17896,16 +18704,12 @@ type AsenaServerOptions = Omit<ServeOptions, 'fetch' | 'routes' | 'websocket' | 
 
 ### Network Configuration
 
-Configure network interfaces and ports.
-
 ```typescript
 @Config()
 class AppConfig implements AsenaConfig {
   public serveOptions(): AsenaServeOptions {
     return {
       serveOptions: {
-        hostname: '0.0.0.0',     // Bind to all interfaces
-        port: 8080,               // Server port
         reusePort: true,          // Enable load balancing across processes
         ipv6Only: false,          // Allow both IPv4 and IPv6
       },
@@ -17914,28 +18718,31 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
-**Unix Socket Configuration:**
+::: danger `port` and `hostname` do not belong here
+**`port`** is always overwritten. `AsenaServer.start()` pushes the port from
+`AsenaServerFactory.create({ port })` into the adapter on every start, after
+`serveOptions()` has been read - so a `port` (including `port: 0`) inside `serveOptions`
+never takes effect. Set it on the factory:
 
 ```typescript
-public serveOptions(): AsenaServeOptions {
-  return {
-    serveOptions: {
-      unix: '/tmp/asena.sock',  // Use Unix domain socket
-    },
-  };
-}
+const server = await AsenaServerFactory.create({ adapter, logger, port: 8080 });
 ```
 
-**Dynamic Port (Random Available Port):**
+**`hostname`** is adapter-specific. Hono honours `serveOptions.hostname`; Ergenecore
+overwrites it with the value given to the factory function:
 
 ```typescript
-public serveOptions(): AsenaServeOptions {
-  return {
-    serveOptions: {
-      port: 0,  // Bun will assign a random available port
-    },
-  };
-}
+const adapter = createErgenecoreAdapter({ hostname: '0.0.0.0' });
+```
+:::
+
+**Unix Socket Configuration:**
+
+A unix socket is a *start* option, not a serve option - Bun rejects `hostname` and `unix`
+together, so the framework only wires it through `start()`:
+
+```typescript
+await server.start({ unix: '/tmp/asena.sock' });
 ```
 
 ### TLS/SSL Configuration
@@ -18009,7 +18816,7 @@ class AppConfig implements AsenaConfig {
 **Options:**
 
 - **`maxRequestBodySize`** - Maximum allowed request body size in bytes. Requests exceeding this limit will be rejected.
-- **`idleTimeout`** - Maximum time (in seconds) a connection can remain idle before being closed. Default: 120 seconds.
+- **`idleTimeout`** - Maximum time (in seconds) an HTTP connection can remain idle before being closed. Bun's default is **10 seconds** (the 120 s default belongs to `wsOptions.idleTimeout`).
 
 ### Development Mode
 
@@ -18035,12 +18842,14 @@ Configure WebSocket-specific settings for real-time communication.
 
 ```typescript
 interface WSOptions {
-  maxPayloadLimit?: number;           // Maximum message size
+  maxPayloadLimit?: number;           // See the caveat below - currently not applied
   backpressureLimit?: number;         // Backpressure threshold
   closeOnBackpressureLimit?: boolean; // Close on backpressure
   idleTimeout?: number;               // WebSocket idle timeout
   publishToSelf?: boolean;            // Receive own published messages
-  sendPings?: boolean;                // Enable automatic ping frames
+  sendPings?: boolean;                // See the caveat below - superseded by sendPingStrategy
+  sendPingStrategy?: 'adapter' | 'native'; // Keep-alive mechanism (default 'adapter')
+  heartbeatInterval?: number;         // Heartbeat period in ms, 'adapter' strategy only
   perMessageDeflate:                  // Compression configuration (required)
     | boolean
     | {
@@ -18069,8 +18878,9 @@ class AppConfig implements AsenaConfig {
         // Publishing
         publishToSelf: false,                   // Don't receive own messages
 
-        // Keep-Alive
-        sendPings: true,                        // Send automatic ping frames
+        // Keep-Alive ('adapter' is the default; 'native' delegates to Bun)
+        sendPingStrategy: 'adapter',
+        heartbeatInterval: 30_000,              // no heartbeat is sent without this
 
         // Compression (required field)
         perMessageDeflate: true,                // Enable compression with defaults
@@ -18084,13 +18894,21 @@ class AppConfig implements AsenaConfig {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `maxPayloadLimit` | 16 MB | Maximum message size. Larger messages close the connection. |
-| `backpressureLimit` | 1 MB | Threshold for backpressure detection. Triggers `drain` event. |
+| `maxPayloadLimit` | 16 MB | Intended as the maximum message size. **Currently has no effect** - see the caveat below. |
+| `backpressureLimit` | 16 MB (Bun's default) | Threshold for backpressure detection. Triggers `drain` event. |
 | `closeOnBackpressureLimit` | `false` | Whether to close connection when backpressure limit is reached. |
 | `idleTimeout` | 120 seconds | Auto-close connections exceeding idle period. |
 | `publishToSelf` | `false` | Whether socket receives its own published messages. |
-| `sendPings` | `true` | Enable automatic ping frames for keep-alive. |
+| `sendPings` | — | **Ignored.** Superseded by `sendPingStrategy`; the adapters overwrite whatever you pass. |
+| `sendPingStrategy` | `'adapter'` | `'adapter'` uses the framework's own `ws.ping()` heartbeat; `'native'` hands keep-alive to Bun. |
+| `heartbeatInterval` | — | Heartbeat period in ms for the `'adapter'` strategy. With no value, no heartbeat is sent. |
 | `perMessageDeflate` | `false` | Enable per-message compression (reduces bandwidth). **Required field.** |
+
+::: warning `maxPayloadLimit` is not applied
+The adapters forward `wsOptions` to `Bun.serve()` verbatim, but Bun's option is named
+`maxPayloadLength`. `maxPayloadLimit` is therefore an unknown key that Bun silently drops,
+and the cap stays at Bun's 16 MB default. Do not rely on it to bound message size.
+:::
 
 **Advanced Compression Configuration:**
 
@@ -18225,6 +19043,70 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
+## onNotFound() Method
+
+Answers a request that matched no route. Separate from `onError` on purpose: nothing threw, the
+router simply had nowhere to send the request, so neither handler has to ask which case it is
+looking at.
+
+```typescript
+onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>
+```
+
+**Parameters:**
+- `context` - The request context
+- `request` - `{ path, method }`, normalised by the adapter
+
+**Returns:** `Response` or `Promise<Response>`
+
+### Basic Usage
+
+```typescript
+import { Config } from '@asenajs/asena/decorators';
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService, type Context } from '@asenajs/hono-adapter';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public onNotFound(context: Context, request: NotFoundRequest) {
+    return context.send({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      instance: request.path
+    }, 404);
+  }
+
+}
+```
+
+`request.path` carries the path only - no origin, no query string - and `request.method` is the
+upper-case verb. Both adapters produce identical values, so the same body works under either.
+
+### Defaults
+
+With no `onNotFound` declared, both adapters answer `{"error":"Not Found"}` with status `404` and
+`Content-Type: application/json`.
+
+Global middlewares run **before** `onNotFound` on both adapters, so a 404 still carries CORS
+headers and anything else you apply to every request.
+
+If the hook throws, the adapter logs it and falls back to the default 404 rather than taking the
+server down. It is deliberately **not** routed to `onError`.
+
+::: warning Not for domain 404s
+When the route exists but the record does not, throw instead - that reaches `onError` like any
+other application decision:
+
+```typescript
+if (!user) {
+  throw new HttpException(404, { code: 'USER_NOT_FOUND' });
+}
+```
+:::
+
+
 ## globalMiddlewares() Method
 
 Configure global middleware that applies to all or specific routes. Supports both simple array syntax and pattern-based filtering.
@@ -18234,6 +19116,15 @@ globalMiddlewares?(): Promise<GlobalMiddlewareEntry[]> | GlobalMiddlewareEntry[]
 ```
 
 **Returns:** Array of middleware classes or `GlobalMiddlewareEntry` objects
+
+::: danger It must be a method, not a property
+Asena reads global middleware by calling `globalMiddlewares()`. A `middlewares = [...]`
+property on the config class is never read - the server starts normally and the middleware
+simply never runs.
+
+The server warns at startup when it finds such a property, but the warning is scrollback:
+if middleware seems to be skipped, check the shape of this hook first.
+:::
 
 ### Simple Global Middleware
 
@@ -18308,10 +19199,26 @@ type GlobalMiddlewareEntry =
 ```
 
 **Pattern Matching:**
-- `*` - Matches any characters except `/`
-- `**` - Matches any characters including `/`
-- `/api/*` - Matches `/api/users` but not `/api/v1/users`
-- `/api/**` - Matches `/api/users` and `/api/v1/users`
+
+A `*` matches any characters **including `/`**, so a pattern covers every path below it.
+`**` is not a separate construct - it compiles to the same regex as `*`.
+
+| Path | `/api/*` | `/api/**` |
+|:-----|:---------|:----------|
+| `/api/users` | ✅ | ✅ |
+| `/api/v1/users` | ✅ | ✅ |
+| `/api` (no trailing segment) | ❌ | ❌ |
+
+Other forms: an exact path (`/health`) matches literally, trailing slashes are normalized,
+and `:param` patterns (`/users/:id`) match a single segment.
+
+::: danger `/api/*` is recursive
+A wildcard does **not** stop at the next `/`. If you write
+`{ middleware: AuthMiddleware, routes: { include: ['/api/*'] } }` it protects
+`/api/v1/admin/users` too - which is usually what you want, but is the opposite of a
+single-segment glob. Conversely `include: ['/api/*']` does **not** cover the bare `/api`
+path; list it explicitly if you need it.
+:::
 
 ### Execution Order
 
@@ -18436,10 +19343,10 @@ export class AppConfig extends ConfigService {
   public transport() {
     return {
       websocket: new RedisTransport({ url: 'redis://localhost:6379' }),      // optional
-      microservice: new RedisMicroserviceTransport({
-        url: 'redis://localhost:6379',
-        serviceName: 'order-service',
-      }),
+      microservice: new RedisMicroserviceTransport(
+        { url: 'redis://localhost:6379' },                                   // connection
+        { serviceName: 'order-service' },                                    // required options
+      ),
       interceptors: [otelMessaging({ system: 'redis' })],                    // optional
     };
   }
@@ -18460,7 +19367,8 @@ A real-world configuration example combining all features:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Config, Inject, Service } from '@asenajs/asena/decorators';
+import { Config, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ConfigService, Context } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 
@@ -18481,8 +19389,7 @@ export class AppConfig implements ConfigService {
 
     return {
       serveOptions: {
-        hostname: process.env.HOSTNAME || '0.0.0.0',
-        port: parseInt(process.env.PORT || '3000', 10),
+        // port/hostname are not read from here - see Network Configuration
         development: !isProduction,
         maxRequestBodySize: 10 * 1024 * 1024,  // 10MB
         idleTimeout: isProduction ? 30 : 120,
@@ -18499,7 +19406,6 @@ export class AppConfig implements ConfigService {
         backpressureLimit: 1024 * 1024,     // 1MB
         closeOnBackpressureLimit: false,
         idleTimeout: 120,
-        sendPings: true,
         publishToSelf: false,
       },
     };
@@ -18509,7 +19415,7 @@ export class AppConfig implements ConfigService {
     await this.logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.getUrl(),
+      url: context.req.url,
     });
 
     const isProduction = process.env.NODE_ENV === 'production';
@@ -18546,7 +19452,8 @@ export class AppConfig implements ConfigService {
 ```
 
 ```typescript [Hono]
-import { Config, Inject, Service } from '@asenajs/asena/decorators';
+import { Config, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ConfigService, Context } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 
@@ -18567,8 +19474,7 @@ export class AppConfig implements ConfigService {
 
     return {
       serveOptions: {
-        hostname: process.env.HOSTNAME || '0.0.0.0',
-        port: parseInt(process.env.PORT || '3000', 10),
+        // port/hostname are not read from here - see Network Configuration
         development: !isProduction,
         maxRequestBodySize: 10 * 1024 * 1024,  // 10MB
         idleTimeout: isProduction ? 30 : 120,
@@ -18585,7 +19491,6 @@ export class AppConfig implements ConfigService {
         backpressureLimit: 1024 * 1024,     // 1MB
         closeOnBackpressureLimit: false,
         idleTimeout: 120,
-        sendPings: true,
         publishToSelf: false,
       },
     };
@@ -18601,10 +19506,10 @@ export class AppConfig implements ConfigService {
     const isProduction = process.env.NODE_ENV === 'production';
 
     if (isProduction) {
-      return context.json({ error: 'Internal Server Error' }, 500);
+      return context.send({ error: 'Internal Server Error' }, 500);
     }
 
-    return context.json({
+    return context.send({
       error: error.message,
       stack: error.stack,
     }, 500);
@@ -18646,7 +19551,9 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 5. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
    - `onError()` is registered as error handler
+   - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
+   - `transport()` is called and the WebSocket / microservice transports are wired
 6. **Phase: SERVER_READY** - Server starts with applied configuration
 
 ### Singleton Validation
@@ -18691,8 +19598,12 @@ class AppConfig implements AsenaConfig {
 }
 ```
 
-::: info Async Configuration
-When using async operations in `serveOptions()`, the method can return `Promise<AsenaServeOptions>`.
+::: warning Async `serveOptions()` - runtime yes, types no
+The adapters `await` the result, so returning a Promise works at runtime. But
+`AsenaConfig.serveOptions?(): AsenaServeOptions` declares a synchronous return, so a class
+that `implements AsenaConfig` / `extends ConfigService` cannot legally declare the method
+`async`. Prefer resolving async values before the server starts and passing them in, or
+widen the type at the call site.
 :::
 
 ## Best Practices
@@ -18784,7 +19695,7 @@ When using async operations in `serveOptions()`, the method can return `Promise<
 
 ## Troubleshooting
 
-### "Only one config instance is allowed"
+### "Only one config is allowed"
 
 **Error:** Multiple `@Config` classes are defined in your application.
 
@@ -18957,11 +19868,11 @@ The `HttpException` class accepts three parameters:
 new HttpException(status, body, options?)
 ```
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `status` | `number` | HTTP status code (e.g., 400, 401, 404, 500) |
-| `body` | `string \| object` | Response body (string or JSON object) |
-| `options` | `ResponseInit` | Optional response options (headers, statusText) |
+| Parameter | Type | Required | Description |
+|:----------|:-----|:---------|:------------|
+| `status` | `HttpStatusCode \| number` | Yes | HTTP status code. The `ClientErrorStatusCode` / `ServerErrorStatusCode` enums are accepted. |
+| `body` | `string \| object` | No (default `''`) | Response body. An object is serialized and gets `Content-Type: application/json` automatically. |
+| `options` | `HttpExceptionInit` | No | Extends `ResponseInit` (headers, statusText) with `cause?: Error` for wrapping the original failure. |
 
 **Examples:**
 
@@ -18986,8 +19897,39 @@ throw new HttpException(503, 'Service Unavailable', {
 });
 ```
 
-::: tip Automatic Detection
-Both adapters automatically detect `HttpException`/`HTTPException` and convert them to proper HTTP responses. You don't need to catch them manually in your handlers.
+::: tip Your handler always gets first refusal
+Both adapters turn the exception into a proper HTTP response without you catching it, and
+both offer it to `onError` first:
+
+1. `onError` is called. If it returns a `Response`, that is the answer.
+2. If there is no handler, it returns nothing, or it throws, the exception answers itself
+   from its own status and body. Anything that is not an `HttpException` becomes a 500.
+
+So an ExceptionMapper that logs or enriches thrown exceptions works the same on both adapters.
+
+Before 0.9.0 Ergenecore answered an `HttpException` straight from `getResponse()` and only
+consulted `onError` for everything else, so the same ExceptionMapper worked on Hono and was
+bypassed here. If you worked around that by throwing a plain domain error, you can now throw
+`HttpException` directly.
+:::
+
+::: warning Match the exception with `isHttpException()`, not `instanceof`
+A project that resolves two copies of an adapter - or two copies of `hono`, which is a peer
+dependency - ends up with two distinct exception classes, and `instanceof` silently answers
+false for one of them. Every deliberate 401/403/404 then collapses to your generic 500 branch
+while the API keeps responding.
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    return context.send({ error: error.message }, error.status);
+  }
+
+  return context.send({ error: 'Internal Server Error' }, 500);
+}
+```
 :::
 
 ---
@@ -19171,7 +20113,7 @@ import { AuthError } from '../errors/AuthError';
 export class AuthController {
   @Post('/login')
   async login(context: Context) {
-    const { username, password } = await context.getBody();
+    const { username, password } = await context.getBody<{ username: string; password: string }>();
 
     const user = await validateCredentials(username, password);
 
@@ -19239,6 +20181,104 @@ public map(error: Error, context: Context): Response {
 
 ---
 
+## Not Found
+
+A request that matched no route is not an error - nothing threw, the router simply had nowhere
+to send it. It has its own hook, so `onError` only ever sees something your code raised and
+never has to ask which it is looking at.
+
+```typescript
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
+
+@Config()
+export class AppConfig extends ConfigService {
+
+  public onNotFound(context: Context, request: NotFoundRequest) {
+    return context.send({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      instance: request.path
+    }, 404);
+  }
+
+  public onError(error: Error, context: Context) {
+    // No 404 branch needed here
+    return context.send({ error: 'Internal Server Error' }, 500);
+  }
+
+}
+```
+
+`request.path` is the path only - no origin, no query string - and `request.method` is the
+upper-case verb. Both are normalised by the adapter, so the same handler body works on
+Ergenecore and the Hono adapter alike.
+
+With no `onNotFound` declared, **both** adapters answer:
+
+```json
+{ "error": "Not Found" }
+```
+
+with status `404` and `Content-Type: application/json`, and write one INFO line -
+`Route not found:` with `{ path, method, status }`. A hook that answers the request itself
+replaces both. See [Adapter logging](#adapter-logging).
+
+::: info Not the same as a domain 404
+`onNotFound` is about routing. When the route exists but the record does not, throw - that is a
+real application decision and belongs in `onError`:
+
+```typescript
+const user = await this.db.findUser(id);
+
+if (!user) {
+  throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
+}
+```
+:::
+
+::: warning Upgrading from 0.8
+`NotFoundError`, `isNotFoundError` and the `NOT_FOUND_ERROR` brand are removed. An `onError`
+that branched on `isNotFoundError()` should move that branch into `onNotFound`. On the Hono
+adapter the default 404 body also changes from `text/plain` to the JSON envelope above.
+:::
+
+::: tip Static file 404s are separate
+`StaticServeService.onNotFound` handles a file missing *inside* a `@StaticServe` route. It is
+unrelated to the config hook, which only fires when no route matched at all.
+:::
+
+### Adapter logging
+
+One rule, both adapters: **the framework's default log fires exactly when the framework's
+default response fires.**
+
+| | your hook answered | no hook, or it declined or threw |
+|:--|:--|:--|
+| response | yours | the framework's |
+| log | none | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
+
+If your `onError` returns a `Response`, you own the response and therefore the record - log it
+there, with your correlation id, and the adapter stays out of the way. If it returns nothing or
+throws, the adapter is the one answering, so it writes the original error rather than letting it
+disappear. Same for `onNotFound`.
+
+The level split exists so a wall of 401s from a bot cannot flood the error stream: only `5xx`
+carries a stack. An unmatched route logs `Route not found:` with `{ path, method, status }` at
+INFO - low enough that a scanner walking `/wp-admin` and `/.env` cannot fill the warning stream,
+high enough that a mistyped route in a deployed client is visible without turning on debug.
+
+Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence all of it,
+including the 404 line. There is no setting that forces a log line for a request your own handler
+answered.
+
+::: warning Upgrading from ergenecore 1.5.x / hono-adapter 1.7.x
+Those versions logged only when **no** `onError` was registered - which in a real application
+meant never, since almost every application configures one. A 500 answered the client and wrote
+nothing at all, stack included. You will now see error output you did not see before: whenever the
+framework is the one answering. If your own handler answers and also logs, nothing is duplicated.
+:::
+
 ## Validation Errors
 
 ### Request Validation Errors
@@ -19279,9 +20319,21 @@ carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
 `ZodError.errors`; the field is now `issues`.
 :::
 
-::: warning Only when a handler exists
-If your application defines no `onError`, the adapter answers validation failures itself
-with its default 400 envelope. See [Validation](/docs/concepts/validation#validation-error-responses).
+::: info When no handler answers it
+A `ValidationError` is always thrown, whether or not you declare `onError`. If nothing answers it -
+no handler, or a handler that returns nothing - both adapters fall back to the same envelope:
+
+```json
+{
+  "error": "Validation failed",
+  "details": { "formErrors": [], "fieldErrors": { "email": ["..."] } },
+  "target": "json"
+}
+```
+
+`target` is which part of the request failed: `json`, `query`, `param`, `form` or `header`. The
+failure is logged like any other 4xx. See
+[Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
 ### Custom Validation Error Response
@@ -19398,7 +20450,7 @@ async getUser(id: string) {
   const user = await this.db.findUser(id);
 
   if (!user) {
-    throw new NotFoundError('User not found');
+    throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
   }
 
   return user;
@@ -19461,7 +20513,7 @@ logger.error('Payment processing failed', {
 @Post('/charge')
 async processPayment(context: Context) {
   try {
-    const { amount, token } = await context.getBody();
+    const { amount, token } = await context.getBody<{ amount: number; token: string }>();
 
     const charge = await this.paymentService.charge(amount, token);
 
@@ -19634,7 +20686,7 @@ import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }
@@ -19887,7 +20939,7 @@ import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }
@@ -19936,7 +20988,7 @@ import { mock } from 'bun:test';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }
@@ -20222,7 +21274,7 @@ import { Inject } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 class UserService {
-  async createUser(name: string, email: string) {
+  async createUser(name: string, email: string): Promise<{ id: string; name: string; email: string }> {
     // implementation
   }
 }
@@ -20833,14 +21885,14 @@ class UserController {
   async getUser(context: Context) {
     const id = context.getParam('id');
     const user = await this.userService.getUser(id);
-    return context.json(user);
+    return context.send(user);
   }
 
   @Post('/')
   async createUser(context: Context) {
-    const { name, email } = await context.getBody();
+    const { name, email } = await context.getBody<{ name: string; email: string }>();
     const user = await this.userService.createUser(name, email);
-    return context.json(user, 201);
+    return context.send(user, 201);
   }
 }
 
@@ -20851,10 +21903,10 @@ describe('UserController', () => {
     const mockUser = { id: 'user-123', name: 'John Doe' };
     mocks.userService.getUser.mockResolvedValue(mockUser);
 
-    // Mock context
+    // Mock context - stub the methods the handler actually calls
     const mockContext = {
       getParam: mock(() => 'user-123'),
-      json: mock((data) => data)
+      send: mock((data) => data)
     } as unknown as Context;
 
     const result = await instance.getUser(mockContext);
@@ -20871,10 +21923,14 @@ describe('UserController', () => {
 
     const mockContext = {
       getBody: mock(async () => ({ name: 'John', email: 'john@example.com' })),
-      json: mock((data, status) => ({ data, status }))
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const result = await instance.createUser(mockContext);
+    // send() is typed as returning a Response, so unwrap the stub's shape
+    const result = (await instance.createUser(mockContext)) as unknown as {
+      data: unknown;
+      status: number;
+    };
 
     expect(result.data).toEqual(mockUser);
     expect(result.status).toBe(201);
@@ -21162,17 +22218,17 @@ class AuthMiddleware extends MiddlewareService {
   @Inject(AuthService)
   private authService!: AuthService;
 
-  async handle(context: Context, next: Function) {
-    const token = context.getHeader('authorization');
+  async handle(context: Context, next: () => Promise<void>) {
+    const token = context.headers['authorization'];
 
     if (!token) {
-      return context.json({ error: 'Unauthorized' }, 401);
+      return context.send({ error: 'Unauthorized' }, 401);
     }
 
     const user = await this.authService.validateToken(token);
 
     if (!user) {
-      return context.json({ error: 'Invalid token' }, 401);
+      return context.send({ error: 'Invalid token' }, 401);
     }
 
     context.setValue('user', user);
@@ -21185,16 +22241,15 @@ describe('AuthMiddleware', () => {
     const { instance, mocks } = mockComponent(AuthMiddleware);
 
     const mockContext = {
-      getHeader: mock(() => null),
-      json: mock((data, status) => ({ data, status }))
+      headers: {},
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const mockNext = mock(() => {});
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
-    expect(result.data).toEqual({ error: 'Unauthorized' });
-    expect(result.status).toBe(401);
+    expect(mockContext.send).toHaveBeenCalledWith({ error: 'Unauthorized' }, 401);
     expect(mockNext).not.toHaveBeenCalled();
   });
 
@@ -21204,16 +22259,15 @@ describe('AuthMiddleware', () => {
     mocks.authService.validateToken.mockResolvedValue(null);
 
     const mockContext = {
-      getHeader: mock(() => 'Bearer invalid-token'),
-      json: mock((data, status) => ({ data, status }))
+      headers: { authorization: 'Bearer invalid-token' },
+      send: mock((data, status) => ({ data, status }))
     } as unknown as Context;
 
-    const mockNext = mock(() => {});
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
-    expect(result.data).toEqual({ error: 'Invalid token' });
-    expect(result.status).toBe(401);
+    expect(mockContext.send).toHaveBeenCalledWith({ error: 'Invalid token' }, 401);
     expect(mockNext).not.toHaveBeenCalled();
   });
 
@@ -21224,17 +22278,16 @@ describe('AuthMiddleware', () => {
     mocks.authService.validateToken.mockResolvedValue(mockUser);
 
     const mockContext = {
-      getHeader: mock(() => 'Bearer valid-token'),
+      headers: { authorization: 'Bearer valid-token' },
       setValue: mock(() => {})
     } as unknown as Context;
 
-    const mockNext = mock(() => 'next-response');
+    const mockNext = mock(async () => {});
 
-    const result = await instance.handle(mockContext, mockNext);
+    await instance.handle(mockContext, mockNext);
 
     expect(mockContext.setValue).toHaveBeenCalledWith('user', mockUser);
     expect(mockNext).toHaveBeenCalled();
-    expect(result).toBe('next-response');
   });
 });
 ```

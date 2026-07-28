@@ -96,6 +96,44 @@ json(): ValidationSchema | Promise<ValidationSchema>
 - **Return Type**: A Zod schema (`z.ZodType`)
 - **Async Support**: Can be `async` for dynamic schemas
 
+### Validating other request parts
+
+`json()` is the most common, but a validator can define any of these - each takes the same
+shape (a Zod schema, or `{ schema, hook }`) and validates a different part of the request:
+
+| Method | Validates | Runtime |
+|:-------|:----------|:--------|
+| `json()` | JSON request body | ✅ |
+| `form()` | `multipart/form-data` / URL-encoded body | ✅ |
+| `query()` | Query string | ✅ |
+| `param()` | Route parameters | ✅ |
+| `header()` | Request headers | ✅ |
+| `response()` | Response shape, **by status code** | ❌ documentation only |
+
+```typescript
+@Middleware({ validator: true })
+export class ListUsersValidator extends ValidationService {
+  public query() {
+    return z.object({
+      page: z.string().transform(Number).pipe(z.number().min(1)),
+    });
+  }
+
+  public param() {
+    return z.object({ id: z.string().uuid() });
+  }
+}
+```
+
+::: warning `response()` is never executed
+It exists so [`@asenajs/asena-openapi`](/docs/packages/openapi) can emit response schemas
+into the spec; the runtime ignores it.
+
+A consequence worth knowing: `@Middleware({ validator: true })` requires at least one of
+the five *runtime* methods. A validator class that defines **only** `response()` fails the
+decorator's check at import time and the process exits.
+:::
+
 ### Basic Example
 
 ```typescript
@@ -151,7 +189,7 @@ export class UserValidatorWithHook extends ValidationService {
 
       hook: (result, context) => {
         // result: Zod SafeParseResult - { success, data } or { success, error }
-        // context: adapter Context
+        // context: Asena's Context wrapper
 
         if (!result.success) {
           // Return nothing to let the framework report the failure through onError
@@ -182,7 +220,7 @@ export class UserValidatorWithHook extends ValidationService {
 
       hook: (result, context) => {
         // result: Zod SafeParseResult - { success, data } or { success, error }
-        // context: adapter Context
+        // context: Hono's NATIVE context, not Asena's wrapper - see the warning below
 
         if (!result.success) {
           // Return nothing to let the framework report the failure through onError
@@ -191,13 +229,25 @@ export class UserValidatorWithHook extends ValidationService {
 
         console.log('Validated user data:', result.data);
 
-        // Store in context for later use
-        context.setValue('validatedEmail', result.data.email);
+        // Hono's own state API - set()/get(), not setValue()/getValue()
+        context.set('validatedEmail', result.data.email);
       }
     };
   }
 }
 ```
+:::
+
+::: warning The hook's `context` differs per adapter
+This is the one place where the two adapters are not interchangeable.
+
+- **Ergenecore** passes Asena's `Context` wrapper, so `setValue()` / `getValue()` /
+  `send()` are available.
+- **Hono** types the hook as `@hono/zod-validator`'s `Hook`, which hands you **Hono's
+  native context**. Use `set()` / `get()` to store state and `json()` to respond.
+
+The values you store are still readable from the handler's Asena context - `setValue`
+and Hono's `set` write to the same per-request store.
 :::
 ### Hook Function Signature
 
@@ -279,8 +329,9 @@ When validation fails, Asena answers with **400 Bad Request**.
 
 ### Default response
 
-If your application defines no global error handler, the adapter answers directly with
-Zod's flattened error:
+A `ValidationError` is always thrown. When nothing answers it - your application defines no
+global error handler, or its handler returns nothing - **both** adapters fall back to the same
+envelope, Zod's flattened error:
 
 ```json
 {
@@ -297,7 +348,13 @@ Zod's flattened error:
 ```
 
 `target` names the part of the request that failed - `json`, `query`, `form`, `param` or
-`header`. The Hono adapter includes it; Ergenecore omits it.
+`header`.
+
+The failure is also logged like any other 4xx, at DEBUG (or INFO when your logger has no
+`debug`). Before 0.9.1 an application with no `onError` got this response from inside the
+validator, which never threw - so it reached neither `onError` nor the log, the one rejection
+that was invisible at every level. See
+[Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Customizing the response
 
@@ -376,13 +433,19 @@ export class ProductController {
   validator: CreateUserValidator
 })
 async create(context: Context) {
-  // Execution order:
-  // 1. AuthMiddleware
-  // 2. RateLimitMiddleware
-  // 3. CreateUserValidator (validation)
-  // 4. create() handler
+  // Ergenecore: AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
+  // Hono:       CreateUserValidator -> AuthMiddleware -> RateLimitMiddleware -> handler
 }
 ```
+
+::: danger Validators and route middleware run in a different order per adapter
+Ergenecore validates **after** the route's middleware chain; Hono registers validators
+**before** route middleware, so validation happens first.
+
+This matters when a middleware populates state the validator depends on - an
+`AuthMiddleware` that calls `context.setValue('user', …)` has not run yet on Hono. Global
+middleware is unaffected: it is top-level on both adapters and always runs first.
+:::
 
 ## Zod Schema Definition
 
@@ -580,24 +643,37 @@ export class RegisterUserValidator extends ValidationService {
         path: ['confirmPassword']
       }),
 
+      // The hook receives Zod's SafeParseResult - the data lives at `result.data`
+      // and only when `result.success` is true
       hook: (result, context) => {
-        // Log validation success
+        if (!result.success) {
+          // Returning a Response overrides the adapter's default 400 envelope
+          return context.send({ success: false, issues: result.error.issues }, 400);
+        }
+
         this.logger.info('User registration validated', {
-          username: result.username,
-          email: result.email
+          username: result.data.username,
+          email: result.data.email
         });
 
-        // Store validated data in context
-        context.setValue('registrationData', result);
+        // Stash the parsed data for the handler to pick up with context.getValue()
+        const { confirmPassword, ...userData } = result.data;
 
-        // Remove confirmPassword from result
-        const { confirmPassword, ...userData } = result;
-        return userData;
+        context.setValue('registrationData', userData);
       }
     };
   }
 }
 ```
+
+::: warning The hook cannot transform the payload
+The return value is a **Response override**, not a transformed body. Returning a plain
+object is silently ignored - the handler still receives the original parsed data. To pass
+a reshaped value along, write it to the context with `setValue()` as above.
+
+Note also that Ergenecore invokes the hook **only on failure**, while Hono invokes it on
+every attempt. Guard on `result.success` so the same hook works under both adapters.
+:::
 
 ## Related Documentation
 

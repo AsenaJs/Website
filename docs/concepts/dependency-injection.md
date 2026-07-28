@@ -49,10 +49,14 @@ You can also inject services using their registered name as a string. This is us
 
 First, register your service with a custom name:
 
-::: tip String-Based Injection Requires Named Components
-When using **string-based injection**, you must explicitly provide a `name` to your Services (controllers, components, Websockets etc.).
+::: tip Name Your Components for String-Based Injection
+A component is registered under its `name` if you give one, and under its **class name**
+otherwise - so `@Inject('UserService')` already resolves an unnamed `@Service()` class
+called `UserService`.
 
-**Why?** Bun bundler may minify or rename your class names during the build process, causing the injection system to fail when looking up components by class name.
+**Why give an explicit name anyway?** The Bun bundler may rename classes during a
+production build, and the container key would change with it. An explicit
+`@Service('UserService')` pins the key so string injection keeps working after minification.
 :::
 
 Inject services by their registered name:
@@ -95,7 +99,7 @@ Expressions allow you to transform the injected dependency or extract specific p
 ```typescript
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { DatabaseService } from '../services/DatabaseService';
-import type { BunSQLDatabase } from 'drizzle-orm/bun-sqlite';
+import type { BunSQLDatabase } from 'drizzle-orm/bun-sql';
 
 @Service()
 export class UserRepository {
@@ -182,7 +186,8 @@ Mark implementations with `@Implements`:
 
 ```typescript
 // src/services/EmailNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -197,7 +202,8 @@ export class EmailNotificationService implements NotificationService {
 
 ```typescript
 // src/services/SmsNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -212,7 +218,8 @@ export class SmsNotificationService implements NotificationService {
 
 ```typescript
 // src/services/PushNotificationService.ts
-import { Service, Implements } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements } from '@asenajs/asena/decorators/ioc';
 import type { NotificationService } from './NotificationService';
 
 @Service()
@@ -341,9 +348,8 @@ export class CacheService {
 
 ```typescript
 @Service()
-export class ConfigService {
-  @Inject('ENV_API_KEY')
-  private apiKey: string;
+export class ApiKeyService {
+  private apiKey = process.env.API_KEY;
 
   @PostConstruct()
   validate() {
@@ -353,6 +359,12 @@ export class ConfigService {
   }
 }
 ```
+
+::: warning `@Inject` resolves components, not values
+A string token names a **registered component**. There is no value/constant registry, so
+`@Inject('ENV_API_KEY')` throws `ENV_API_KEY is not registered` at startup. Read plain
+configuration values from `process.env` (or a `@Service` that wraps it) as above.
+:::
 
 **3. Setup with Injected Dependencies**
 
@@ -406,7 +418,15 @@ export class CountryService {
 
 1. Class constructor runs
 2. All `@Inject` dependencies are resolved
-3. All `@PostConstruct` methods are called
+3. All `@Strategy` arrays are resolved (a separate pass)
+4. All `@PostConstruct` methods are called
+5. Registered `@PostProcessor`s run
+
+::: danger A throwing `@PostConstruct` exits the process
+The container catches the error, logs it, and calls `process.exit(1)` - it is **not**
+propagated to the caller. Use `@PostConstruct` for setup that must succeed at boot
+(opening a connection pool, building a transport) and validate recoverable input elsewhere.
+:::
 
 ```typescript
 @Service()
@@ -458,7 +478,7 @@ export class ConfigService {
 New instance created for every injection:
 
 ```typescript
-import { Service, Scope } from '@asenajs/asena/decorators';
+import { Service } from '@asenajs/asena/decorators';
 import { Scope } from '@asenajs/asena/decorators/ioc';
 
 @Service({ scope: Scope.PROTOTYPE })

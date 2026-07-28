@@ -162,7 +162,7 @@ Bun automatically bundles linked CSS, JavaScript, and TypeScript files.
 
 ## Production Build
 
-When you run `asena build`, HTML import paths are automatically rewritten so they resolve correctly from the output directory. However, you must configure `include` in your `asena.config.ts` to copy the HTML files to the build output.
+When you run `asena build`, HTML import paths are automatically rewritten so they resolve correctly from the output directory. However, you must configure `include` in your `asena-config.ts` to copy the HTML files to the build output.
 
 ### Required Configuration
 
@@ -216,7 +216,7 @@ my-app/
 │   │       ├── settings.html
 │   │       └── app.ts
 │   └── index.ts
-├── asena.config.ts          # include: ['src/frontend/pages']
+├── asena-config.ts          # include: ['src/frontend/pages']
 └── dist/                    # After build:
     ├── index.asena.js
     └── src/frontend/pages/  # Copied by include

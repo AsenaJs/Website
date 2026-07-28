@@ -120,14 +120,14 @@ export class NotificationWebSocket extends AsenaWebSocketService<{ userId: strin
 
   protected async onOpen(socket: Socket<{ userId: string }>) {
     // Subscribe user to their personal room
-    socket.subscribe(`user:${socket.data.userId}`);
-    console.log(`User ${socket.data.userId} connected`);
+    socket.subscribe(`user:${socket.data.values.userId}`);
+    console.log(`User ${socket.data.values.userId} connected`);
   }
 
   protected async onMessage(socket: Socket<{ userId: string }>, message: string) {
     const data = JSON.parse(message);
     // Use service for business logic
-    await this.userService.handleNotification(socket.data.userId, data);
+    await this.userService.handleNotification(socket.data.values.userId, data);
   }
 }
 ```
@@ -168,7 +168,7 @@ For advanced scenarios with transformations:
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
-import { ICoreServiceNames } from '@asenajs/asena';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
 
 
 @Service('NotificationService')
@@ -191,7 +191,7 @@ For working with multiple or dynamic namespaces:
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { type Ulak } from '@asenajs/asena/messaging';
-import { ICoreServiceNames } from '@asenajs/asena';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
 
 @Service('MultiChannelService')
 export class MultiChannelService {
@@ -287,6 +287,14 @@ await ulak.toMany('/chat', ['room-1', 'room-2', 'room-3'], {
   data: { count: 42 }
 });
 ```
+
+::: warning `toMany()` and `broadcastAll()` never reject
+Both use `Promise.allSettled` internally and only log the failures they see, so wrapping
+them in `try/catch` catches nothing. `bulkSend()` behaves the same way - it resolves with a
+`BulkResult` count instead of throwing.
+
+The single-target methods (`broadcast`, `to`, `toSocket`) **do** throw `UlakError`.
+:::
 
 #### `broadcastAll(data: any): Promise<void>`
 
@@ -395,7 +403,7 @@ console.log(chat.path); // '/chat'
 Ulak throws structured errors with specific error codes:
 
 ```typescript
-import { UlakError, UlakErrorCode } from '@asenajs/asena';
+import { UlakError, UlakErrorCode } from '@asenajs/asena/messaging';
 
 try {
   await ulak.broadcast('/non-existent', { message: 'test' });
@@ -419,6 +427,13 @@ try {
 - `BROADCAST_FAILED` - Failed to broadcast
 - `SOCKET_NOT_FOUND` - Socket ID not found
 - `SERVICE_NOT_INITIALIZED` - Ulak not initialized
+
+Microservice messaging (`send()` / `emit()` / `messages()`) adds four more:
+
+- `NO_TRANSPORT` - No microservice transport is configured
+- `TRANSPORT_NOT_FOUND` - The named transport does not exist
+- `TIMEOUT` - An RPC `send()` exceeded its reply timeout
+- `REMOTE_ERROR` - The remote handler answered with an error
 
 ### Error Handling Best Practices
 
@@ -458,12 +473,18 @@ ulak.unregisterNamespace('/old-chat');
 
 ### Disposing Ulak
 
-Clean up all resources when shutting down:
+`dispose()` clears every registered namespace and drops the transport reference:
 
 ```typescript
-// Called automatically on server shutdown
 ulak.dispose();
 ```
+
+::: warning It is not called for you
+`AsenaServer.stop()` stops the cron runner, the health server, the adapter and the
+microservice transports - it does **not** call `ulak.dispose()`. Call it yourself if you
+need the cleanup (long-lived test processes, hot-reload loops); a normal process exit does
+not need it.
+:::
 
 ## Best Practices
 
@@ -605,7 +626,7 @@ export class NotificationService {
     });
   }
 
-  private async getFollowers(userId: string) {
+  private async getFollowers(userId: string): Promise<{ id: string }[]> {
     // Database logic
     return [];
   }

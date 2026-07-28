@@ -31,8 +31,8 @@ bun add mysql2          # For MySQL
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.7.0 or higher
-- [drizzle-orm](https://orm.drizzle.team) v0.44 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
 
@@ -151,18 +151,19 @@ Without the database type parameter, TypeScript cannot infer the correct query b
 |----------|--------|-------------|
 | PostgreSQL | `pg` | `NodePgDatabase<typeof Schemas>` |
 | MySQL | `mysql2` | `MySql2Database<typeof Schemas>` |
-| SQLite | `bun:sqlite` | `BunSQLDatabase<typeof Schemas>` |
+| BunSQL (PostgreSQL) | Bun native (`type: 'bun-sql'`) | `BunSQLDatabase<typeof Schemas>` |
 
 **Complete Example:**
 ```typescript
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { users } from './schema';
 
-@Repository(users)
+@Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<typeof Schemas>> {
   // Type-safe methods with IntelliSense
   async findByEmail(email: string) {
-    return this.query().where(eq(users.email, email)).limit(1);
+    // findOne() is inherited; `this.db` is the raw drizzle connection for anything else
+    return this.findOne(eq(users.email, email));
   }
 }
 ```
@@ -224,16 +225,16 @@ The `@Database` decorator configures a database connection:
     database: string;
     user: string;
     password: string;
+    ssl?: boolean;
     connectionString?: string; // Optional: overrides individual config
-    // PostgreSQL pool options (optional)
-    max?: number;
-    idleTimeoutMillis?: number;
-    connectionTimeoutMillis?: number;
+    name?: string;             // Optional: shown in the connection log
   },
-  name?: string; // Optional: service name (recommended for multiple databases)
+  name?: string;               // Optional: service name (recommended for multiple databases)
+  logger?: ServerLogger;       // Optional: where the adapter logs connection events
   drizzleConfig?: {
-    logger?: boolean; // Enable SQL query logging
-    schema?: any;     // Your Drizzle schema
+    logger?: boolean;      // Enable SQL query logging
+    schema?: any;          // Your Drizzle schema
+    configPath?: string;   // Path to a drizzle config file
   }
 })
 ```
@@ -598,7 +599,7 @@ export const posts = pgTable('posts', {
 @Repository({ table: posts, databaseService: 'MainDatabase' })
 export class PostRepository extends BaseRepository<typeof posts> {
   async findPostsWithAuthors() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     return db
       .select({
@@ -617,7 +618,7 @@ export class PostRepository extends BaseRepository<typeof posts> {
 @Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users> {
   async complexQuery() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     // Use Drizzle's full API
     return db
@@ -629,7 +630,7 @@ export class UserRepository extends BaseRepository<typeof users> {
   }
 
   async rawSQL() {
-    const db = this.getDatabase();
+    const db = this.db;
 
     // Execute raw SQL if needed
     return db.execute(sql`
@@ -742,7 +743,7 @@ async writeAuditLog(event: AuditEvent) {
 
 ### Isolation & Access Mode
 
-`isolationLevel` and `accessMode` are forwarded straight to Drizzle's `db.transaction(cb, config)`:
+`isolationLevel` and `accessMode` are forwarded to Drizzle's `db.transaction(cb, config)` on the top-level paths (`REQUIRED` starting a new transaction, and `REQUIRES_NEW`). A `NESTED` call **inside** an existing transaction opens a SAVEPOINT with no config, so it inherits the outer transaction's isolation:
 
 ```typescript
 @Transaction({
@@ -836,7 +837,7 @@ export class UserService {
 @Service()
 export class UserService {
   async createUser(data: any) {
-    const db = getDatabase();
+    const db = this.db;
     const existing = await db.select().from(users)...
   }
 }
@@ -874,7 +875,7 @@ const allUsers = await userRepository.findAll(); // Could be millions!
 @Repository({ table: users, databaseService: 'MainDB' })
 export class UserRepository extends BaseRepository<typeof users> {
   async findRecentActiveUsers(days: number = 7) {
-    const db = this.getDatabase();
+    const db = this.db;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
@@ -895,6 +896,7 @@ export class UserRepository extends BaseRepository<typeof users> {
 
 - [Services](/docs/concepts/services)
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration)
 - [Drizzle ORM Documentation](https://orm.drizzle.team/)
 

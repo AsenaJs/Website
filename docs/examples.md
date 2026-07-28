@@ -31,7 +31,7 @@ my-api/
 │   ├── database.ts
 │   ├── logger.ts
 │   └── index.ts
-├── asena.config.ts
+├── asena-config.ts
 ├── package.json
 └── tsconfig.json
 ```
@@ -40,7 +40,7 @@ my-api/
 
 ```typescript
 // src/database.ts
-import { Database } from '@asenajs/asena-drizzle';
+import { AsenaDatabaseService, Database } from '@asenajs/asena-drizzle';
 import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -60,7 +60,7 @@ export const users = pgTable('users', {
     password: process.env.DB_PASSWORD || 'postgres'
   }
 })
-export class MainDB {}
+export class MainDB extends AsenaDatabaseService {}
 ```
 
 ### Repository
@@ -105,11 +105,11 @@ Without the database type parameter, TypeScript cannot infer the correct query b
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { users } from './schema';
 
-@Repository(users)
+@Repository({ table: users, databaseService: 'MainDatabase' })
 export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
   // Type-safe methods with IntelliSense
   async findByEmail(email: string) {
-    return this.query().where(eq(users.email, email)).limit(1);
+    return this.findOne(eq(users.email, email));
   }
 }
 ```
@@ -334,7 +334,7 @@ A real-time chat application with room management and broadcasting.
 
 ```typescript
 // src/websockets/ChatSocket.ts
-import { WebSocket } from '@asenajs/asena/web-socket';
+import { WebSocket } from '@asenajs/asena/decorators';
 import { AsenaWebSocketService } from '@asenajs/asena/web-socket';
 import type { Socket } from '@asenajs/asena/web-socket';
 
@@ -347,8 +347,8 @@ interface ChatData {
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
 
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // Send message to socket
     ws.send(`Hello ${username}`)
@@ -361,16 +361,16 @@ export class ChatSocket extends AsenaWebSocketService<ChatData> {
   }
 
   protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // send message to other sockets in room. (except itself)
     ws.publish(room, message);
   }
 
   protected async onClose(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.value?.username || 'Anonymous';
-    const room = ws.data.value?.room || 'general';
+    const username = ws.data.values?.username || 'Anonymous';
+    const room = ws.data.values?.room || 'general';
 
     // leave room
     ws.unsubscribe(room);
@@ -423,7 +423,7 @@ export class AuthMiddleware extends MiddlewareService {
   private authService: AuthService;
 
   async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.getHeader('authorization')?.replace('Bearer ', '');
+    const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
       return context.send({ error: 'No token provided' }, 401);
@@ -446,7 +446,7 @@ export class AuthMiddleware extends MiddlewareService {
 // src/controllers/ProfileController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
 @Controller({ path: '/profile', middlewares: [AuthMiddleware] })
@@ -472,7 +472,7 @@ export class ProfileController {
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { AuthService } from '../services/AuthService';
 
 @Controller('/auth')
@@ -535,7 +535,7 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       keyGenerator: (ctx) => {
         // Rate limit per user or IP
         const user = ctx.getValue('user');
-        return user?.id || ctx.getRequest().headers.get('x-forwarded-for') || 'anonymous';
+        return user?.id || ctx.req.headers.get('x-forwarded-for') || 'anonymous';
       },
       skip: (ctx) => {
         // Skip for admins
@@ -544,8 +544,8 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       },
       cost: (ctx) => {
         // Expensive operations cost more tokens
-        if (ctx.getRequest().url.includes('/search')) return 5;
-        if (ctx.getRequest().url.includes('/export')) return 10;
+        if (ctx.req.url.includes('/search')) return 5;
+        if (ctx.req.url.includes('/export')) return 10;
         return 1;
       }
     });
@@ -593,7 +593,9 @@ import { GlobalCors } from '../middlewares/GlobalCors';
 
 @Config()
 export class ServerConfig extends ConfigService {
-  middlewares = [GlobalCors];
+  globalMiddlewares() {
+    return [GlobalCors];
+  }
 }
 ```
 

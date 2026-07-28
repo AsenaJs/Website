@@ -131,7 +131,7 @@ This creates `src/controllers/UserController.ts`. Let's modify it:
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 
 @Controller('/users')
 export class UserController {
@@ -162,7 +162,7 @@ export class UserController {
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/hono-adapter/types';
+import type { Context } from '@asenajs/hono-adapter';
 
 @Controller('/users')
 export class UserController {
@@ -214,7 +214,7 @@ curl http://localhost:3000/users/1
 ```
 
 ::: info Controller Names in Output
-Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena.config.ts`.
+Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
 
 ## Step 5: Create a Service
@@ -275,7 +275,7 @@ Update your controller to use the service:
 import { Controller } from '@asenajs/asena/decorators';
 import { Get, Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore/types';
+import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
 
 @Controller('/users')
@@ -303,7 +303,7 @@ export class UserController {
 
   @Post({ path: '/' })
   async createUser(context: Context) {
-    const { name, email } = await context.getBody();
+    const { name, email } = await context.getBody<{ name: string; email: string }>();
     const user = await this.userService.createUser(name, email);
     return context.send({ user }, 201);
   }
@@ -337,10 +337,10 @@ Output:
 
 ```
 Build completed successfully.
-Output: dist/index.js
+Output: dist/index.asena.js
 ```
 
-The build files are in the `dist/` directory (configured in `asena.config.ts`).
+The build files are in the `dist/` directory (configured in `asena-config.ts`).
 
 Run the production build:
 
@@ -376,8 +376,8 @@ import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 export class LoggerMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const start = Date.now();
-    const method = context.getRequest().method;
-    const url = context.getRequest().url;
+    const method = context.req.method;
+    const url = context.req.url;
 
     console.log(`[${method}] ${url} - Started`);
 
@@ -392,7 +392,7 @@ export class LoggerMiddleware extends MiddlewareService {
 Apply it to your controller:
 
 ```typescript
-@Controller('/users', { middlewares: [LoggerMiddleware] })
+@Controller({ path: '/users', middlewares: [LoggerMiddleware] })
 export class UserController {
   // ... your routes
 }
@@ -414,7 +414,7 @@ my-asena-app/
 │   │   └── LoggerMiddleware.ts   # Your middleware
 │   └── index.ts                  # Entry point
 ├── dist/                         # Build output
-├── asena.config.ts               # CLI configuration
+├── asena-config.ts               # CLI configuration
 ├── package.json
 └── tsconfig.json
 ```

@@ -151,7 +151,8 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-const adapter = createHonoAdapter();
+// createHonoAdapter returns a tuple and requires a logger
+const [adapter] = createHonoAdapter({ logger });
 
 const server = await AsenaServerFactory.create({
   adapter,
@@ -213,7 +214,7 @@ export class HelloController {
 asena init
 ```
 
-This creates `asena.config.ts` with default build settings.
+This creates `asena-config.ts` with default build settings.
 
 ### 8. Run Your Application
 
@@ -264,7 +265,7 @@ my-app/
 │   │   └── HelloController.ts
 │   ├── index.ts
 │   └── logger.ts
-├── asena.config.ts
+├── asena-config.ts
 ├── package.json
 └── tsconfig.json
 ```

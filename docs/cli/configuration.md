@@ -1,12 +1,12 @@
 ---
 title: CLI Configuration
-description: Complete reference for asena.config.ts configuration file
+description: Complete reference for asena-config.ts configuration file
 outline: deep
 ---
 
 # CLI Configuration
 
-All Asena projects come with an `asena.config.ts` file for project configuration. This file controls how the CLI builds, develops, and manages your project.
+All Asena projects come with an `asena-config.ts` file for project configuration. This file controls how the CLI builds, develops, and manages your project.
 
 ## defineConfig Helper
 
@@ -16,7 +16,8 @@ Use the `defineConfig` helper for type-safe configuration:
 import { defineConfig } from '@asenajs/asena-cli';
 
 export default defineConfig({
-  // Your configuration here
+  sourceFolder: 'src',
+  rootFile: 'src/index.ts',
 });
 ```
 
@@ -107,7 +108,7 @@ export default defineConfig({
 
 ```typescript
 import { AsenaServerFactory } from '@asenajs/asena';
-import { createErgenecoreAdapter } from '@asenajs/ergenecore/factory';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
 const logger = new AsenaLogger();
@@ -175,7 +176,7 @@ include: [
 ### buildOptions
 
 **Type:** `BuildOptions` (optional)
-**Default:** `{ outdir: './out' }` if not specified
+**Default:** `{ outdir: './out' }` when `buildOptions` is omitted. The `asena-config.ts` that `asena create` / `asena init` scaffolds sets `outdir: 'dist'` explicitly, which is why most projects build into `dist/`.
 
 Configuration options for Bun's bundler. Asena exposes only backend-relevant build options from Bun's `BuildConfig`.
 
@@ -417,11 +418,11 @@ export default defineConfig({
 
 ```bash
 # Development
-cp asena.config.dev.ts asena.config.ts
+cp asena.config.dev.ts asena-config.ts
 asena dev start
 
 # Production
-cp asena.config.prod.ts asena.config.ts
+cp asena.config.prod.ts asena-config.ts
 asena build
 ```
 
@@ -576,7 +577,7 @@ export default defineConfig({
 // ✅ Good: Clear separation
 // - asena.config.dev.ts
 // - asena.config.prod.ts
-// - asena.config.ts (active config)
+// - asena-config.ts (active config)
 ```
 
 ### 4. Document Custom Configuration
