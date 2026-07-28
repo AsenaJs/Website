@@ -3466,6 +3466,53 @@ export class PaymentService {
 }
 ```
 
+### How many implementations?
+
+A `@Strategy` field is **always an array**, whatever the number of implementations:
+
+| `@Implements('Key')` components | injected value |
+|:--------------------------------|:---------------|
+| 0 | `[]` |
+| 1 | `[implementation]` |
+| 2+ | every implementation |
+
+Zero is a normal state, not a misconfiguration. `@Strategy` is the consumer side of a plugin
+point, and a plugin point with no plugins is how one starts — you write the consumer first and
+the implementations arrive per feature:
+
+```typescript
+@Service()
+export class NotificationManager {
+  @Strategy('NotificationService')
+  private notificationServices: NotificationService[]; // [] until the first @Implements exists
+
+  async notifyUser(userId: string, message: string) {
+    // Works from day one - iterates nothing until a channel is added
+    for (const service of this.notificationServices) {
+      await service.send(userId, message);
+    }
+  }
+}
+```
+
+Because an empty key is legitimate, a **mistyped** interface name cannot fail at boot either — it
+would just stay empty forever. To keep that diagnosable, the container logs one line per injection
+site at startup, at `debug` level:
+
+```
+[IocEngine] Strategy key 'NotificationService' has no implementations - NotificationManager.notificationServices will be injected as []
+```
+
+Enable `debug` on your logger when a strategy collection is unexpectedly empty. Keys supplied
+through a test's `overrides` are not reported.
+
+:::warning Upgrading from 0.9.0
+Up to and including `0.9.0`, a strategy key with no implementations **aborted the boot** with
+`<key> is not registered`, and a key with exactly one implementation injected a **bare instance
+instead of an array** — so `.length`, `for...of` and `.map()` all failed on it at runtime. If you
+worked around either of those, the workaround can go.
+:::
+
 ## Lifecycle Hooks with @PostConstruct
 
 The `@PostConstruct` decorator marks a method to be called **after** all dependencies have been injected and the component is fully constructed.
