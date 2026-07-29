@@ -725,7 +725,15 @@ Your WebSocket services, Ulak messaging, and room management work exactly the sa
 :::
 
 ::: info Custom Transports
-The `WebSocketTransport` interface (from `@asenajs/asena`) defines `publish()`, `init()`, and `destroy()` methods. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+
+`init(server)` is called during startup, before any connection is accepted. `destroy()` is called from `server.stop()`, when the adapter shuts the WebSocket layer down — under a 5s ceiling, with failures logged and stepped over so one unreachable broker cannot hold the shutdown open.
+:::
+
+::: warning `destroy()` was never called before 0.10.0
+The hook was documented as "called during server shutdown" and had **zero call sites** anywhere in the framework. A Redis-backed multi-pod setup therefore leaked a subscriber connection (with a live channel subscription) and a publisher connection on every `server.stop()` — enough for a test suite doing twenty stop/start cycles, or a pod under a rolling deploy, to exhaust the broker's connection limit. Both adapters now reach it.
+
+If your custom transport has been relying on never being torn down, make `destroy()` idempotent: the transport reference is deliberately kept after teardown, so a restarted server reuses the same object rather than silently downgrading to the local transport.
 :::
 
 For full `RedisTransport` reference and Redis service setup, see [Redis Package](/docs/packages/redis).

@@ -24,6 +24,7 @@ GET /api/users (SERVER)
 - **W3C Context Propagation** — Extract incoming `traceparent`, inject outgoing context
 - **Route Exclusion** — `ignoreRoutes` with exact and wildcard matching
 - **Custom Sampling** — `ratioBasedSampler` helper for production
+- **Flush on Shutdown** — `server.stop()` flushes and releases the SDK through an `@OnStop` hook
 - **Minimal Dependencies** — One runtime dependency (`@opentelemetry/context-async-hooks`); everything else is a peer dep
 
 ## Installation
@@ -40,7 +41,7 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 
 ::: info Requirements
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 :::
 
 ## Quick Start
@@ -102,7 +103,8 @@ Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context, HttpException } from '@asenajs/ergenecore';
+import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { isHttpException } from '@asenajs/asena/adapter';
 import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
@@ -117,8 +119,10 @@ export class AppConfig extends ConfigService {
   }
 
   public onError(error: Error, context: Context) {
-    if (error instanceof HttpException) {
-      return context.send(error.body, error.status);
+    if (isHttpException(error)) {
+      // Answer with the body the exception carries; `error.message` is that body
+      // already flattened to a string, so re-wrapping it double-encodes an object
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
     }
     return context.send({ error: 'Internal Server Error' }, 500);
   }
@@ -254,6 +258,30 @@ private meter: Meter;
 | `http.server.request.duration` | Histogram (ms) | Request duration by method/path |
 
 The middleware also extracts incoming W3C `traceparent` headers, enabling distributed tracing when other services call your API.
+
+## Shutdown
+
+`server.stop()` runs `shutdown()` on your `@Otel` class through an
+[`@OnStop`](/docs/concepts/lifecycle) hook: buffered spans and metrics are flushed, the exporter
+timers stop, and the context manager is unhooked. There is nothing to call by hand, and nothing to
+register — the hook is inherited from `OtelTracingPostProcessor`.
+
+Each step runs independently and every failure is logged rather than thrown, so a collector that
+cannot be reached does not take the application down with it. `shutdown()` is safe to call twice;
+the second call has nothing left to release.
+
+::: warning The package no longer installs its own signal handlers
+Up to now this package registered `process.on('SIGTERM')` and `process.on('SIGINT')` of its own.
+That was wrong three ways: the async listener's rejection was unheld, so an unreachable collector
+— the normal case for a local `Ctrl+C` — killed the process with `ECONNREFUSED`; the listeners were
+never removed, so repeated boots in one process piled them up; and `server.stop()` on its own
+flushed nothing, leaving the `BatchSpanProcessor` timer and the metric reader's export interval
+running.
+
+Signals are now [handled by the server](/docs/concepts/lifecycle#signal-handling), which calls
+`stop()`, which drives this hook. If you added a `SIGTERM` handler of your own to work around the
+missing flush, remove it.
+:::
 
 ## Configuration
 
@@ -524,6 +552,7 @@ await fetch('http://other-service/api', { headers });
 ## Related Documentation
 
 - [PostProcessor](/docs/concepts/post-processor) — How PostProcessors work in Asena
+- [Component Lifecycle](/docs/concepts/lifecycle) — `@OnStop`, signal handling and shutdown ordering
 - [Services](/docs/concepts/services) — Service layer architecture
 - [Middleware](/docs/concepts/middleware) — Middleware system and registration
 - [Dependency Injection](/docs/concepts/dependency-injection) — IoC container and `@Inject`

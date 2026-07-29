@@ -30,7 +30,7 @@ bun add @asenajs/asena-kafka kafkajs
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 - [kafkajs](https://kafka.js.org) v2.2 or higher
 
 ::: warning Broker compatibility
@@ -61,7 +61,7 @@ A complete produce-and-consume round trip in three steps.
 
 ### 1. Define a Kafka service
 
-Extend `AsenaKafkaService` and decorate with `@Kafka`. The decorator registers the class as an Asena `@Service`, so it is injectable everywhere, and connects it during bootstrap.
+Extend `AsenaKafkaService` and decorate with `@Kafka`. The decorator registers the class as an Asena `@Service`, so it is injectable everywhere; the connection is opened by an [`@OnStart`](/docs/concepts/lifecycle) during `server.start()` and closed by an `@OnStop` during `server.stop()`.
 
 ```typescript
 // src/kafka/AppKafka.ts
@@ -117,12 +117,12 @@ export class AuditService {
 
 ### 3. Consume messages
 
-`createConsumer()` returns a **caller-owned** consumer: you connect it, subscribe, run it, and disconnect it. A `@Service` with `@PostConstruct` is the natural home.
+`createConsumer()` returns a **caller-owned** consumer: you connect it, subscribe, run it, and disconnect it. A `@Service` with [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) is the natural home — components stop in the reverse of the order they started, so this service is torn down while `AppKafka` and its client are still up.
 
 ```typescript
 // src/services/AuditConsumer.ts
 import { Service } from '@asenajs/asena/decorators';
-import { Inject, PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
 import type { KafkaConsumerLike } from '@asenajs/asena-kafka';
 import { AppKafka } from '../kafka/AppKafka';
 
@@ -133,7 +133,7 @@ export class AuditConsumer {
 
   private consumer: KafkaConsumerLike;
 
-  @PostConstruct()
+  @OnStart()
   async start() {
     // groupId is required - replicas sharing it split the partitions between them
     this.consumer = this.kafka.createConsumer({ groupId: 'audit-archiver' });
@@ -150,11 +150,22 @@ export class AuditConsumer {
     });
   }
 
+  @OnStop()
   async stop() {
     await this.consumer?.disconnect();
   }
 }
 ```
+
+::: tip What the service closes and what it does not
+`AsenaKafkaService` carries its own `@OnStop`, which disconnects the client `@OnStart` brought up
+— and with it the default producer behind `sendMessage()`. A client passed as the `client` option
+goes down there too.
+
+What `createProducer()`, `createConsumer()` and `createAdmin()` hand out stays **yours**: nothing
+tracks them, so nothing closes them at a moment your application did not choose. `@OnStop` is
+where you close them.
+:::
 
 ::: warning The topic must exist
 The service never auto-creates topics (`allowAutoTopicCreation: false`). Create them with your broker tooling, or via `createAdmin()`:
@@ -180,10 +191,10 @@ await admin.disconnect();
 | `createAdmin()` | New caller-owned admin client |
 | `client` | The underlying `KafkaClientAdapter` |
 | `config` | The `KafkaConfig` used |
-| `disconnect()` | Close the default producer |
+| `disconnect()` | Close the default producer. Called for you by `@OnStop` on `server.stop()` |
 | `testConnection()` | Bounded broker probe (3s), returns `boolean` |
 
-Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer.
+Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer, and `server.stop()` now calls it through the service's `@OnStop`. Before the framework grew a stop phase nothing did, so the client outlived the server that opened it.
 
 ### Configuration
 

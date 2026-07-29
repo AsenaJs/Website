@@ -162,15 +162,27 @@ await server.start(); // no HTTP port is opened
 
 What still runs in headless mode: configs, the microservice layer, the in-process event system, scheduled tasks. HTTP-only components (`@Controller`, `@WebSocket`, `@FrontendController`) are ignored with a warning.
 
+::: tip The process stays alive on its own
+A headless process has no listening socket to hold the event loop open. `keepAlive` defaults to **`true`** here, so a worker that starts its loop in [`@OnStart`](/docs/concepts/lifecycle) and returns keeps running — the entry file does not have to block on the loop itself. Pass `keepAlive: false` to opt out.
+:::
+
 ### Health Endpoint
 
-With `health: { port }`, a minimal `Bun.serve` endpoint reports process liveness and per-transport connection state — built for Kubernetes probes:
+With `health: { port }`, a minimal `Bun.serve` endpoint reports process liveness and per-transport connection state — built for Kubernetes probes. `path` defaults to `/healthz`, and there are three routes under it:
 
 ```jsonc
-// GET :9090/healthz → 200 while all transports are connected
+// GET :9090/healthz/live → 200 for as long as the process is alive; touches no dependency
+{ "status": "up", "uptime": 123 }
+
+// GET :9090/healthz/ready → 200 while serving and all transports are connected
 { "status": "up", "uptime": 123, "transports": { "default": "connected" } }
-// → 503 with "status": "degraded" when any transport is disconnected
+// → 503 "degraded" when any transport is disconnected
+// → 503 "not_ready" while starting or stopping, with the lifecycle "state"
+
+// GET :9090/healthz → the original endpoint, same body as /ready
 ```
+
+Point the restart policy at `/live` and the load balancer at `/ready`. Readiness flips to `503` the moment `stop()` begins and the health server is the last thing taken down, so the instance is pulled from rotation for the whole drain. See [Health probes](/docs/concepts/lifecycle#health-probes).
 
 ---
 
@@ -207,7 +219,11 @@ async onPayment(event: PaymentEvent, context: MessageContext) {
 - **Handler duration must stay below `claimIdleMs`** (default 60s) — otherwise the sweep assumes the replica crashed and a second replica processes the same entry concurrently.
 - **`maxStreamLength` bounds memory but also offline tolerance** — events older than the trim window are lost for services that stay down too long. Size it against your worst-case deployment gap.
 - **Monitor the DLQ stream** (`asena:ms:dlq`) — poison events land there after `maxRetries`, with `origin_stream`, `origin_group` and `delivery_count` fields.
-- **`@PostConstruct` cannot send messages** — transports are wired during application setup (after component init), so `ulak.send/emit` in `@PostConstruct` throws `NO_TRANSPORT`.
+- **`@OnStart` cannot send messages** — [start hooks run from `server.start()`](/docs/concepts/lifecycle#onstart) but *before* application setup, which is where the transports are wired, so `ulak.send`/`emit` inside one throws `NO_TRANSPORT`. Defer the first publish. An `@OnStop` **can** publish a last message, because the transports are torn down *after* the stop hooks.
+
+::: tip Why start hooks run that early
+They have to, so that a `@Config` finds its own injected dependencies started — `transport()` is called during application setup, and `prepareMicroservices()` goes on to `init()` and `listen()` whatever it returned. A transport built from an injected service would otherwise reach for a connection nothing had opened yet.
+:::
 
 ---
 
@@ -244,13 +260,23 @@ A proven real-world shape for this is the **cross-broker bridge**: keep Redis as
 
 ## Graceful Shutdown
 
-`server.stop()` drains the microservice layer before closing:
+The microservice transports are taken down **after** the components' [`@OnStop` hooks](/docs/concepts/lifecycle#onstop) — so a hook can still finish in-flight work and publish a last message — and before `ulak.dispose()`. Within that step, each transport drains:
 
 1. Consuming stops (no new messages are read)
 2. In-flight handlers get `drainTimeout` (default 10s) to finish — completed ones ACK, unfinished ones stay pending for another replica
 3. Pending `send()` calls are rejected
 4. The consumer's group registration is removed **only if it has no pending entries** — otherwise the entries stay pending for another replica's sweep to claim, and the leftover consumer name is garbage-collected by the sweep once drained
 5. Connections close
+
+`drainTimeout` is reachable from `stop()`:
+
+```typescript
+await server.stop({ drainTimeout: 30_000 });
+```
+
+::: warning New in 0.10.0
+`server.stop()` previously took only a boolean, so the transports' drain window could not be set by the application at all. The boolean form still works — see [Stopping the server](/docs/concepts/lifecycle#stopping-the-server).
+:::
 
 > **`handlerTimeout` is not cancellation:** when a handler exceeds `handlerTimeout`, the dispatch is rejected (the entry stays un-ACKed for redelivery) but the handler function itself keeps running until it settles on its own.
 
@@ -364,4 +390,5 @@ They are deliberately separate: hiding the local-vs-remote distinction creates f
 
 ## Related
 
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop`, where they sit relative to the transports, and signal handling
 - [Inheritance](/docs/concepts/inheritance) - Sharing `@MessagePattern` and `@EventPattern` handlers through a base class, and why an inherited `@EventPattern` opens a real subscription

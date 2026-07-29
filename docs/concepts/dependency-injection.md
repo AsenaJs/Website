@@ -335,16 +335,35 @@ instead of an array** — so `.length`, `for...of` and `.map()` all failed on it
 worked around either of those, the workaround can go.
 :::
 
-## Lifecycle Hooks with @PostConstruct
+## Lifecycle Hooks
 
-The `@PostConstruct` decorator marks a method to be called **after** all dependencies have been injected and the component is fully constructed.
+`@OnStart` marks a method to be called when the server starts — after every dependency is
+injected and every component is constructed, but *before* the application is set up — so a
+`@Config` that builds something out of an injected service finds it already started — and long
+before the HTTP socket binds. `@OnStop` is its counterpart, called during `server.stop()`.
+
+::: tip Full reference
+This section covers the injection side. Ordering, failure policies, signal handling and the
+headless worker pattern live on [Component Lifecycle](/docs/concepts/lifecycle).
+:::
+
+::: warning Upgrading from 0.9.x
+`@PostConstruct` was renamed to **`@OnStart`**. It remains a deprecated alias writing the same
+metadata, so existing code keeps working and renaming the import is the whole migration.
+
+The **timing** changed, and that part is breaking: the hook used to run inside
+`Container.register()`, mid-scan, while the rest of the graph was still being built. It now runs
+from `server.start()`. A component resolved from a server that was created but never started is
+therefore no longer initialised, and a throwing hook no longer calls `process.exit(1)` — it
+throws and `server.start()` rejects. See [Upgrading from 0.9.x](/docs/concepts/lifecycle#upgrading-from-0-9-x).
+:::
 
 ### Basic Usage
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 export class UserService {
@@ -353,7 +372,7 @@ export class UserService {
 
   private cache: Map<string, any>;
 
-  @PostConstruct()
+  @OnStart()
   async initialize() {
     // Called after all @Inject dependencies are resolved
     console.log('UserService initializing...');
@@ -371,10 +390,15 @@ export class UserService {
   getUser(id: string) {
     return this.cache.get(id);
   }
+
+  @OnStop()
+  async release() {
+    this.cache.clear();
+  }
 }
 ```
 
-### Use Cases for @PostConstruct
+### Use Cases for @OnStart
 
 **1. Initialization Logic**
 
@@ -383,10 +407,15 @@ export class UserService {
 export class CacheService {
   private redis: RedisClient;
 
-  @PostConstruct()
+  @OnStart()
   async connect() {
     this.redis = await createRedisClient();
     console.log('Redis connection established');
+  }
+
+  @OnStop()
+  async disconnect() {
+    await this.redis?.close();
   }
 }
 ```
@@ -398,7 +427,7 @@ export class CacheService {
 export class ApiKeyService {
   private apiKey = process.env.API_KEY;
 
-  @PostConstruct()
+  @OnStart()
   validate() {
     if (!this.apiKey || this.apiKey.length < 32) {
       throw new Error('Invalid API key configuration');
@@ -421,7 +450,7 @@ export class EventSubscriberService {
   @Inject(EventBus)
   private eventBus: EventBus;
 
-  @PostConstruct()
+  @OnStart()
   subscribeToEvents() {
     // Subscribe to events after EventBus is injected
     this.eventBus.on('user.created', this.handleUserCreated.bind(this));
@@ -448,7 +477,7 @@ export class CountryService {
 
   private countries: Map<string, Country>;
 
-  @PostConstruct()
+  @OnStart()
   async preloadCountries() {
     const data = await this.db.query('SELECT * FROM countries');
     this.countries = new Map(data.map(c => [c.code, c]));
@@ -463,16 +492,28 @@ export class CountryService {
 
 ### Execution Order
 
+Construction, per component:
+
 1. Class constructor runs
 2. All `@Inject` dependencies are resolved
 3. All `@Strategy` arrays are resolved (a separate pass)
-4. All `@PostConstruct` methods are called
-5. Registered `@PostProcessor`s run
+4. Registered `@PostProcessor`s run
 
-::: danger A throwing `@PostConstruct` exits the process
-The container catches the error, logs it, and calls `process.exit(1)` - it is **not**
-propagated to the caller. Use `@PostConstruct` for setup that must succeed at boot
-(opening a connection pool, building a transport) and validate recoverable input elsewhere.
+Then, once every component exists, from `server.start()`:
+
+5. All `@OnStart` methods are called, in registration order — dependencies before dependents
+
+And from `server.stop()`, in the reverse of that order:
+
+6. All `@OnStop` methods are called
+
+::: danger A throwing `@OnStart` aborts the boot
+The error is **not** swallowed. The components that already started are rolled back and
+`server.start()` rejects with an error naming the hook, carrying the original error as `cause`.
+Use `@OnStart` for setup that must succeed at boot (opening a connection pool, subscribing to a
+topic) and validate recoverable input elsewhere.
+
+Up to 0.9.x the container caught the error, logged it, and called `process.exit(1)`.
 :::
 
 ```typescript
@@ -486,17 +527,29 @@ export class ExampleService {
     // this.logger is undefined here!
   }
 
-  @PostConstruct()
+  @OnStart()
   initialize() {
-    console.log('2. PostConstruct called');
+    console.log('2. OnStart called');
     // this.logger is available here!
     this.logger.info('Service initialized');
   }
 }
 ```
 
-::: warning Async PostConstruct
-`@PostConstruct` methods can be async. Asena waits for them to complete before the application starts.
+::: warning Async hooks
+`@OnStart` and `@OnStop` methods can be async. Asena awaits `@OnStart` before the HTTP socket is
+bound, and awaits each `@OnStop` under a per-hook timeout (default 5s) during shutdown.
+
+An `@OnStart` that never resolves is a `start()` that never resolves — a component with a run
+loop should start it and return, not await it. See
+[Component Lifecycle](/docs/concepts/lifecycle#the-hook-must-return).
+:::
+
+::: warning Injected fields are read-only
+`@Inject` and `@Strategy` install accessors with no setter, so assigning to one throws. The error
+names the field and the class and points at the [`overrides` option](/docs/testing/test-app#replacing-components-with-mocks)
+or [`mockComponent()`](/docs/testing/mock-component) — reach for those instead of
+`Object.assign(instance, { dep: fake })` in a test.
 :::
 
 ## Service Scopes
@@ -643,6 +696,45 @@ export class ChatSocket extends AsenaWebSocketService<void> {
 }
 ```
 
+## Reaching the container from outside
+
+`@Inject` only works inside a component, and the entry file is not one. A migration runner, a
+one-off script, a `bun --eval` session against a booted server — none of them can declare a field
+the container will fill. For those, the server itself hands out components:
+
+```typescript
+const server = await AsenaServerFactory.create({ adapter, logger });
+
+await server.start();
+
+const feed = await server.resolve<PriceFeed>('PriceFeed');
+
+await feed.warmUp();
+```
+
+The name is the component's registered name: the class name by default, or whatever string you
+passed to `@Service('name')`. It is the same key `@Inject('PriceFeed')` takes, and the same
+signature the test harness exposes as [`app.resolve()`](/docs/testing/test-app#the-container).
+
+Three things worth knowing before you reach for it:
+
+- **Resolve after `start()`, not after `create()`.** `create()` builds the graph, but
+  [`@OnStart`](/docs/concepts/lifecycle) runs in `start()` — a component pulled out in between is
+  constructed and injected, yet its pool is unopened and its cache is empty.
+- **An unknown name throws**, with `<name> is not registered`. There is no `undefined` to check
+  for.
+- **A name shared by two classes resolves to an array**, because the container promotes duplicate
+  names rather than letting one silently win. See [Inheritance](/docs/concepts/inheritance) for
+  how a class ends up sharing its base's name.
+
+::: tip Replaces `coreContainer.container`
+`server.coreContainer.container.resolve()` also works, and up to 0.9.x it was what everyone found
+instead. `server.resolve()` is the supported spelling — prefer it.
+:::
+
+Inside a component, keep using `@Inject`. Resolving by hand from a component works but hides the
+dependency from the graph, so the container can no longer order construction around it.
+
 ## Complete Example
 
 Combining all concepts:
@@ -661,10 +753,15 @@ export class RedisStorage implements StorageProvider {
   @Inject(RedisService, (service) => service.client)
   private redis: RedisClient;
 
-  @PostConstruct()
+  @OnStart()
   async connect() {
     await this.redis.connect();
     console.log('Redis storage ready');
+  }
+
+  @OnStop()
+  async close() {
+    await this.redis.close();
   }
 
   async save(key: string, data: any) {
@@ -697,7 +794,7 @@ export class DataService {
   @Strategy('StorageProvider')
   private storageProviders: StorageProvider[];
 
-  @PostConstruct()
+  @OnStart()
   initialize() {
     console.log(`Loaded ${this.storageProviders.length} storage providers`);
   }
@@ -737,13 +834,18 @@ private userService: UserService;
 private userService: any;
 ```
 
-### 2. Use @PostConstruct for Setup
+### 2. Use @OnStart for Setup, @OnStop to Release
 
 ```typescript
-// ✅ Good: Initialize after injection
-@PostConstruct()
+// ✅ Good: Initialize after injection, release symmetrically
+@OnStart()
 async initialize() {
-  await this.setupConnection();
+  this.connection = await this.setupConnection();
+}
+
+@OnStop()
+async release() {
+  await this.connection?.close();
 }
 
 // ❌ Bad: Dependencies not available in constructor
@@ -813,6 +915,7 @@ export interface PaymentProvider {
 
 ## Related Documentation
 
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop`, shutdown ordering and signals
 - [Services](/docs/concepts/services) - Creating injectable services
 - [Controllers](/docs/concepts/controllers) - Using DI in controllers
 - [Middleware](/docs/concepts/middleware) - DI in middleware

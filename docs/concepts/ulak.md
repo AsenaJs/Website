@@ -479,11 +479,14 @@ ulak.unregisterNamespace('/old-chat');
 ulak.dispose();
 ```
 
-::: warning It is not called for you
-`AsenaServer.stop()` stops the cron runner, the health server, the adapter and the
-microservice transports - it does **not** call `ulak.dispose()`. Call it yourself if you
-need the cleanup (long-lived test processes, hot-reload loops); a normal process exit does
-not need it.
+::: tip It is called for you
+`AsenaServer.stop()` calls `ulak.dispose()` as part of its
+[shutdown sequence](/docs/concepts/lifecycle#stop-sequence) - after the components' `@OnStop`
+hooks and after the microservice transports are taken down, so nothing that still wanted to
+publish loses its namespaces first. Calling it yourself is harmless but no longer necessary.
+
+**Changed in 0.10.0:** up to 0.9.x `stop()` did **not** dispose Ulak, and long-lived test
+processes and hot-reload loops had to do it by hand.
 :::
 
 ## Best Practices

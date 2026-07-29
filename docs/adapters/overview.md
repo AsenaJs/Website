@@ -27,7 +27,7 @@ Asena currently provides two official adapters:
 **The fastest adapter for production workloads**
 
 - ⚡ **Performance:** ~295k req/sec
-- 📦 **Dependencies:** Zero (except Zod)
+- 📦 **Dependencies:** Zero — Zod is a peer your project owns
 - 🔧 **Runtime:** Bun-exclusive
 - 🎯 **Use Case:** Production APIs, microservices
 
@@ -36,7 +36,7 @@ Asena currently provides two official adapters:
 **Familiar and battle-tested**
 
 - ⚡ **Performance:** ~233k req/sec
-- 📦 **Dependencies:** Hono framework
+- 📦 **Dependencies:** Hono and Zod, as peers your project owns
 - 🔧 **Runtime:** Bun (can be ported to Node)
 - 🎯 **Use Case:** Projects using Hono, gradual migration
 
@@ -244,6 +244,12 @@ or
 Check the [Hono-adapter source code](https://github.com/AsenaJs/hono-adapter) for a complete implementation example.
 :::
 
+::: warning `stop()` has to reach your WebSocket layer
+`server.stop()` calls the adapter's `stop()` before it runs any [`@OnStop`](/docs/concepts/lifecycle) hook, and an adapter with WebSocket support is responsible for tearing that layer down from there — clearing heartbeat timers and calling the [WebSocket transport's](/docs/concepts/websocket#multi-pod-websocket) optional `destroy()`.
+
+Both official adapters do this now. Neither did before: `destroy()` had no call site anywhere in the framework, so a Redis-backed multi-pod setup leaked a subscriber and a publisher connection on every stop.
+:::
+
 ## Recommendations
 
 ### For New Projects
@@ -251,7 +257,7 @@ Check the [Hono-adapter source code](https://github.com/AsenaJs/hono-adapter) fo
 Start with **Ergenecore** for optimal performance and native Bun features.
 
 ```bash
-bun add @asenajs/ergenecore
+bun add @asenajs/ergenecore zod
 ```
 
 ### For Existing Hono Projects
@@ -259,7 +265,7 @@ bun add @asenajs/ergenecore
 Use the **Hono adapter** for seamless migration and reuse of existing middleware.
 
 ```bash
-bun add @asenajs/hono-adapter
+bun add @asenajs/hono-adapter hono zod
 ```
 
 ### For Maximum Performance

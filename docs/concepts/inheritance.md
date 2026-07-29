@@ -49,7 +49,7 @@ Everything declared on a method or a field is collected from the whole prototype
 | `@Inject` | ✅ | Fields declared on any ancestor are injected |
 | `@Strategy` | ✅ | |
 | `@Implements` | ✅ | A subclass joins its base's interface registration, so a `@Strategy` list picks it up — see below |
-| `@PostConstruct` | ✅ | Runs once per method, even when the chain is several levels deep |
+| `@OnStart` / `@OnStop` ([lifecycle](/docs/concepts/lifecycle)) | ✅ | Runs once per method, even when the chain is several levels deep. Start hooks are collected ancestors-first; stop hooks run in the reverse of that. `@PostConstruct` is a deprecated alias of `@OnStart` and behaves identically |
 | `@Override` | ✅ | Marks accumulate across the chain; a subclass cannot un-mark an inherited one |
 | `@Hidden` on a method ([openapi](/docs/packages/openapi)) | ✅ | A hidden base-class route stays out of the spec |
 | `@Transaction` ([drizzle](/docs/packages/drizzle)) | ✅ | A base class's transactional methods run inside a transaction |

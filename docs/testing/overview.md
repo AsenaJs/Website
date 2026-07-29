@@ -236,7 +236,7 @@ See the [MockComponent API](/docs/testing/mock-component) documentation for deta
 
 ### mockComponentAsync
 
-Asynchronous version for components with `postConstruct` hooks.
+Asynchronous version, for when the `postConstruct` callback you pass is async. It is your callback, not the component's [`@OnStart`](/docs/concepts/lifecycle) — `mockComponent` never runs the component's own lifecycle hooks.
 
 ```typescript
 @Service()

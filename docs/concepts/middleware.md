@@ -24,8 +24,8 @@ Both adapters accept the same three ways to answer a request from middleware:
 
 - **`return context.send(...)`** - returning a `Response` short-circuits the chain
 - **`return false`** - short-circuits with `403 Forbidden`
-- **`throw`** - an `HttpException` (Ergenecore) or `HTTPException` (Hono) is routed to
-  your `onError` handler
+- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your `onError`
+  handler. The same class on both adapters, so a middleware that guards a route is portable
 
 The one thing that is *not* portable is **omitting `next()`**. See
 [Stopping Middleware Chain](#stopping-middleware-chain).
@@ -176,6 +176,15 @@ export class UserController {
 
 ## Common Middleware Patterns
 
+::: info The two tabs differ by style, not by adapter
+In the examples below the Ergenecore tab answers with `context.send(...)` and the Hono tab
+`throw`s, so you can see both. **Either works on either adapter** - the only adapter-specific
+line is where `MiddlewareService` and `Context` are imported from.
+
+Return a `Response` when the middleware is the right place to phrase the answer. Throw when you
+want the rejection to reach `onError` and be shaped there with the rest of your API's errors.
+:::
+
 ### Authentication Middleware
 
 ::: code-group
@@ -213,7 +222,7 @@ export class AuthMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
@@ -221,7 +230,7 @@ export class AuthMiddleware extends MiddlewareService {
     const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
-      throw new HTTPException(401, { message: 'No token provided' });
+      throw new HttpException(401, 'No token provided');
     }
 
     try {
@@ -230,7 +239,7 @@ export class AuthMiddleware extends MiddlewareService {
       context.setValue('user', payload);
       await next();
     } catch (error) {
-      throw new HTTPException(401, { message: 'Invalid token' });
+      throw new HttpException(401, 'Invalid token');
     }
   }
 
@@ -268,7 +277,7 @@ export class AdminRoleMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 import type { Next } from 'hono';
 
 
@@ -278,7 +287,7 @@ export class AdminRoleMiddleware extends MiddlewareService {
     const user = context.getValue('user');
 
     if (!user || user.role !== 'admin') {
-      throw new HTTPException(403, { message: 'Forbidden' });
+      throw new HttpException(403, 'Forbidden');
     }
 
     await next();
@@ -437,7 +446,7 @@ export class AuthMiddleware extends MiddlewareService {
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
@@ -451,7 +460,7 @@ export class AuthMiddleware extends MiddlewareService {
     const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
-      throw new HTTPException(401, { message: 'Unauthorized' });
+      throw new HttpException(401, 'Unauthorized');
     }
 
     try {
@@ -461,7 +470,7 @@ export class AuthMiddleware extends MiddlewareService {
       context.setValue('user', user);
       await next();
     } catch (error) {
-      throw new HTTPException(401, { message: 'Invalid token' });
+      throw new HttpException(401, 'Invalid token');
     }
   }
 }
@@ -583,7 +592,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class MaintenanceMiddleware extends MiddlewareService {
@@ -592,9 +601,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
 
     if (isMaintenanceMode) {
       // Returning a Response also works here; throwing routes through onError instead
-      throw new HTTPException(503, {
-        message: 'Service under maintenance'
-      });
+      throw new HttpException(503, 'Service under maintenance');
     }
 
     await next(); // Continue if not in maintenance mode

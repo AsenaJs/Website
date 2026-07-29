@@ -14,6 +14,24 @@ Both the **Ergenecore** and the **Hono** adapter ship validation. Each exports i
 One behavioural difference remains: Ergenecore runs the `hook` **only when validation fails**, while the Hono adapter runs it on **every** validation attempt. Write hooks that check `result.success` and they behave the same on both.
 :::
 
+## Installation
+
+Zod is a **peer dependency** of both adapters — they define the validation contract, they do not
+ship the library, so your project owns the version:
+
+```bash
+bun add zod
+```
+
+**Zod v4 or higher is required.** Both adapters call `flattenError` to build the validation-failure
+envelope, and that is a top-level export introduced in Zod 4.
+
+::: tip You may already have it
+`asena create` installs zod for you, and `asena generate validator` writes `import { z } from 'zod'`
+into the file it scaffolds. If you set the project up by hand, add it — before 3.0.0 the import
+resolved by hoisting out of the adapter's own dependencies, which was never something to rely on.
+:::
+
 ## Why Use Validation?
 
 - **Type Safety**: Catch type mismatches at runtime
@@ -390,10 +408,18 @@ adapters. The error it narrows to also carries `target` and `cause` (the origina
 `ZodError`) if you need more than `issues`.
 
 ::: tip Existing error handlers keep working
-The thrown error extends the adapter's HTTP exception type (`HTTPException` for Hono,
-`HttpException` for Ergenecore) and carries status **400**. An existing handler that
-branches on `instanceof HTTPException` and replies with `error.status` therefore keeps
-answering 400 - adopting this does not silently turn validation failures into 500s.
+The thrown error is an HTTP exception carrying status **400**, so a handler that matches with
+`isHttpException()` and replies with `error.status` keeps answering 400 - adopting this does not
+silently turn validation failures into 500s.
+
+Check `isValidationError()` **first** if you want validation failures to have their own envelope.
+A `ValidationError` is an HTTP exception too, so a generic `isHttpException()` branch placed
+above it would swallow it.
+
+The class each adapter extends is an implementation detail and they differ - Ergenecore's extends
+`HttpException`, the Hono adapter's extends hono's `HTTPException` so that pre-0.9 handlers
+written against `instanceof HTTPException` keep answering 400. Match with the guards and you do
+not have to know which.
 :::
 
 ::: warning A hook that returns a Response wins

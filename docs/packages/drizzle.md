@@ -16,7 +16,8 @@ Drizzle ORM utilities for AsenaJS - A powerful and type-safe database integratio
 - 🔄 **Declarative Transactions** - `@Transaction` with `REQUIRED` / `NESTED` / `REQUIRES_NEW` propagation, propagated through `AsyncLocalStorage`
 - 🔧 **AsenaJS Integration** - Seamless IoC container integration
 - 📦 **Multiple Database Support** - Connect to different databases simultaneously
-- ⚡ **Performance Optimized** - Connection pooling and efficient queries
+- ⚡ **Performance Optimized** - Configurable connection pooling and efficient queries
+- 🔌 **Symmetric Connection Lifecycle** - the pool is opened by `@OnStart` and released by `@OnStop`
 
 ## Installation
 
@@ -31,7 +32,7 @@ bun add mysql2          # For MySQL
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 - [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
@@ -220,14 +221,22 @@ The `@Database` decorator configures a database connection:
 @Database({
   type: 'postgresql' | 'mysql' | 'bun-sql',
   config: {
-    host: string;
-    port: number;
-    database: string;
-    user: string;
-    password: string;
+    // All five are optional: supply them, or a connectionString, not both
+    host?: string;
+    port?: number;
+    database?: string;
+    user?: string;
+    password?: string;
     ssl?: boolean;
-    connectionString?: string; // Optional: overrides individual config
+    connectionString?: string; // Replaces the five fields above - see "Connection String" below
     name?: string;             // Optional: shown in the connection log
+    pool?: {                   // Optional: driver-agnostic pool sizing, all durations in ms
+      max?: number;
+      idleTimeoutMs?: number;
+      connectTimeoutMs?: number;
+      maxLifetimeMs?: number;
+    };
+    extra?: Record<string, unknown>; // Optional: driver-native options, spread last
   },
   name?: string;               // Optional: service name (recommended for multiple databases)
   logger?: ServerLogger;       // Optional: where the adapter logs connection events
@@ -238,6 +247,18 @@ The `@Database` decorator configures a database connection:
   }
 })
 ```
+
+The `pool` shape is exported as `DatabasePoolConfig` if you want to build it separately.
+
+::: tip The pool is released on shutdown
+`AsenaDatabaseService` connects from an [`@OnStart`](/docs/concepts/lifecycle) and releases the
+pool from an `@OnStop`, so `server.stop()` hands the connections back.
+
+Nothing did that before the framework grew a stop phase: the pool outlived the server that opened
+it. That is invisible for a process that exits straight after, and fatal for a test run where
+every file boots its own container — the pools accumulate until Postgres answers
+`sorry, too many clients already`, in whichever test happened to run last.
+:::
 
 ## @Repository Decorator API
 
@@ -278,15 +299,51 @@ The decorator chains `@PostProcessor()` onto your subclass and writes the option
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'password',
 
-    // Optional: Connection pool settings
-    max: 20, // Maximum number of clients
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    // Optional: driver-agnostic connection pool settings
+    pool: {
+      max: 20,                 // pg default: 20
+      idleTimeoutMs: 30_000,   // pg default: 30000
+      connectTimeoutMs: 2_000, // pg default: 2000
+    },
   },
   name: 'MainDatabase'
 })
 export class PostgresDB extends AsenaDatabaseService {}
 ```
+
+### Connection Pool
+
+`pool` is driver-agnostic: every duration on it is **milliseconds**, and each adapter translates
+it into its own driver's vocabulary. A field left undefined keeps the adapter's default, so
+adding a `pool` block never changes anything you did not ask to change.
+
+| Field | postgresql (`pg`) | mysql (`mysql2`) | bun-sql (`Bun.SQL`) |
+|:------|:------------------|:-----------------|:--------------------|
+| `max` | `max` — default **20** | `connectionLimit` — default **10** | `max` — Bun's own default (10) |
+| `idleTimeoutMs` | `idleTimeoutMillis` — default **30000** | `idleTimeout` — unset by default | `idleTimeout`, **converted to seconds** |
+| `connectTimeoutMs` | `connectionTimeoutMillis` — default **2000** | `connectTimeout` — unset by default | `connectionTimeout`, **converted to seconds** |
+| `maxLifetimeMs` | `maxLifetimeSeconds`, **converted to seconds**; unset by default | ❌ no mysql2 equivalent — ignored | `maxLifetime`, **converted to seconds** |
+
+::: tip `extra` is the escape hatch
+`config.extra` is a `Record<string, unknown>` spread **last** into the driver's option object, so
+it also wins over everything the rest of the config produced. It is passed through unvalidated and
+is not portable between database types.
+
+```typescript
+config: {
+  host: 'localhost', port: 5432, database: 'myapp', user: 'postgres', password: '…',
+  pool: { max: 50 },
+  extra: { application_name: 'billing-api' },  // pg-specific
+}
+```
+:::
+
+::: info New
+These numbers used to be literals inside each adapter, unreachable from configuration — the same
+image could ship an API wanting 50 connections and a worker wanting 5, and neither could say so.
+The former literals became the defaults, so an application that configures no `pool` block
+behaves exactly as before.
+:::
 
 ### MySQL
 
@@ -324,22 +381,55 @@ export class BunSQLDatabase extends AsenaDatabaseService {}
 
 ### Connection String
 
+Every adapter honours `connectionString`. Set it and leave the discrete fields out — they are
+optional, and when a connection string is present they are **not sent to the driver at all**.
+
 ```typescript
 @Database({
   type: 'postgresql',
   config: {
     connectionString: process.env.DATABASE_URL,
-    // Still required (can be empty if using connection string)
-    host: '',
-    port: 0,
-    database: '',
-    user: '',
-    password: ''
+    // Still applied on top of the URL
+    pool: { max: 20 },
   },
   name: 'MainDatabase'
 })
 export class DatabaseFromURL extends AsenaDatabaseService {}
 ```
+
+Each driver takes it under its own name — `pg` as `connectionString`, `mysql2` as `uri`,
+`Bun.SQL` as `url` — but the rule above is the same for all three. `ssl`, `pool` and `extra`
+still apply.
+
+::: warning Supplying both is not a merge
+Setting a connection string *and* the discrete fields does not fill the URL's gaps from the
+fields. The drivers do not even agree on who wins: `pg` lets the URL win, while `mysql2` keeps
+any truthy discrete option and ignores the URI entirely. And on `pg`, a key the URL omits falls
+back to `PGHOST`/`PGPORT`/pg's defaults — **never** to the discrete value you supplied, so
+`{ port: 5555, connectionString: 'postgres://u:p@host/db' }` resolves to 5432.
+
+That is why Asena omits the discrete fields outright rather than emitting both. Pick one.
+:::
+
+::: info Where `ssl` fits
+For `pg`, an `ssl`/`sslmode` in the query string wins in **both** directions — it overrides
+`config.ssl` whichever way each is set — because pg re-parses the URL over the whole config.
+`config.ssl` only decides what the URL is silent about.
+
+For `mysql2` and `bun-sql` the priority is the other way round: an explicit `ssl: true` beats
+the URL, and the URL applies when `ssl` is unset or `false`.
+:::
+
+::: info Fixed in 0.10.0
+`connectionString` was accepted by the config type and documented as supported, but only
+`bun-sql` ever read it — and even there it was dropped along with `ssl` and the pool size. The
+`postgresql` and `mysql` adapters built their options from the discrete fields alone, so a
+URL-configured application silently connected somewhere else: pg fell through to `PGHOST` and
+the OS username, mysql2 to `localhost:3306`.
+
+The five discrete fields are now optional, so the `host: '', port: 0` ceremony this page used to
+show is gone. `DatabaseAdapter.createConnectionString()` was removed in the same change.
+:::
 
 ## Repository Methods
 
@@ -896,6 +986,7 @@ export class UserRepository extends BaseRepository<typeof users> {
 
 - [Services](/docs/concepts/services)
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Component Lifecycle](/docs/concepts/lifecycle) - when the pool is opened and released
 - [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration)
 - [Drizzle ORM Documentation](https://orm.drizzle.team/)

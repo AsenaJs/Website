@@ -15,7 +15,7 @@ PostProcessor is Asena's component interception system. It lets you hook into th
 - **AOP Patterns** — Add cross-cutting concerns without modifying individual components
 
 ::: tip
-If you just need initialization logic for a single component, use `@PostConstruct` instead. PostProcessor is for cross-cutting concerns that apply to **multiple** components.
+If you just need initialization logic for a single component, use [`@OnStart`](/docs/concepts/lifecycle) instead. PostProcessor is for cross-cutting concerns that apply to **multiple** components.
 :::
 
 ## Quick Start
@@ -49,7 +49,7 @@ export interface ComponentPostProcessor {
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `instance` | `T` | The fully initialized component instance (after DI + PostConstruct) |
+| `instance` | `T` | The component instance with every `@Inject` / `@Strategy` field populated. Its `@OnStart` has **not** run yet |
 | `Class` | `any` | The original class constructor (for reading metadata) |
 | **Returns** | `T \| Promise<T>` | The processed instance. Return `null`/`undefined` to keep the original |
 
@@ -73,16 +73,25 @@ Accepts optional `ComponentParams`:
 PostProcessor runs at a specific point in the component initialization chain:
 
 ```
-Constructor → @Inject (DI) → @Strategy → @PostConstruct → postProcess()
+Constructor → @Inject (DI) → @Strategy → postProcess()   … later, from server.start() → @OnStart
 ```
 
 1. Component is instantiated (`new`)
 2. Dependencies are injected (`@Inject`)
-3. PostConstruct methods are called (`@PostConstruct`)
-4. **PostProcessors run** — instance is fully initialized at this point
+3. Strategy arrays are resolved (`@Strategy`)
+4. **PostProcessors run** — every injected field is populated at this point
+5. Much later, once the whole graph exists, [`@OnStart`](/docs/concepts/lifecycle) hooks run from `server.start()`
 
 ::: info Execution Order
 If multiple PostProcessors are registered, they execute in FIFO order (first registered, first executed). Each processor's output becomes the next processor's input (chaining).
+:::
+
+::: warning Changed in 0.10.0
+Up to 0.9.x `@PostConstruct` ran *before* `postProcess()`. Start hooks now run after it, and
+against the **post-processed** instance — a processor that returns a proxy hands the hook the
+same object every other component was injected with. A processor that relied on the wrapped
+instance already having run its own initialization no longer can; do that work in
+`postProcess()` itself, or in the processor's own `@OnStart` (see below).
 :::
 
 ## Two Modes of Operation
@@ -154,7 +163,7 @@ The `@asenajs/asena-openapi` package uses a PostProcessor to automatically gener
 
 ```typescript
 import { PostProcessor } from '@asenajs/asena/decorators';
-import { PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { OnStart } from '@asenajs/asena/decorators/ioc';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ComponentPostProcessor } from '@asenajs/asena/ioc/types';
 import { extractControllerRouteInfo, isController, isValidator } from '@asenajs/asena/utils';
@@ -168,7 +177,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
   private controllers: { instance: any; Class: any }[] = [];
   private validators = new Map<string, any>();
 
-  @PostConstruct()
+  @OnStart()
   public onInit(): void {
     // Register the /openapi endpoint during initialization
     this.adapter.registerRoute({
@@ -207,7 +216,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
 
 **How it works:**
 
-1. `@PostConstruct` registers the `/openapi` GET endpoint on the adapter
+1. `@OnStart` registers the `/openapi` GET endpoint on the adapter
 2. `postProcess()` is called for every component — it selectively collects controllers and validators
 3. When `/openapi` is requested, the spec is lazily generated from collected metadata
 4. The original instances are never modified
@@ -227,6 +236,17 @@ This guarantees that PostProcessors are ready before any user component is creat
 
 ::: warning
 Dependencies of PostProcessors (services injected via `@Inject`) are also created in Phase A and are **not** post-processed. Keep PostProcessor dependencies minimal.
+:::
+
+::: warning Phase A keeps the old start-hook timing
+Phase B components have their [`@OnStart`](/docs/concepts/lifecycle) deferred to `server.start()`.
+Phase A components — the processors and their dependencies — run theirs at **construction**, as
+they always did, because `postProcess()` reads state the processor's own start hook sets up.
+Deferring it would wrap every Phase B component against an uninitialised processor.
+
+Two consequences: a processor's `@OnStart` cannot reach the microservice transports (they are not
+connected yet), and because it counts as started from construction, its `@OnStop` runs on
+`server.stop()` even if `start()` was never called.
 :::
 
 ## Dependency Injection in PostProcessors
@@ -251,13 +271,14 @@ export class MetricsPostProcessor implements ComponentPostProcessor {
 }
 ```
 
-## @PostConstruct vs @PostProcessor
+## @OnStart vs @PostProcessor
 
-| Aspect | `@PostConstruct` | `@PostProcessor` |
+| Aspect | [`@OnStart`](/docs/concepts/lifecycle) | `@PostProcessor` |
 |:-------|:-----------------|:-----------------|
 | **Type** | Method decorator | Class decorator |
 | **Scope** | Single component | All components |
-| **When** | After DI, before post-processing | After DI + PostConstruct |
+| **When** | From `server.start()`, once the whole graph exists | At construction, right after DI |
+| **Counterpart** | `@OnStop` | None |
 | **Purpose** | Component initialization | Cross-cutting concerns |
 | **Can transform** | No (runs on self) | Yes (returns modified instance) |
 | **Use case** | Setup resources, validate config | Tracing, metadata collection, AOP |
@@ -321,6 +342,7 @@ export class HeavyProcessor implements ComponentPostProcessor {
 
 - [Services](/docs/concepts/services) - Service layer architecture
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and why PostProcessors start earlier
 - [OpenAPI](/docs/packages/openapi) - PostProcessor in action
 - [Configuration](/docs/guides/configuration) - Server configuration
 
