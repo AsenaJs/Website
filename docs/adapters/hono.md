@@ -57,12 +57,18 @@ For Ergenecore adapter documentation, see [Ergenecore Adapter](/docs/adapters/er
 ## Installation
 
 ```bash
-bun add @asenajs/hono-adapter
+bun add @asenajs/hono-adapter hono zod
 ```
+
+`hono` and `zod` are **peer dependencies**: this adapter defines the wrapper, your project owns
+the libraries it wraps. That is what keeps you and the adapter on one copy of `hono` — see
+[Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
+- [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
 
 ## Quick Start
@@ -388,6 +394,12 @@ export class AuthController {
 RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal performance. Each middleware instance maintains its own bucket storage for route-specific rate limiting.
 :::
 
+::: info Its sweep timer is released on shutdown
+`RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
+
+The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+:::
+
 ## Hono-Specific Features
 
 ### @Override Decorator
@@ -524,6 +536,7 @@ Extend `ConfigService` for server configuration:
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/hono-adapter';
+import { isHttpException, type NotFoundRequest } from '@asenajs/asena/adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
@@ -532,8 +545,17 @@ export class ServerConfig extends ConfigService {
   }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error);
-    return context.send({ error: error.message }, 500);
+    if (isHttpException(error)) {
+      // Answer with the body the exception carries; `error.message` is that body
+      // already flattened to a string, so re-wrapping it double-encodes an object
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+    }
+
+    return context.send({ error: 'Internal Server Error' }, 500);
+  }
+
+  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
@@ -541,6 +563,62 @@ export class ServerConfig extends ConfigService {
 ::: info
 For configuration, see [Configuration](/docs/guides/configuration).
 :::
+
+### The two handlers do not overlap
+
+`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
+route** — a routing outcome, not a failure — so neither handler has to ask which case it is
+looking at. An unmatched route never reaches `onError`.
+
+`request.path` is the path only, with no origin and no query string, and `request.method` is
+normalised by the adapter, so the same handler body works unchanged on Ergenecore. With no
+`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
+
+A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
+`onError`:
+
+```typescript
+import { HttpException } from '@asenajs/asena/adapter';
+
+throw new HttpException(404, { error: 'User not found' });
+```
+
+`HttpException` lives in the framework core, so that throw is identical on Ergenecore. This
+adapter deliberately does **not** re-export it: it already exports hono's `HTTPException`, and two
+throwable classes differing by the case of two letters is a trap for autocomplete.
+
+### Every thrown error reaches `onError` first
+
+Including `HttpException`, hono's `HTTPException`, and anything a hono middleware raised. Your
+handler sees all of them; the adapter falls back to answering from the exception itself only when
+there is no handler, when it returns nothing, or when it throws.
+
+::: warning Match with `isHttpException()`, not `instanceof`
+This adapter is the one where it matters most. Applications throw `HttpException`, while
+`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and hono's own validator throw `HTTPException` —
+two unrelated classes, so **either** `instanceof` check misses half of your 4xx responses and
+sends them down the generic 500 branch. `isHttpException()` matches both.
+
+It also survives a project resolving two copies of `@asenajs/asena`, where `instanceof` silently
+answers false: `HttpException` brands each instance, so the brand travels with the exception
+whichever copy built it.
+
+**Two copies of `hono` are a different matter, and the guard does not save you there.** The brand
+is patched onto the prototype of the `HTTPException` class *the adapter* resolved; it cannot reach
+another copy's class. An `HTTPException` thrown from a second copy is recognised by neither
+`instanceof` nor `isHttpException()`, and answers `500`.
+
+Since 3.0.0 `hono` is a **peer dependency**, so the adapter has no resolution slot of its own and a
+project normally resolves one copy — which is what makes the guard sufficient. Keep the habit
+anyway: always `import { HTTPException } from '@asenajs/hono-adapter'`, never from
+`hono/http-exception`. Preferring `HttpException` from `@asenajs/asena/adapter` for your own throws
+avoids the question entirely, since it brands each instance rather than a prototype. See
+[Error Handling](/docs/guides/error-handling#throwing-http-exceptions).
+:::
+
+With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+thrown message is deliberately not echoed to the caller — it is written to the log with its stack
+instead. See [Adapter logging](/docs/guides/error-handling#adapter-logging).
 
 ### Static File Serving
 
@@ -702,6 +780,10 @@ describe("UserController", () => {
 | `logger`     | `Logger`   | Logger instance                           |
 | `port`       | `number`   | Server port (optional)                    |
 | `components` | `Class[]`  | Controllers/services to register (for testing) |
+| `overrides`  | `Record<string, object>` | Replace registered components with test doubles, keyed by service name |
+| `health`     | `{ port, path? }` | Health probe endpoint — `path` defaults to `/healthz` ([health probes](/docs/concepts/lifecycle#health-probes)) |
+| `shutdown`   | `object`   | Signal handling and `@OnStop` timeouts ([signal handling](/docs/concepts/lifecycle#signal-handling)) |
+| `keepAlive`  | `boolean`  | Hold the event loop open. Defaults to `true` in headless mode, `false` otherwise |
 | `gc`         | `boolean`  | Enable garbage collection (optional)      |
 
 ::: tip Testing with Components

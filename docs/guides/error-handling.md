@@ -32,16 +32,14 @@ Asena's error handling philosophy:
 
 ### Throwing HTTP Exceptions
 
-The simplest way to handle errors in Asena is to throw an `HttpException` (Ergenecore) or `HTTPException` (Hono).
+Throw an `HttpException`. It comes from `@asenajs/asena/adapter` — the framework core, not an
+adapter — so the same import and the same throw work unchanged on Ergenecore and Hono:
 
-#### Ergenecore Adapter
-::: code-group
-
-```typescript [Ergenecore]
+```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import { HttpException } from '@asenajs/ergenecore';
-import type { Context } from '@asenajs/ergenecore';
+import { HttpException } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
 
 @Controller('/users')
 export class UserController {
@@ -52,8 +50,7 @@ export class UserController {
     const user = await findUserById(id);
 
     if (!user) {
-      // Throw HttpException with status code and message
-      throw new HttpException(404, 'User not found');
+      throw new HttpException(404, { error: 'User not found' });
     }
 
     return context.send(user);
@@ -61,32 +58,51 @@ export class UserController {
 }
 ```
 
+Only the `Context` type is adapter-specific. Everything else — the class, the constructor, the
+response it produces — is identical, so moving an application between adapters does not mean
+rewriting its error handling.
 
-```typescript [Hono]
-import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import { HTTPException } from 'hono/http-exception';
-import type { Context } from '@asenajs/hono-adapter';
+::: tip Upgrading from 0.9
+`HttpException` used to be declared by each adapter. Ergenecore exported its own class; the Hono
+adapter re-exported `HTTPException` from `hono/http-exception`, which takes
+`(status, { message })` rather than `(status, body)`. There is now one class, in core.
 
-@Controller('/users')
-export class UserController {
-  @Get('/:id')
-  async getUser(context: Context) {
-    const id = context.getParam('id');
-
-    const user = await findUserById(id);
-
-    if (!user) {
-      // Throw HTTPException with status code and response
-      const response = context.send({ error: 'User not found' }, 404);
-      throw new HTTPException(404, { res: response as Response });
-    }
-
-    return context.send(user);
-  }
-}
-```
+`import { HttpException } from '@asenajs/ergenecore'` still works and is the *same class object*,
+so nothing breaks — but prefer `@asenajs/asena/adapter` in new code. On the Hono adapter this is
+the only import path: `@asenajs/hono-adapter` deliberately does not re-export it, because
+`HttpException` and `HTTPException` sitting side by side in one package differ by the case of two
+letters and autocomplete cannot tell which you meant.
 :::
+
+::: info Hono's `HTTPException` keeps working
+`@asenajs/hono-adapter` still exports `HTTPException`, and hono packages that throw it —
+`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt`, hono's own validator — are unaffected by the
+move. Both classes are recognised by `isHttpException()` and both are answered from their own
+status, so your handler does not have to know which one it is holding.
+
+**Import it from `@asenajs/hono-adapter`, never from `hono/http-exception`.** This is not a style
+preference. If a project ever resolves *two* copies of `hono`, `HTTPException` from the other copy
+is a different class — `isHttpException()` does not recognise it, and every deliberate `401`/`403`
+thrown from it becomes a `500`, silently, with the API still responding. The brand cannot close
+that: it is installed on the prototype of the copy the adapter resolved and cannot reach another
+copy's class.
+
+Since **3.0.0 `hono` is a peer dependency**, so the adapter no longer has a resolution slot of its
+own and a project normally resolves exactly one copy. That is the real fix; importing from the
+adapter is the guarantee on top of it. Before 3.0.0 this happened in a real application, triggered
+by nothing more than a patch bump of `hono` in its own `package.json`.
+
+`HttpException` from `@asenajs/asena/adapter` sidesteps the question entirely — it brands each
+*instance*, so it is recognised no matter which copy of the framework constructed it. Another
+reason to prefer it for your own throws.
+
+If you suspect a duplicate, `bun pm ls --all | grep hono` shows a nested
+`@asenajs/hono-adapter/node_modules/hono` when there is one, and the adapter writes a startup
+warning if it finds itself resolving one. Note that removing the duplicate from the lockfile is not
+enough — the stale `node_modules` directory has to go too, so upgrade with
+`rm -rf node_modules bun.lock && bun install`.
+:::
+
 ### HttpException API
 
 The `HttpException` class accepts three parameters:
@@ -124,6 +140,30 @@ throw new HttpException(503, 'Service Unavailable', {
 });
 ```
 
+::: warning `message` is the body as a *string* — do not re-wrap it
+`body` is what the caller receives. `message` is the same thing flattened to a string, which for
+an object body is the **serialized JSON**:
+
+```typescript
+const error = new HttpException(404, { error: 'User not found' });
+
+error.message              // '{"error":"User not found"}'   <- a string, not an object
+error.getResponse()        // 404, body {"error":"User not found"}
+```
+
+So an `onError` that answers `context.send({ error: error.message }, error.status)` double-encodes
+an object body into `{"error":"{\"error\":\"User not found\"}"}`. Pick one of two styles and stay
+with it:
+
+- **The exception owns the body** — throw whatever shape you want and let your handler answer with
+  `error.getResponse()`. Works for hono's `HTTPException` too, which has no `body` at all.
+- **The handler owns the body** — throw a **string** and let `onError` build the envelope from
+  `error.message` and `error.status`. Use this when every error in your API must share one shape.
+
+The examples below use the first. `error.body` is only on `HttpException` itself, not on the
+`isHttpException()` contract, so a handler that reads it is assuming it threw the exception itself.
+:::
+
 ::: tip Your handler always gets first refusal
 Both adapters turn the exception into a proper HTTP response without you catching it, and
 both offer it to `onError` first:
@@ -140,23 +180,44 @@ bypassed here. If you worked around that by throwing a plain domain error, you c
 `HttpException` directly.
 :::
 
+::: info The log follows the response
+When the framework answers — no handler, or one that declined or threw — it also writes the line,
+at a level derived from *the status the caller actually received*. A 4xx is logged as a rejected
+request without a stack; a 5xx is logged as an application error with one. See
+[Adapter logging](#adapter-logging).
+:::
+
 ::: warning Match the exception with `isHttpException()`, not `instanceof`
-A project that resolves two copies of an adapter - or two copies of `hono`, which is a peer
-dependency - ends up with two distinct exception classes, and `instanceof` silently answers
-false for one of them. Every deliberate 401/403/404 then collapses to your generic 500 branch
-while the API keeps responding.
+There are two reasons, and on the Hono adapter both apply at once.
+
+**Two classes.** Anything hono's ecosystem raises is an `HTTPException`, not an `HttpException`.
+`instanceof HttpException` answers false for every 401 from `hono/bearer-auth`, and
+`instanceof HTTPException` answers false for everything your own code throws. `isHttpException()`
+matches both, which is the whole reason it exists.
+
+**Two copies.** A project that resolves two copies of `@asenajs/asena` — or of `hono` — ends up
+with two distinct exception classes, and `instanceof` silently answers false for one of them.
+Every deliberate 401/403/404 then collapses to your generic 500 branch while the API keeps
+responding, so nothing looks broken until someone reads the status codes.
 
 ```typescript
 import { isHttpException } from '@asenajs/asena/adapter';
 
 public onError(error: Error, context: Context) {
   if (isHttpException(error)) {
-    return context.send({ error: error.message }, error.status);
+    // Let the exception answer with the body it carries. `error.message` would be that body
+    // flattened to a string - re-wrapping it double-encodes an object body
+    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
   }
 
   return context.send({ error: 'Internal Server Error' }, 500);
 }
 ```
+
+The guard narrows to `status`, an optional `getResponse()` and the usual `Error` members. It
+deliberately does **not** guarantee `body` — a branded exception from another package may not
+carry one — so reach for `error.body` only after you have an `HttpException` you know you threw
+yourself. `getResponse` is optional for the same reason, hence the `?.` and the fallback.
 :::
 
 ---
@@ -202,8 +263,7 @@ For complex applications, use the **ExceptionMapper pattern** to handle differen
 import { Scope } from '@asenajs/asena/decorators/ioc';
 import { Component } from '@asenajs/asena/decorators';
 import type { Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
-import { isValidationError } from '@asenajs/asena/adapter';
+import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
 import { ClientErrorStatusCode, ServerErrorStatusCode } from '@asenajs/asena/web-types';
 
 @Component({ name: 'ExceptionMapper', scope: Scope.SINGLETON })
@@ -213,8 +273,8 @@ export class ExceptionMapper {
     const requestMethod = context.req.method;
 
     // Handle request validation errors.
-    // Checked BEFORE HTTPException on purpose: ValidationError extends HTTPException,
-    // so the generic branch below would otherwise swallow it
+    // Checked BEFORE the HTTP exception branch on purpose: a ValidationError *is* an HTTP
+    // exception (status 400), so the generic branch below would otherwise swallow it
     if (isValidationError(error)) {
       const errors = error.issues.map((issue) => ({
         field: issue.path.join('.'),
@@ -228,15 +288,19 @@ export class ExceptionMapper {
       }, ClientErrorStatusCode.BadRequest);
     }
 
-    // Handle HTTPException (from Hono or middleware)
-    if (error instanceof HTTPException) {
+    // Handle every deliberate HTTP status: your own HttpException, and anything a
+    // hono middleware raised. One branch covers both - see the warning above on why
+    // this is not an `instanceof` check
+    if (isHttpException(error)) {
       console.warn(`HTTP Exception: ${error.message}`, {
         path: requestPath,
         method: requestMethod,
         status: error.status
       });
 
-      return context.send(error.message, error.status);
+      // The exception carries its own body - answer with it rather than re-wrapping
+      // `error.message`, which is that body already flattened to a string
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
     }
 
     // Handle custom domain errors
@@ -359,7 +423,7 @@ export class AuthController {
 import { Middleware } from '@asenajs/asena/decorators';
 import type { Context, MiddlewareService } from '@asenajs/hono-adapter';
 import type { Next } from 'hono';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware implements MiddlewareService {
@@ -367,18 +431,18 @@ export class AuthMiddleware implements MiddlewareService {
     const authHeader = context.req.header('authorization');
 
     if (!authHeader) {
-      const response = context.send({
+      throw new HttpException(401, {
         error: 'Unauthorized',
         message: 'Missing Authorization header'
-      }, 401);
-
-      throw new HTTPException(401, { res: response as Response });
+      });
     }
 
     await next();
   }
 }
 ```
+
+The throw is the same on Ergenecore — only the `Context` and `MiddlewareService` imports change.
 
 ### Mapping Custom Errors
 
@@ -671,7 +735,9 @@ async getUser(context: Context) {
 // Service-level (Business Logic)
 async getUser(id: string) {
   if (!id) {
-    throw new ValidationError('User ID is required');
+    // `ValidationError` is the framework's own type for a failed *request* validation and
+    // takes a ZodError - it is not a general-purpose error to construct by hand
+    throw new HttpException(400, { code: 'USER_ID_REQUIRED' });
   }
 
   const user = await this.db.findUser(id);

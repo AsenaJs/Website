@@ -412,6 +412,27 @@ onError?(error: Error, context: C): Response | Promise<Response>
 
 **Returns:** `Response` or `Promise<Response>`
 
+::: warning Branch on `isHttpException()` before answering 500
+The examples below answer every error with a 500, to keep the focus on logging and DI. A real
+handler needs one branch above that, or every deliberate `401`, `403` and `404` your application
+throws — and every one raised by an auth middleware — arrives at the client as a 500:
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+  }
+
+  // ... the 500 handling shown below
+}
+```
+
+See [Error Handling](/docs/guides/error-handling#global-error-handler) for why this is a guard
+rather than an `instanceof` check, and why the body comes from `getResponse()`.
+:::
+
 ### Basic Error Handler
 
 ```typescript
@@ -569,6 +590,8 @@ When the route exists but the record does not, throw instead - that reaches `onE
 other application decision:
 
 ```typescript
+import { HttpException } from '@asenajs/asena/adapter';
+
 if (!user) {
   throw new HttpException(404, { code: 'USER_NOT_FOUND' });
 }
@@ -1023,7 +1046,14 @@ The `@Config` decorator is processed during the application bootstrap sequence:
    - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
    - `transport()` is called and the WebSocket / microservice transports are wired
-6. **Phase: SERVER_READY** - Server starts with applied configuration
+6. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
+7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
+
+::: warning A `@Config` cannot use `@OnStart` to prepare configuration
+The config hooks above are read in step 5, *before* start hooks run in step 6. An `@OnStart` on a
+`@Config` class still fires, but anything it prepares arrives after the values were already taken —
+Asena logs a warning when it sees one.
+:::
 
 ### Singleton Validation
 

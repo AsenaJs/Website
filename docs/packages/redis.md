@@ -30,7 +30,7 @@ bun add @asenajs/asena-redis redis
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 
 ## Quick Start
 
@@ -83,8 +83,22 @@ export class CacheService {
 }
 ```
 
-::: tip
-The `@Redis` decorator automatically handles connection during IoC initialization and disconnection on server shutdown. You don't need to manage the lifecycle manually.
+::: tip Connection lifecycle is handled for you
+`AsenaRedisService` carries an [`@OnStart`](/docs/concepts/lifecycle) that connects during
+`server.start()`, and an `@OnStop` that closes on `server.stop()` — first every connection handed
+out by `createSubscriber()`, then the main client. Failures on individual subscribers are logged
+and stepped over so one dead socket cannot strand the others or the main client.
+
+A **user-supplied `client`** (the `client` option) is closed too: `@OnStart` adopts it as the
+connection the service runs on, and `@OnStop` treats it the same way. If you need to keep it
+alive past the server, do not hand it to `@Redis`.
+:::
+
+::: warning This was not true before
+This page previously claimed disconnection on shutdown was automatic. It was not — the framework
+had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
+that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.10.0
+or higher.
 :::
 
 ## Adapter Selection
@@ -143,9 +157,9 @@ export class AppRedis extends AsenaRedisService {}
 |:-------|:-----------|:--------|:------------|
 | `send(command, args)` | `command: string, args: string[]` | `any` | Execute raw Redis command |
 | `client` | — | `RedisClientAdapter` | Access underlying client |
-| `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub |
+| `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub. Tracked by the service and closed on `server.stop()` |
 | `testConnection()` | — | `boolean` | Returns `true` if connected |
-| `disconnect()` | — | `void` | Close connection |
+| `disconnect()` | — | `void` | Close the main connection. Called for you by `@OnStop`; calling it by hand leaves any subscriber you are still reading from open |
 
 ## Configuration
 

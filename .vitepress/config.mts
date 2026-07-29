@@ -69,6 +69,7 @@ export default defineConfig({
                     {text: "Controllers", link: "/docs/concepts/controllers"},
                     {text: "Services", link: "/docs/concepts/services"},
                     {text: "Dependency Injection", link: "/docs/concepts/dependency-injection"},
+                    {text: "Component Lifecycle", link: "/docs/concepts/lifecycle"},
                     {text: "Middleware", link: "/docs/concepts/middleware"},
                     {text: "Context", link: "/docs/concepts/context"},
                     {text: "Validation", link: "/docs/concepts/validation"},

@@ -135,7 +135,8 @@ interface MockComponentOptions {
   // Provide custom mocks instead of auto-generated ones (optional)
   overrides?: Record<string, any>;
 
-  // Lifecycle hook called after injection (optional, can be async)
+  // Your own callback, run after injection (optional, can be async).
+  // NOT the component's @OnStart - see below
   postConstruct?: (instance: any) => void | Promise<void>;
 }
 ```
@@ -181,7 +182,7 @@ An override is the **final** value injected into the field:
 
 #### `postConstruct`
 
-Lifecycle hook executed after dependencies are injected.
+A callback of **yours**, run after the dependencies are injected.
 
 ```typescript
 const { instance, mocks } = mockComponent(AuthService, {
@@ -190,6 +191,22 @@ const { instance, mocks } = mockComponent(AuthService, {
   }
 });
 ```
+
+::: warning It is not the component's `@OnStart`
+`mockComponent` builds the instance directly — it never goes through the container or the server,
+so the component's own [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) hooks are **not**
+invoked. This option is the hook you would otherwise write inline; if you want the real start
+hook, call it yourself:
+
+```typescript
+const { instance } = await mockComponentAsync(DatabaseService, {
+  postConstruct: async (inst) => inst.onStart(),   // the @OnStart method, called explicitly
+});
+```
+
+For hooks running in their real order against a real container, use
+[`createTestApp`](/docs/testing/test-app).
+:::
 
 ::: tip Async Support
 The `postConstruct` hook can be async. Use `mockComponentAsync` when you need to await the hook.

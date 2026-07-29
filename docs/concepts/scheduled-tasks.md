@@ -193,6 +193,8 @@ export class CronController {
 
 ::: info Lifecycle
 CronRunner starts all registered jobs when the server is ready and stops them during graceful shutdown. You don't need to manage the start/stop lifecycle manually.
+
+Relative to [component lifecycle hooks](/docs/concepts/lifecycle): jobs start **after** every `@OnStart` has returned, and stop **before** any `@OnStop` runs — the first step of `server.stop()` is "take no new work". A job already executing when shutdown begins is not cancelled; `stopAll()` only unschedules future runs.
 :::
 
 ## Real-World Examples

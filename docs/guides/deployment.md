@@ -32,11 +32,19 @@ Then run the production build:
 bun dist/index.asena.js
 ```
 
+## Graceful Shutdown and Probes
+
+Two things a deployment needs are already available:
+
+- **Signals are handled by default.** `SIGTERM`, `SIGINT` and `SIGHUP` call `server.stop()`, which stops taking new work, runs your components' `@OnStop` hooks while the transports are still up, then releases everything in order. See [Component Lifecycle](/docs/concepts/lifecycle#signal-handling).
+- **Liveness and readiness are separate endpoints.** Pass `health: { port }` and point your restart policy at `{path}/live` and your load balancer at `{path}/ready`. Readiness answers `503` for the whole drain, so an instance is pulled from rotation while it still has work to finish. See [Health probes](/docs/concepts/lifecycle#health-probes).
+
 ## Related Documentation
 
 - [CLI Build Command](/docs/cli/commands#build)
 - [CLI Configuration](/docs/cli/configuration)
 - [Server Configuration](/docs/guides/configuration)
+- [Component Lifecycle](/docs/concepts/lifecycle) - graceful shutdown, signals and health probes
 
 ---
 

@@ -83,14 +83,14 @@ bun init -y
 
 ::: code-group
 ```bash [For ergenecore]
-bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger
+bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger zod
 bun add -D @asenajs/asena-cli
 bunx asena init
 ✔ Which adapter do you want to use? Ergenecore Adapter
 ```
 
 ```bash [For hono]
-bun add @asenajs/asena @asenajs/hono-adapter hono @asenajs/asena-logger
+bun add @asenajs/asena @asenajs/hono-adapter @asenajs/asena-logger hono zod
 bun add -D @asenajs/asena-cli
 bunx asena init
 ✔ Which adapter do you want to use? Hono Adapter

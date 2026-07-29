@@ -163,7 +163,7 @@ expect(mocks.UserService).toBe(double);
 
 ## Known behaviours
 
-- **`@PostConstruct` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its lifecycle hook. This matches `@WebMvcTest` semantics.
+- **`@OnStart` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its [start hook](/docs/concepts/lifecycle). This matches `@WebMvcTest` semantics.
 - **Only `@Controller` classes are accepted** in `controllers`. Pass services and middlewares through `components`.
 
 ## Related

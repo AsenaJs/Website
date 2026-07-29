@@ -427,6 +427,46 @@ export class UserService {
 ```
 :::
 
+## Lifecycle Hooks
+
+A service that acquires something at boot releases it at shutdown. `@OnStart` runs during
+`server.start()`, once every dependency is injected and the whole application exists; `@OnStop`
+runs during `server.stop()`, in the reverse of the start order — so a service still has its
+dependencies while it lets go of its own resources.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class SearchIndexService {
+  @Inject(ProductRepository)
+  private products: ProductRepository;
+
+  private index?: SearchIndex;
+
+  @OnStart()
+  async build() {
+    this.index = await SearchIndex.open('./index');
+    await this.index.load(await this.products.findAll());
+  }
+
+  @OnStop()
+  async close() {
+    await this.index?.close();
+  }
+}
+```
+
+::: warning Only singletons take part
+A `Scope.PROTOTYPE` service is constructed per resolve and the container keeps no handle on it,
+so there is nothing to stop. Its `@OnStart` still runs at construction; declaring `@OnStop` on
+one produces a boot warning, because the hook can never fire.
+:::
+
+The full rules — ordering, failure policies, timeouts, signal handling — are on
+[Component Lifecycle](/docs/concepts/lifecycle).
+
 ## String-based vs Class-based Injection
 
 Asena supports two ways to inject services: by class reference or by string name.
@@ -719,6 +759,7 @@ describe('UserService', () => {
 ## Related Documentation
 
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and shutdown ordering
 - [Controllers](/docs/concepts/controllers)
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
 - [WebSocket](/docs/concepts/websocket)

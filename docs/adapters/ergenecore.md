@@ -14,7 +14,7 @@ Ergenecore is a high-performance adapter that:
 
 - **Built by Asena Team** - First-party adapter maintained alongside Asena core
 - **Bun-Native** - Uses `Bun.serve()` and native Bun APIs exclusively
-- **Zero Dependencies** - No external dependencies except Zod (for validation)
+- **Zero Dependencies** - no runtime dependencies at all; Zod is a peer your project owns
 - **SIMD-Accelerated** - Leverages Bun's SIMD-optimized routing engine
 - **Zero-Copy File Serving** - Uses `Bun.file()` for optimal static file performance
 - **Built-in Middleware** - Includes CorsMiddleware and RateLimiterMiddleware
@@ -57,12 +57,16 @@ For Hono adapter documentation, see [Hono Adapter](/docs/adapters/hono).
 ## Installation
 
 ```bash
-bun add @asenajs/ergenecore
+bun add @asenajs/ergenecore zod
 ```
+
+`zod` is a **peer dependency**: the adapter defines the validation contract, your project owns the
+library and its version.
 
 **Requirements:**
 - Bun v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
 
 ## Quick Start
@@ -406,6 +410,12 @@ export class AuthController {
 RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal performance. Each middleware instance maintains its own bucket storage for route-specific rate limiting.
 :::
 
+::: info Its sweep timer is released on shutdown
+`RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
+
+The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+:::
+
 ## Performance & Architecture
 
 ### SIMD-Accelerated Routing
@@ -525,8 +535,14 @@ A *domain* 404 — the route exists, the record does not — is still a throw, a
 `onError`:
 
 ```typescript
-throw new HttpException(404, { message: 'User not found' });
+import { HttpException } from '@asenajs/asena/adapter';
+
+throw new HttpException(404, { error: 'User not found' });
 ```
+
+`HttpException` lives in the framework core, not in this adapter, so the same throw works
+unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports it under the name it has always
+had, and that re-export is the same class object.
 
 ::: warning `onNotFound` also catches missing static files
 A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
@@ -586,6 +602,7 @@ import {
   type Context,
   type ValidationSchema,
 } from '@asenajs/ergenecore';
+import { isHttpException } from '@asenajs/asena/adapter';
 import { z } from 'zod';
 
 // MiddlewareService requires handle() - it is the only abstract member
@@ -608,7 +625,12 @@ export class MyValidator extends ValidationService {
 @Config()
 export class MyConfig extends ConfigService {
   public onError(error: Error, context: Context) {
-    return context.send({ error: error.message }, 500);
+    // Without this branch every deliberate 401/403/404 arrives at the client as a 500
+    if (isHttpException(error)) {
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+    }
+
+    return context.send({ error: 'Internal Server Error' }, 500);
   }
 }
 ```

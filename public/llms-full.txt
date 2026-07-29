@@ -175,14 +175,14 @@ bun init -y
 
 ::: code-group
 ```bash [For ergenecore]
-bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger
+bun add @asenajs/asena @asenajs/ergenecore @asenajs/asena-logger zod
 bun add -D @asenajs/asena-cli
 bunx asena init
 ✔ Which adapter do you want to use? Ergenecore Adapter
 ```
 
 ```bash [For hono]
-bun add @asenajs/asena @asenajs/hono-adapter hono @asenajs/asena-logger
+bun add @asenajs/asena @asenajs/hono-adapter @asenajs/asena-logger hono zod
 bun add -D @asenajs/asena-cli
 bunx asena init
 ✔ Which adapter do you want to use? Hono Adapter
@@ -1468,9 +1468,19 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.9.x)
+## ✅ Current Release (v0.10.x)
 
 These features are **stable and production-ready** in the current release:
+
+### New in v0.10
+
+- **[Component Lifecycle](/docs/concepts/lifecycle)** - `@OnStart` and `@OnStop`, a symmetric pair around `server.start()` and `server.stop()`. `@PostConstruct` is now a deprecated alias of `@OnStart`, and start hooks moved out of the component scan into `start()` - so a hook sees the finished graph, can publish through `ulak`, and no request can reach a component whose hook has not run
+- **Graceful shutdown, completed** - `stop()` reordered around the new hooks, `ulak.dispose()` called automatically, the WebSocket transport's `destroy()` actually invoked, and every teardown step contained so one failure cannot strand the rest
+- **[Signal handling](/docs/concepts/lifecycle#signal-handling)** - `SIGTERM` / `SIGINT` / `SIGHUP` call `stop()` by default; handlers are installed in `start()` and removed in `stop()`, with `forceExitAfter` and `onUnhandledError` as opt-ins
+- **[`keepAlive`](/docs/concepts/lifecycle#keepalive-and-headless-workers)** - a headless worker starts its loop in `@OnStart`, returns, and the process stays alive. The run loop no longer has to live in the entry file
+- **[Liveness and readiness probes](/docs/concepts/lifecycle#health-probes)** - `{path}/live` and `{path}/ready` next to the original endpoint, with readiness wired to the lifecycle state so `/ready` answers 503 for the whole drain
+- **`server.resolve<T>(name)`** - resolve a component without reaching through `coreContainer.container`
+- **A failing hook no longer kills the process** - `process.exit(1)` is gone; the error propagates and `start()` rejects
 
 ### New in v0.9
 
@@ -1478,6 +1488,11 @@ These features are **stable and production-ready** in the current release:
 - **`onNotFound`** - An unmatched route is a routing outcome, not an error, so it has [its own config hook](/docs/guides/error-handling#not-found) and `onError` never has to ask which it is looking at
 - **[Uniform error handling](/docs/guides/error-handling#adapter-logging)** - Both adapters answer the same 404, 500 and validation envelopes, and the framework's default log fires exactly when its default response does
 - **`isHttpException()`** - Branded exception detection that survives a project resolving two copies of a package, where `instanceof` silently answers false and turns every deliberate 401/403 into a 500
+
+### New in v0.9.2
+
+- **[One `HttpException`](/docs/guides/error-handling#throwing-http-exceptions)** - The class moved into `@asenajs/asena/adapter`, so the same import and the same `throw` work unchanged on both adapters. Each adapter used to declare its own, with different constructors and different response bodies. Hono's `HTTPException` is still fully supported, so `hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and hono's validator keep working
+- **Hono brand parity** - The Hono adapter's default response now selects on the brand rather than `instanceof`, and its log level is derived from the same status the caller received. Previously a branded exception from a second resolved copy was answered 500 while its log line claimed the status it carried
 
 ### Core Framework
 
@@ -1495,10 +1510,10 @@ These features are **stable and production-ready** in the current release:
 - **EventService Support** - Built-in native EventService support with `@EventService` and `@On`
 - **[Scheduled Tasks](/docs/concepts/scheduled-tasks)** - Cron-based task scheduling with `@Schedule` and `CronRunner`
 - **[FrontendController](/docs/concepts/frontend-controller)** - Serve HTML pages using Bun's native HTML imports with `@FrontendController` and `@Page`
-- **[PostProcessor](/docs/concepts/post-processor)** - Component lifecycle hooks for metadata collection and instance transformation
+- **[PostProcessor](/docs/concepts/post-processor)** - Component interception for metadata collection and instance transformation
 - **SSE/Streaming** - Server-Sent Events with `stream()`, `streamSSE()`, `streamText()`
 - **Duplicate Route Detection** - Prevents accidental route conflicts at startup
-- **Graceful Server Shutdown** - `server.stop()` with proper resource cleanup
+- **[Graceful Server Shutdown](/docs/concepts/lifecycle#stop-sequence)** - `server.stop()` with a contained, ordered teardown: cron, adapter, `@OnStop` hooks, microservice transports, Ulak, health endpoint
 - **[Microservices](/docs/concepts/microservices)** - Broker-agnostic messaging with `@MessageController`, `@MessagePattern` (RPC), `@EventPattern` (events), Ulak client API, and multiple named transports
 - **Headless Mode** - Start without an HTTP adapter for message-driven internal services, with optional health endpoint
 
@@ -1511,7 +1526,7 @@ These features are **stable and production-ready** in the current release:
 
 ### Adapters
 
-- **Ergenecore Adapter** - Native Bun adapter with SIMD-accelerated routing, streaming, and unified `HttpException`
+- **Ergenecore Adapter** - Native Bun adapter with SIMD-accelerated routing and streaming
 - **Hono Adapter** - Hono-based adapter with [strict mode (trailing slash)](/docs/adapters/hono#trailing-slash-strict-mode), streaming, and middleware compatibility
 
 ### Official Packages
@@ -1524,7 +1539,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.9.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.10.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -1542,7 +1557,7 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 A powerful plugin architecture allowing third-party extensions.
 
 **Features:**
-- Plugin lifecycle hooks (`onLoad`, `onStart`, `onStop`)
+- Plugin lifecycle hooks (`onLoad`, plus the plugin-level equivalents of the component `@OnStart` / `@OnStop` [shipped in v0.10](/docs/concepts/lifecycle))
 - Plugin dependency resolution
 - Plugin configuration management
 - Official plugin registry
@@ -1603,8 +1618,9 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.8.x  | Previous | Possible | Yes (with caution) |
-| v0.9.x  | Current | Possible | Yes (with caution) |
+| v0.8.x  | Older | Possible | Yes (with caution) |
+| v0.9.x  | Previous | Possible | Yes (with caution) |
+| v0.10.x | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -1646,6 +1662,8 @@ We welcome contributions in many forms:
 - **v0.7.1** - Released April 2026 (`routePattern` on Context, FrontendController registration refinements)
 - **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
 - **v0.9.0** - Released July 2026 (Decorator inheritance, `onNotFound` hook, uniform error and 404 handling across adapters, branded `HttpException`)
+- **v0.9.2** - Released July 2026 (One `HttpException` in core, thrown identically on both adapters; the Hono adapter's default response and log level both moved onto the brand)
+- **v0.10.0** - Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`. **Breaking:** start hooks moved from the component scan to `server.start()`
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress
@@ -2869,6 +2887,46 @@ export class UserService {
 ```
 :::
 
+## Lifecycle Hooks
+
+A service that acquires something at boot releases it at shutdown. `@OnStart` runs during
+`server.start()`, once every dependency is injected and the whole application exists; `@OnStop`
+runs during `server.stop()`, in the reverse of the start order — so a service still has its
+dependencies while it lets go of its own resources.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class SearchIndexService {
+  @Inject(ProductRepository)
+  private products: ProductRepository;
+
+  private index?: SearchIndex;
+
+  @OnStart()
+  async build() {
+    this.index = await SearchIndex.open('./index');
+    await this.index.load(await this.products.findAll());
+  }
+
+  @OnStop()
+  async close() {
+    await this.index?.close();
+  }
+}
+```
+
+::: warning Only singletons take part
+A `Scope.PROTOTYPE` service is constructed per resolve and the container keeps no handle on it,
+so there is nothing to stop. Its `@OnStart` still runs at construction; declaring `@OnStop` on
+one produces a boot warning, because the hook can never fire.
+:::
+
+The full rules — ordering, failure policies, timeouts, signal handling — are on
+[Component Lifecycle](/docs/concepts/lifecycle).
+
 ## String-based vs Class-based Injection
 
 Asena supports two ways to inject services: by class reference or by string name.
@@ -3161,6 +3219,7 @@ describe('UserService', () => {
 ## Related Documentation
 
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and shutdown ordering
 - [Controllers](/docs/concepts/controllers)
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
 - [WebSocket](/docs/concepts/websocket)
@@ -3513,16 +3572,35 @@ instead of an array** — so `.length`, `for...of` and `.map()` all failed on it
 worked around either of those, the workaround can go.
 :::
 
-## Lifecycle Hooks with @PostConstruct
+## Lifecycle Hooks
 
-The `@PostConstruct` decorator marks a method to be called **after** all dependencies have been injected and the component is fully constructed.
+`@OnStart` marks a method to be called when the server starts — after every dependency is
+injected and every component is constructed, but *before* the application is set up — so a
+`@Config` that builds something out of an injected service finds it already started — and long
+before the HTTP socket binds. `@OnStop` is its counterpart, called during `server.stop()`.
+
+::: tip Full reference
+This section covers the injection side. Ordering, failure policies, signal handling and the
+headless worker pattern live on [Component Lifecycle](/docs/concepts/lifecycle).
+:::
+
+::: warning Upgrading from 0.9.x
+`@PostConstruct` was renamed to **`@OnStart`**. It remains a deprecated alias writing the same
+metadata, so existing code keeps working and renaming the import is the whole migration.
+
+The **timing** changed, and that part is breaking: the hook used to run inside
+`Container.register()`, mid-scan, while the rest of the graph was still being built. It now runs
+from `server.start()`. A component resolved from a server that was created but never started is
+therefore no longer initialised, and a throwing hook no longer calls `process.exit(1)` — it
+throws and `server.start()` rejects. See [Upgrading from 0.9.x](/docs/concepts/lifecycle#upgrading-from-0-9-x).
+:::
 
 ### Basic Usage
 
 ```typescript
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
 
 @Service()
 export class UserService {
@@ -3531,7 +3609,7 @@ export class UserService {
 
   private cache: Map<string, any>;
 
-  @PostConstruct()
+  @OnStart()
   async initialize() {
     // Called after all @Inject dependencies are resolved
     console.log('UserService initializing...');
@@ -3549,10 +3627,15 @@ export class UserService {
   getUser(id: string) {
     return this.cache.get(id);
   }
+
+  @OnStop()
+  async release() {
+    this.cache.clear();
+  }
 }
 ```
 
-### Use Cases for @PostConstruct
+### Use Cases for @OnStart
 
 **1. Initialization Logic**
 
@@ -3561,10 +3644,15 @@ export class UserService {
 export class CacheService {
   private redis: RedisClient;
 
-  @PostConstruct()
+  @OnStart()
   async connect() {
     this.redis = await createRedisClient();
     console.log('Redis connection established');
+  }
+
+  @OnStop()
+  async disconnect() {
+    await this.redis?.close();
   }
 }
 ```
@@ -3576,7 +3664,7 @@ export class CacheService {
 export class ApiKeyService {
   private apiKey = process.env.API_KEY;
 
-  @PostConstruct()
+  @OnStart()
   validate() {
     if (!this.apiKey || this.apiKey.length < 32) {
       throw new Error('Invalid API key configuration');
@@ -3599,7 +3687,7 @@ export class EventSubscriberService {
   @Inject(EventBus)
   private eventBus: EventBus;
 
-  @PostConstruct()
+  @OnStart()
   subscribeToEvents() {
     // Subscribe to events after EventBus is injected
     this.eventBus.on('user.created', this.handleUserCreated.bind(this));
@@ -3626,7 +3714,7 @@ export class CountryService {
 
   private countries: Map<string, Country>;
 
-  @PostConstruct()
+  @OnStart()
   async preloadCountries() {
     const data = await this.db.query('SELECT * FROM countries');
     this.countries = new Map(data.map(c => [c.code, c]));
@@ -3641,16 +3729,28 @@ export class CountryService {
 
 ### Execution Order
 
+Construction, per component:
+
 1. Class constructor runs
 2. All `@Inject` dependencies are resolved
 3. All `@Strategy` arrays are resolved (a separate pass)
-4. All `@PostConstruct` methods are called
-5. Registered `@PostProcessor`s run
+4. Registered `@PostProcessor`s run
 
-::: danger A throwing `@PostConstruct` exits the process
-The container catches the error, logs it, and calls `process.exit(1)` - it is **not**
-propagated to the caller. Use `@PostConstruct` for setup that must succeed at boot
-(opening a connection pool, building a transport) and validate recoverable input elsewhere.
+Then, once every component exists, from `server.start()`:
+
+5. All `@OnStart` methods are called, in registration order — dependencies before dependents
+
+And from `server.stop()`, in the reverse of that order:
+
+6. All `@OnStop` methods are called
+
+::: danger A throwing `@OnStart` aborts the boot
+The error is **not** swallowed. The components that already started are rolled back and
+`server.start()` rejects with an error naming the hook, carrying the original error as `cause`.
+Use `@OnStart` for setup that must succeed at boot (opening a connection pool, subscribing to a
+topic) and validate recoverable input elsewhere.
+
+Up to 0.9.x the container caught the error, logged it, and called `process.exit(1)`.
 :::
 
 ```typescript
@@ -3664,17 +3764,29 @@ export class ExampleService {
     // this.logger is undefined here!
   }
 
-  @PostConstruct()
+  @OnStart()
   initialize() {
-    console.log('2. PostConstruct called');
+    console.log('2. OnStart called');
     // this.logger is available here!
     this.logger.info('Service initialized');
   }
 }
 ```
 
-::: warning Async PostConstruct
-`@PostConstruct` methods can be async. Asena waits for them to complete before the application starts.
+::: warning Async hooks
+`@OnStart` and `@OnStop` methods can be async. Asena awaits `@OnStart` before the HTTP socket is
+bound, and awaits each `@OnStop` under a per-hook timeout (default 5s) during shutdown.
+
+An `@OnStart` that never resolves is a `start()` that never resolves — a component with a run
+loop should start it and return, not await it. See
+[Component Lifecycle](/docs/concepts/lifecycle#the-hook-must-return).
+:::
+
+::: warning Injected fields are read-only
+`@Inject` and `@Strategy` install accessors with no setter, so assigning to one throws. The error
+names the field and the class and points at the [`overrides` option](/docs/testing/test-app#replacing-components-with-mocks)
+or [`mockComponent()`](/docs/testing/mock-component) — reach for those instead of
+`Object.assign(instance, { dep: fake })` in a test.
 :::
 
 ## Service Scopes
@@ -3821,6 +3933,45 @@ export class ChatSocket extends AsenaWebSocketService<void> {
 }
 ```
 
+## Reaching the container from outside
+
+`@Inject` only works inside a component, and the entry file is not one. A migration runner, a
+one-off script, a `bun --eval` session against a booted server — none of them can declare a field
+the container will fill. For those, the server itself hands out components:
+
+```typescript
+const server = await AsenaServerFactory.create({ adapter, logger });
+
+await server.start();
+
+const feed = await server.resolve<PriceFeed>('PriceFeed');
+
+await feed.warmUp();
+```
+
+The name is the component's registered name: the class name by default, or whatever string you
+passed to `@Service('name')`. It is the same key `@Inject('PriceFeed')` takes, and the same
+signature the test harness exposes as [`app.resolve()`](/docs/testing/test-app#the-container).
+
+Three things worth knowing before you reach for it:
+
+- **Resolve after `start()`, not after `create()`.** `create()` builds the graph, but
+  [`@OnStart`](/docs/concepts/lifecycle) runs in `start()` — a component pulled out in between is
+  constructed and injected, yet its pool is unopened and its cache is empty.
+- **An unknown name throws**, with `<name> is not registered`. There is no `undefined` to check
+  for.
+- **A name shared by two classes resolves to an array**, because the container promotes duplicate
+  names rather than letting one silently win. See [Inheritance](/docs/concepts/inheritance) for
+  how a class ends up sharing its base's name.
+
+::: tip Replaces `coreContainer.container`
+`server.coreContainer.container.resolve()` also works, and up to 0.9.x it was what everyone found
+instead. `server.resolve()` is the supported spelling — prefer it.
+:::
+
+Inside a component, keep using `@Inject`. Resolving by hand from a component works but hides the
+dependency from the graph, so the container can no longer order construction around it.
+
 ## Complete Example
 
 Combining all concepts:
@@ -3839,10 +3990,15 @@ export class RedisStorage implements StorageProvider {
   @Inject(RedisService, (service) => service.client)
   private redis: RedisClient;
 
-  @PostConstruct()
+  @OnStart()
   async connect() {
     await this.redis.connect();
     console.log('Redis storage ready');
+  }
+
+  @OnStop()
+  async close() {
+    await this.redis.close();
   }
 
   async save(key: string, data: any) {
@@ -3875,7 +4031,7 @@ export class DataService {
   @Strategy('StorageProvider')
   private storageProviders: StorageProvider[];
 
-  @PostConstruct()
+  @OnStart()
   initialize() {
     console.log(`Loaded ${this.storageProviders.length} storage providers`);
   }
@@ -3915,13 +4071,18 @@ private userService: UserService;
 private userService: any;
 ```
 
-### 2. Use @PostConstruct for Setup
+### 2. Use @OnStart for Setup, @OnStop to Release
 
 ```typescript
-// ✅ Good: Initialize after injection
-@PostConstruct()
+// ✅ Good: Initialize after injection, release symmetrically
+@OnStart()
 async initialize() {
-  await this.setupConnection();
+  this.connection = await this.setupConnection();
+}
+
+@OnStop()
+async release() {
+  await this.connection?.close();
 }
 
 // ❌ Bad: Dependencies not available in constructor
@@ -3991,6 +4152,7 @@ export interface PaymentProvider {
 
 ## Related Documentation
 
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop`, shutdown ordering and signals
 - [Services](/docs/concepts/services) - Creating injectable services
 - [Controllers](/docs/concepts/controllers) - Using DI in controllers
 - [Middleware](/docs/concepts/middleware) - DI in middleware
@@ -4002,6 +4164,491 @@ export interface PaymentProvider {
 - Learn about [Service Scopes](/docs/concepts/services#service-scopes)
 - Explore [Controllers](/docs/concepts/controllers)
 - Understand [Middleware](/docs/concepts/middleware)
+
+
+---
+
+# Component Lifecycle
+Section: Concepts
+Source: https://asena.sh/raw/concepts/lifecycle.md
+
+# Component Lifecycle
+
+A component that opens something at boot has to close it at shutdown. Asena gives you both
+halves as a symmetric pair of method decorators:
+
+| Decorator | Runs | Purpose |
+|:----------|:-----|:--------|
+| `@OnStart()` | During `server.start()`, before the HTTP socket binds | Acquire: connect, subscribe, preload, start a loop |
+| `@OnStop()` | During `server.stop()`, in reverse start order | Release: disconnect, unsubscribe, drain, stop the loop |
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class PriceFeed {
+  @Inject(MarketClient)
+  private market: MarketClient;
+
+  private subscription?: Subscription;
+
+  @OnStart()
+  public async start() {
+    this.subscription = await this.market.subscribe('prices');
+  }
+
+  @OnStop()
+  public async stop() {
+    await this.subscription?.close();
+  }
+}
+```
+
+::: tip `@PostConstruct` is now `@OnStart`
+`@PostConstruct` still exists and still works — it is a deprecated alias that writes the same
+metadata. Nothing needs to change beyond the import. What *did* change is **when** the hook
+runs; see [Upgrading from 0.9.x](#upgrading-from-0-9-x).
+:::
+
+## `@OnStart`
+
+The hook runs once the whole component graph exists, and before the framework starts consuming
+it. By the time it is called:
+
+- every component has been constructed and every `@Inject` / `@Strategy` field is populated
+- every `@PostProcessor` has run
+
+and — deliberately — none of the application setup has happened yet: `@Config` hooks have not
+been read, microservice transports are not connected, routes are not registered, the HTTP socket
+is not bound and scheduled jobs have not started.
+
+Two things follow from that, and they are the reason the timing is what it is:
+
+::: warning A start hook cannot publish through `ulak`
+The transports are wired during application setup, which is *after* the hooks run, so
+`ulak.send()` / `ulak.emit()` inside an `@OnStart` throws `NO_TRANSPORT`. Defer the first
+publish — an `@OnStop` has no such limit, because the transports are torn down after the stop
+hooks.
+:::
+
+::: tip A `@Config` finds its dependencies started
+This is what buys the ordering above. `serveOptions()`, `globalMiddlewares()` and `transport()`
+are *called* during application setup, and `prepareMicroservices()` goes on to `init()` and
+`listen()` whatever `transport()` returned. A config that builds a transport from an injected
+service — the pattern the redis and kafka packages document — therefore needs that service
+already started, and it is.
+:::
+
+::: tip No request can outrun a start hook
+The listening socket opens only after every hook has returned. A controller cannot be reached
+before the service it injects has finished initialising.
+:::
+
+### The hook must return
+
+`@OnStart` is awaited. A hook that never resolves is a server that never finishes starting.
+A component that runs for the process's lifetime starts its loop and keeps the handle:
+
+```typescript
+@Service()
+export class QueueWorker {
+  private running = false;
+
+  @OnStart()
+  public async start() {
+    this.running = true;
+    void this.loop();       // started, not awaited
+  }
+
+  @OnStop()
+  public async stop() {
+    this.running = false;   // the loop observes this and returns
+  }
+
+  private async loop() {
+    while (this.running) {
+      await this.drainOnce();
+    }
+  }
+}
+```
+
+## `@OnStop`
+
+The counterpart. It runs during `server.stop()`, and at that point:
+
+- the HTTP surface is already down — no new requests, in-flight ones have been handled
+- the component's own dependencies are **still up**, because stop walks the graph backwards
+- microservice transports are **still up**, so a hook can finish in-flight work and publish a
+  last message
+
+```typescript
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
+import type { Ulak } from '@asenajs/asena/messaging';
+
+@Service()
+export class ShiftReporter {
+  @Inject(ICoreServiceNames.__ULAK__)
+  private ulak: Ulak;
+
+  @OnStop()
+  public async flush() {
+    await this.ulak.emit('shift.ended', { at: Date.now() });
+  }
+}
+```
+
+## Where the hooks sit
+
+### Start sequence
+
+1. Components are constructed, `@Inject` and `@Strategy` fields are wired, `@PostProcessor`s run
+2. **`@OnStart` hooks run**, in registration order
+3. `@Config` hooks are read and applied
+4. Microservice transports connect and start listening
+5. Event handlers and scheduled jobs are registered
+6. Routes, frontend controllers and WebSocket namespaces are registered with the adapter
+7. The adapter binds the HTTP socket
+8. Scheduled jobs start
+9. The health endpoint starts, signal handlers are installed
+
+### Stop sequence
+
+`server.stop()` runs these steps in order. The order is what makes the shutdown graceful rather
+than merely quick:
+
+1. Signal handlers and the keep-alive handle are released, and the lifecycle state flips to
+   `STOPPING` — so `/ready` answers `503` for the **whole** drain, not just the last instant
+2. Scheduled jobs stop
+3. The adapter stops (this is what closes the HTTP socket and the WebSocket transport)
+4. **`@OnStop` hooks run**, in reverse start order
+5. Microservice transports drain and disconnect
+6. `ulak.dispose()`
+7. The health endpoint stops — last, so the probe outlives the drain it reports on
+
+Every step is contained: a step that throws is logged, the remaining steps still run, and the
+collected failures are raised together as an `AggregateError` at the end. One broken teardown
+cannot strand the ones behind it.
+
+## Ordering rules
+
+- **Start walks components in registration order**, which the IoC engine has topologically
+  sorted — a component's dependencies have started before its own hook runs.
+- **Stop walks the same list backwards** — a component still has its dependencies while it
+  releases its own resources.
+- Within one class, multiple `@OnStart` methods run in declaration order (ancestors first when
+  the class inherits hooks), and its `@OnStop` methods run in the reverse of that.
+- An inherited hook runs **once**, however deep the chain — see [Inheritance](/docs/concepts/inheritance).
+
+## Failure policy
+
+The two halves fail differently on purpose.
+
+| | A hook that throws | A hook that hangs |
+|:--|:--|:--|
+| `@OnStart` | Boot aborts. Components that already started are rolled back, the lifecycle state becomes `FAILED`, and `server.start()` rejects with an error naming the hook and carrying the original error as `cause` | No timeout — an `@OnStart` that never resolves is a `start()` that never resolves |
+| `@OnStop` | Logged and skipped; shutdown continues | Bounded per hook (default `5000` ms), then logged and skipped |
+
+A half-initialised application must not serve traffic, so a failing start hook stops the boot.
+A shutdown that gives up halfway leaves more behind than one that limps to the end, so a failing
+stop hook does not.
+
+::: warning A failed boot does not stop the server for you
+`server.start()` rejecting rolls back the components that started, but the microservice
+transports it already connected are still up. Call `server.stop()` in the failure path — it is
+safe on a server that never finished starting.
+
+```typescript
+try {
+  await server.start();
+} catch (error) {
+  await server.stop();
+  throw error;
+}
+```
+:::
+
+::: info No more `process.exit(1)`
+Up to 0.9.x a throwing `@PostConstruct` was caught by the container, logged, and followed by
+`process.exit(1)` — which in a test run produced `0 pass / 1 fail` with no indication of why.
+The error now propagates.
+:::
+
+## Who takes part
+
+**Only singletons.** A transient (`Scope.PROTOTYPE`) is constructed per resolve and the
+container keeps no handle on it, so there is nothing to stop. Its `@OnStart` still runs at
+construction; a transient that declares `@OnStop` gets a boot warning, because that hook can
+never run:
+
+```
+[IocEngine] 'RequestScratchpad' is transient and declares @OnStop (release), which will never
+run - the container keeps no handle on a transient instance.
+```
+
+**A component is stopped only if its start hook completed.** Components rolled back by a failed
+boot, or never started because `start()` was never called, are skipped. Components that
+initialise at construction — `@PostProcessor`s, their dependencies, and the framework's own core
+services — count as started from that moment, so their `@OnStop` runs even on a server that was
+created but never started.
+
+**`stop()` runs once.** Concurrent calls share one teardown rather than racing two of them, and a
+later call is a no-op that returns the original outcome — including its failure, if it had one.
+Every step was attempted the first time, so a retry has nothing to pick up. This matters beyond
+tidiness: the component hooks would correctly find nothing to do, but the adapter, the cron runner
+and the transports do not guard themselves, so a second pass would tear down an already-stopped
+server and log a second round of teardown errors.
+
+::: tip A `@Config` may carry a start hook
+Its `@OnStart` runs before its config hooks are read, so it can prepare something that
+`transport()` or `globalMiddlewares()` then uses. The same holds for anything the config injects.
+:::
+
+::: warning `@PostProcessor` keeps the old timing
+A post-processor's `postProcess()` reads state its own start hook sets up, so deferring that
+hook would wrap every later component against an uninitialised processor. Post-processors and
+the components they inject therefore run their `@OnStart` at construction, as before — see
+[PostProcessor](/docs/concepts/post-processor#bootstrap-priority).
+:::
+
+## Stopping the server
+
+```typescript
+await server.stop();                          // closeActiveConnections: true
+await server.stop(false);                     // wait for in-flight connections instead
+await server.stop({ drainTimeout: 30_000 });  // give the transports 30s to drain
+```
+
+| Option | Type | Default | Description |
+|:-------|:-----|:--------|:------------|
+| `closeActiveConnections` | `boolean` | `true` | Close in-flight connections instead of waiting for them |
+| `drainTimeout` | `number` | transport's own | How long microservice transports may drain in-flight messages, in ms |
+| `hookTimeout` | `number` | `shutdown.timeout`, else `5000` | Per-`@OnStop` ceiling, in ms |
+
+The option shapes and the state the readiness probe reports are exported, so you can type a
+wrapper around either:
+
+```typescript
+import { LifecycleState } from '@asenajs/asena';
+import type { AsenaStopOptions, ShutdownOptions } from '@asenajs/asena';
+```
+
+The bare boolean form (`stop(true)` / `stop(false)`) is still accepted and still means
+`closeActiveConnections`.
+
+::: tip `drainTimeout` is reachable now
+Both broker transports supported a drain window, but `stop()` only took a boolean — so there was
+no way for an application to pass one. `stop({ drainTimeout })` is the way.
+:::
+
+## Signal handling
+
+Signal handling is **on by default**. `start()` installs the handlers and `stop()` removes them,
+so a process that boots several servers — a test suite, a watch-mode reload — does not
+accumulate listeners.
+
+```typescript
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000,
+  shutdown: {
+    signals: true,            // default: SIGTERM, SIGINT, SIGHUP
+    timeout: 5000,            // per-@OnStop ceiling
+    forceExitAfter: false,
+    onUnhandledError: false,
+  },
+});
+```
+
+| Option | Type | Default | Description |
+|:-------|:-----|:--------|:------------|
+| `signals` | `boolean \| NodeJS.Signals[]` | `true` | `true` covers `SIGTERM`, `SIGINT`, `SIGHUP`. Pass a list to narrow it, or `false` to own the signals yourself |
+| `timeout` | `number` | `5000` | Per-`@OnStop` ceiling, in ms. `stop({ hookTimeout })` overrides it for one call |
+| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began |
+| `onUnhandledError` | `boolean` | `false` | Treat an uncaught exception or unhandled rejection as a shutdown request: log, stop, exit non-zero |
+
+A second signal while a shutdown is already running exits immediately with code `130` — someone
+pressing `Ctrl+C` again because the first one looked stuck means it.
+
+::: warning `forceExitAfter` is a deadline on the process, not on `stop()`
+The case worth protecting against is a `stop()` that completed cleanly and left something ref'd
+behind anyway — a pool that never drained, a timer nobody owns — because that process now hangs
+until the orchestrator `SIGKILL`s it. The timer is `unref()`'d, so a process that exits on its
+own is never delayed by it, and a forced exit is always non-zero.
+
+Leaving it `false` is the honest default: a process that will not exit is a bug worth seeing.
+:::
+
+::: tip `onUnhandledError` swallows the stack
+It turns a crash into a graceful teardown, which is usually what a production process wants —
+but the top-level stack Bun would otherwise print goes with it. Hence opt-in.
+:::
+
+## `keepAlive` and headless workers
+
+A process with no listening socket has nothing holding the event loop open, so once `start()`
+resolves it would exit — taking a perfectly healthy worker with it. `keepAlive` holds it open;
+it defaults to `true` in [headless mode](/docs/concepts/microservices#headless-mode) and `false`
+otherwise, because an HTTP server is held open by its own socket.
+
+This is what lets the run loop live in the component instead of in the entry file:
+
+```typescript
+// src/workers/OutboxWorker.ts
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
+import { ICoreServiceNames } from '@asenajs/asena/ioc/types';
+import type { Ulak } from '@asenajs/asena/messaging';
+
+@Service()
+export class OutboxWorker {
+  @Inject(ICoreServiceNames.__ULAK__)
+  private ulak: Ulak;
+
+  @Inject(OutboxRepository)
+  private outbox: OutboxRepository;
+
+  private running = false;
+
+  private loop?: Promise<void>;
+
+  @OnStart()
+  public start() {
+    this.running = true;
+    this.loop = this.run();   // returns immediately; the loop keeps running
+  }
+
+  @OnStop()
+  public async stop() {
+    this.running = false;
+    await this.loop;          // let the current batch finish
+  }
+
+  private async run() {
+    while (this.running) {
+      for (const entry of await this.outbox.takePending(100)) {
+        await this.ulak.emit(entry.pattern, entry.payload);
+        await this.outbox.markSent(entry.id);
+      }
+
+      await Bun.sleep(250);
+    }
+  }
+}
+```
+
+```typescript
+// src/index.ts
+import { AsenaServerFactory } from '@asenajs/asena';
+import { logger } from './logger';
+
+const server = await AsenaServerFactory.create({
+  headless: true,           // no HTTP adapter
+  logger,
+  health: { port: 9090 },   // K8s probes
+  // keepAlive defaults to true here - the entry file does not have to block
+});
+
+await server.start();
+```
+
+The entry file no longer awaits the loop, so `SIGTERM` reaches `stop()`, `stop()` reaches
+`@OnStop`, and the worker finishes its current batch before the process exits.
+
+## Health probes
+
+With `health: { port }` Asena starts a minimal zero-dependency endpoint. `path` defaults to
+`/healthz`, and there are three routes under it — liveness and readiness answer different
+questions, and a probe that conflates them restarts a pod that was only busy starting up.
+
+| Route | Answers |
+|:------|:--------|
+| `GET {path}/live` | `200` for as long as the process is alive. Touches no dependency — point your **restart policy** here |
+| `GET {path}/ready` | `503` unless the lifecycle state is `STARTED`, and `503 degraded` when any microservice transport is disconnected. Point your **load balancer** here |
+| `GET {path}` | The original endpoint, same body as `/ready` |
+
+```jsonc
+// GET :9090/healthz/live
+{ "status": "up", "uptime": 123 }
+
+// GET :9090/healthz/ready - serving, all transports connected
+{ "status": "up", "uptime": 123, "transports": { "default": "connected" } }
+
+// GET :9090/healthz/ready - a transport is down
+{ "status": "degraded", "uptime": 123, "transports": { "default": "disconnected" } }   // 503
+
+// GET :9090/healthz/ready - not serving (starting, stopping, or a failed boot)
+{ "status": "not_ready", "state": "STOPPING", "uptime": 123 }                          // 503
+```
+
+`state` is the server's lifecycle state: `NEW`, `STARTING`, `STARTED`, `STOPPING`, `STOPPED` or
+`FAILED`. Because readiness flips to `STOPPING` before anything is torn down, and the health
+server is the last thing `stop()` takes down, `/ready` answers `503` for the entire drain — which
+is what lets a load balancer pull the instance while it still has work to finish.
+
+## `server.resolve()`
+
+Once `start()` has returned, the server hands out any registered component by name — which is how
+an entry file or a one-off script reaches the graph without being a component itself:
+
+```typescript
+await server.start();
+
+const feed = await server.resolve<PriceFeed>('PriceFeed');
+```
+
+Resolving *before* `start()` is the trap this page exists to describe: the component is
+constructed and injected, but its `@OnStart` has not run, so it is not initialised. It replaces
+reaching through `server.coreContainer.container.resolve()`, which worked and was what everybody
+found instead.
+
+See [Reaching the container from outside](/docs/concepts/dependency-injection#reaching-the-container-from-outside)
+for naming, duplicate names and the failure mode on an unknown name.
+
+## Upgrading from 0.9.x
+
+::: warning Start hooks moved to `server.start()`
+Up to and including `0.9.x`, `@PostConstruct` ran inside `Container.register()` — mid-scan, while
+the rest of the graph was still being built. It now runs from `server.start()`, once everything
+exists. What that changes:
+
+- **A start hook still cannot publish through `ulak`.** The hooks run before application setup,
+  which is where the transports are wired, so `ulak.send()` / `emit()` inside one throws
+  `NO_TRANSPORT` exactly as it did in `0.9.x`. Keep deferring the first publish.
+- **A component resolved from a server that was created but never started is no longer
+  initialised.** If you construct a server and pull components out of it without calling
+  `start()`, call `start()`.
+- **A throwing hook no longer calls `process.exit(1)`.** It throws, naming the hook, with the
+  original error as `cause`, and `server.start()` rejects.
+- **Start hooks now run after `@PostProcessor`s, not before.** A hook therefore runs against the
+  post-processed instance — the same object every other component was injected with.
+- **`@PostProcessor`s are the exception** and keep the old construction-time timing.
+
+`@PostConstruct` itself is unchanged and still supported as a deprecated alias of `@OnStart`, so
+no source change is required. Renaming the import is the whole migration.
+:::
+
+::: warning `stop()` reordered and `ulak.dispose()` is automatic
+`server.stop()` now runs `@OnStop` hooks between the adapter and the microservice transports,
+and calls `ulak.dispose()` itself. If your code called `ulak.dispose()` after `stop()`, drop it —
+`dispose()` is idempotent, but the call is no longer needed.
+:::
+
+::: warning Signal handlers are installed by default
+`start()` now registers `SIGTERM`, `SIGINT` and `SIGHUP` handlers that call `stop()`. If your
+entry file already installs its own, either remove them or pass `shutdown: { signals: false }`,
+or a signal will trigger two shutdowns.
+:::
+
+## Related
+
+- [Dependency Injection](/docs/concepts/dependency-injection#lifecycle-hooks) — the wiring the hooks run on top of
+- [PostProcessor](/docs/concepts/post-processor) — cross-cutting instance transformation, and why it starts earlier
+- [Microservices](/docs/concepts/microservices#graceful-shutdown) — what the transports do while the hooks run
+- [Inheritance](/docs/concepts/inheritance) — hooks declared on a base class
+- [Scheduled Tasks](/docs/concepts/scheduled-tasks) — cron jobs start after the hooks and stop before them
 
 
 ---
@@ -4030,8 +4677,8 @@ Both adapters accept the same three ways to answer a request from middleware:
 
 - **`return context.send(...)`** - returning a `Response` short-circuits the chain
 - **`return false`** - short-circuits with `403 Forbidden`
-- **`throw`** - an `HttpException` (Ergenecore) or `HTTPException` (Hono) is routed to
-  your `onError` handler
+- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your `onError`
+  handler. The same class on both adapters, so a middleware that guards a route is portable
 
 The one thing that is *not* portable is **omitting `next()`**. See
 [Stopping Middleware Chain](#stopping-middleware-chain).
@@ -4182,6 +4829,15 @@ export class UserController {
 
 ## Common Middleware Patterns
 
+::: info The two tabs differ by style, not by adapter
+In the examples below the Ergenecore tab answers with `context.send(...)` and the Hono tab
+`throw`s, so you can see both. **Either works on either adapter** - the only adapter-specific
+line is where `MiddlewareService` and `Context` are imported from.
+
+Return a `Response` when the middleware is the right place to phrase the answer. Throw when you
+want the rejection to reach `onError` and be shaped there with the rest of your API's errors.
+:::
+
 ### Authentication Middleware
 
 ::: code-group
@@ -4219,7 +4875,7 @@ export class AuthMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
@@ -4227,7 +4883,7 @@ export class AuthMiddleware extends MiddlewareService {
     const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
-      throw new HTTPException(401, { message: 'No token provided' });
+      throw new HttpException(401, 'No token provided');
     }
 
     try {
@@ -4236,7 +4892,7 @@ export class AuthMiddleware extends MiddlewareService {
       context.setValue('user', payload);
       await next();
     } catch (error) {
-      throw new HTTPException(401, { message: 'Invalid token' });
+      throw new HttpException(401, 'Invalid token');
     }
   }
 
@@ -4274,7 +4930,7 @@ export class AdminRoleMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 import type { Next } from 'hono';
 
 
@@ -4284,7 +4940,7 @@ export class AdminRoleMiddleware extends MiddlewareService {
     const user = context.getValue('user');
 
     if (!user || user.role !== 'admin') {
-      throw new HTTPException(403, { message: 'Forbidden' });
+      throw new HttpException(403, 'Forbidden');
     }
 
     await next();
@@ -4443,7 +5099,7 @@ export class AuthMiddleware extends MiddlewareService {
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
@@ -4457,7 +5113,7 @@ export class AuthMiddleware extends MiddlewareService {
     const token = context.headers['authorization']?.replace('Bearer ', '');
 
     if (!token) {
-      throw new HTTPException(401, { message: 'Unauthorized' });
+      throw new HttpException(401, 'Unauthorized');
     }
 
     try {
@@ -4467,7 +5123,7 @@ export class AuthMiddleware extends MiddlewareService {
       context.setValue('user', user);
       await next();
     } catch (error) {
-      throw new HTTPException(401, { message: 'Invalid token' });
+      throw new HttpException(401, 'Invalid token');
     }
   }
 }
@@ -4589,7 +5245,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
 ```typescript [Hono]
 import { Middleware } from '@asenajs/asena/decorators';
 import { MiddlewareService, type Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class MaintenanceMiddleware extends MiddlewareService {
@@ -4598,9 +5254,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
 
     if (isMaintenanceMode) {
       // Returning a Response also works here; throwing routes through onError instead
-      throw new HTTPException(503, {
-        message: 'Service under maintenance'
-      });
+      throw new HttpException(503, 'Service under maintenance');
     }
 
     await next(); // Continue if not in maintenance mode
@@ -5757,6 +6411,24 @@ Both the **Ergenecore** and the **Hono** adapter ship validation. Each exports i
 One behavioural difference remains: Ergenecore runs the `hook` **only when validation fails**, while the Hono adapter runs it on **every** validation attempt. Write hooks that check `result.success` and they behave the same on both.
 :::
 
+## Installation
+
+Zod is a **peer dependency** of both adapters — they define the validation contract, they do not
+ship the library, so your project owns the version:
+
+```bash
+bun add zod
+```
+
+**Zod v4 or higher is required.** Both adapters call `flattenError` to build the validation-failure
+envelope, and that is a top-level export introduced in Zod 4.
+
+::: tip You may already have it
+`asena create` installs zod for you, and `asena generate validator` writes `import { z } from 'zod'`
+into the file it scaffolds. If you set the project up by hand, add it — before 3.0.0 the import
+resolved by hoisting out of the adapter's own dependencies, which was never something to rely on.
+:::
+
 ## Why Use Validation?
 
 - **Type Safety**: Catch type mismatches at runtime
@@ -6133,10 +6805,18 @@ adapters. The error it narrows to also carries `target` and `cause` (the origina
 `ZodError`) if you need more than `issues`.
 
 ::: tip Existing error handlers keep working
-The thrown error extends the adapter's HTTP exception type (`HTTPException` for Hono,
-`HttpException` for Ergenecore) and carries status **400**. An existing handler that
-branches on `instanceof HTTPException` and replies with `error.status` therefore keeps
-answering 400 - adopting this does not silently turn validation failures into 500s.
+The thrown error is an HTTP exception carrying status **400**, so a handler that matches with
+`isHttpException()` and replies with `error.status` keeps answering 400 - adopting this does not
+silently turn validation failures into 500s.
+
+Check `isValidationError()` **first** if you want validation failures to have their own envelope.
+A `ValidationError` is an HTTP exception too, so a generic `isHttpException()` branch placed
+above it would swallow it.
+
+The class each adapter extends is an implementation detail and they differ - Ergenecore's extends
+`HttpException`, the Hono adapter's extends hono's `HTTPException` so that pre-0.9 handlers
+written against `instanceof HTTPException` keep answering 400. Match with the guards and you do
+not have to know which.
 :::
 
 ::: warning A hook that returns a Response wins
@@ -6443,10 +7123,6 @@ Source: https://asena.sh/raw/concepts/static-files.md
 # Static File Serving
 
 Asena provides built-in support for serving static files through the `@StaticServe` decorator and `StaticServeService` base class.
-
-::: danger BREAKING CHANGES IN v0.7.0
-**This feature will undergo major changes in version 0.7.0.** The API and implementation described here may change significantly. If you're starting a new project, be prepared to update your static file serving implementation when v0.7.0 is released.
-:::
 
 ## Quick Start
 
@@ -7094,12 +7770,6 @@ public rewriteRequestPath(reqPath: string): string {
   // This slows down every request!
 }
 ```
-
-### 6. Be Prepared for v0.7.0 Changes
-
-::: warning
-Since this API will change in v0.7.0, avoid building complex abstractions on top of the current implementation. Keep your static serving logic isolated and easy to refactor.
-:::
 
 ---
 
@@ -7909,7 +8579,15 @@ Your WebSocket services, Ulak messaging, and room management work exactly the sa
 :::
 
 ::: info Custom Transports
-The `WebSocketTransport` interface (from `@asenajs/asena`) defines `publish()`, `init()`, and `destroy()` methods. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+
+`init(server)` is called during startup, before any connection is accepted. `destroy()` is called from `server.stop()`, when the adapter shuts the WebSocket layer down — under a 5s ceiling, with failures logged and stepped over so one unreachable broker cannot hold the shutdown open.
+:::
+
+::: warning `destroy()` was never called before 0.10.0
+The hook was documented as "called during server shutdown" and had **zero call sites** anywhere in the framework. A Redis-backed multi-pod setup therefore leaked a subscriber connection (with a live channel subscription) and a publisher connection on every `server.stop()` — enough for a test suite doing twenty stop/start cycles, or a pod under a rolling deploy, to exhaust the broker's connection limit. Both adapters now reach it.
+
+If your custom transport has been relying on never being torn down, make `destroy()` idempotent: the transport reference is deliberately kept after teardown, so a restarted server reuses the same object rather than silently downgrading to the local transport.
 :::
 
 For full `RedisTransport` reference and Redis service setup, see [Redis Package](/docs/packages/redis).
@@ -9304,15 +9982,27 @@ await server.start(); // no HTTP port is opened
 
 What still runs in headless mode: configs, the microservice layer, the in-process event system, scheduled tasks. HTTP-only components (`@Controller`, `@WebSocket`, `@FrontendController`) are ignored with a warning.
 
+::: tip The process stays alive on its own
+A headless process has no listening socket to hold the event loop open. `keepAlive` defaults to **`true`** here, so a worker that starts its loop in [`@OnStart`](/docs/concepts/lifecycle) and returns keeps running — the entry file does not have to block on the loop itself. Pass `keepAlive: false` to opt out.
+:::
+
 ### Health Endpoint
 
-With `health: { port }`, a minimal `Bun.serve` endpoint reports process liveness and per-transport connection state — built for Kubernetes probes:
+With `health: { port }`, a minimal `Bun.serve` endpoint reports process liveness and per-transport connection state — built for Kubernetes probes. `path` defaults to `/healthz`, and there are three routes under it:
 
 ```jsonc
-// GET :9090/healthz → 200 while all transports are connected
+// GET :9090/healthz/live → 200 for as long as the process is alive; touches no dependency
+{ "status": "up", "uptime": 123 }
+
+// GET :9090/healthz/ready → 200 while serving and all transports are connected
 { "status": "up", "uptime": 123, "transports": { "default": "connected" } }
-// → 503 with "status": "degraded" when any transport is disconnected
+// → 503 "degraded" when any transport is disconnected
+// → 503 "not_ready" while starting or stopping, with the lifecycle "state"
+
+// GET :9090/healthz → the original endpoint, same body as /ready
 ```
+
+Point the restart policy at `/live` and the load balancer at `/ready`. Readiness flips to `503` the moment `stop()` begins and the health server is the last thing taken down, so the instance is pulled from rotation for the whole drain. See [Health probes](/docs/concepts/lifecycle#health-probes).
 
 ---
 
@@ -9349,7 +10039,11 @@ async onPayment(event: PaymentEvent, context: MessageContext) {
 - **Handler duration must stay below `claimIdleMs`** (default 60s) — otherwise the sweep assumes the replica crashed and a second replica processes the same entry concurrently.
 - **`maxStreamLength` bounds memory but also offline tolerance** — events older than the trim window are lost for services that stay down too long. Size it against your worst-case deployment gap.
 - **Monitor the DLQ stream** (`asena:ms:dlq`) — poison events land there after `maxRetries`, with `origin_stream`, `origin_group` and `delivery_count` fields.
-- **`@PostConstruct` cannot send messages** — transports are wired during application setup (after component init), so `ulak.send/emit` in `@PostConstruct` throws `NO_TRANSPORT`.
+- **`@OnStart` cannot send messages** — [start hooks run from `server.start()`](/docs/concepts/lifecycle#onstart) but *before* application setup, which is where the transports are wired, so `ulak.send`/`emit` inside one throws `NO_TRANSPORT`. Defer the first publish. An `@OnStop` **can** publish a last message, because the transports are torn down *after* the stop hooks.
+
+::: tip Why start hooks run that early
+They have to, so that a `@Config` finds its own injected dependencies started — `transport()` is called during application setup, and `prepareMicroservices()` goes on to `init()` and `listen()` whatever it returned. A transport built from an injected service would otherwise reach for a connection nothing had opened yet.
+:::
 
 ---
 
@@ -9386,13 +10080,23 @@ A proven real-world shape for this is the **cross-broker bridge**: keep Redis as
 
 ## Graceful Shutdown
 
-`server.stop()` drains the microservice layer before closing:
+The microservice transports are taken down **after** the components' [`@OnStop` hooks](/docs/concepts/lifecycle#onstop) — so a hook can still finish in-flight work and publish a last message — and before `ulak.dispose()`. Within that step, each transport drains:
 
 1. Consuming stops (no new messages are read)
 2. In-flight handlers get `drainTimeout` (default 10s) to finish — completed ones ACK, unfinished ones stay pending for another replica
 3. Pending `send()` calls are rejected
 4. The consumer's group registration is removed **only if it has no pending entries** — otherwise the entries stay pending for another replica's sweep to claim, and the leftover consumer name is garbage-collected by the sweep once drained
 5. Connections close
+
+`drainTimeout` is reachable from `stop()`:
+
+```typescript
+await server.stop({ drainTimeout: 30_000 });
+```
+
+::: warning New in 0.10.0
+`server.stop()` previously took only a boolean, so the transports' drain window could not be set by the application at all. The boolean form still works — see [Stopping the server](/docs/concepts/lifecycle#stopping-the-server).
+:::
 
 > **`handlerTimeout` is not cancellation:** when a handler exceeds `handlerTimeout`, the dispatch is rejected (the entry stays un-ACKed for redelivery) but the handler function itself keeps running until it settles on its own.
 
@@ -9506,6 +10210,7 @@ They are deliberately separate: hiding the local-vs-remote distinction creates f
 
 ## Related
 
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop`, where they sit relative to the transports, and signal handling
 - [Inheritance](/docs/concepts/inheritance) - Sharing `@MessagePattern` and `@EventPattern` handlers through a base class, and why an inherited `@EventPattern` opens a real subscription
 
 
@@ -9990,11 +10695,14 @@ ulak.unregisterNamespace('/old-chat');
 ulak.dispose();
 ```
 
-::: warning It is not called for you
-`AsenaServer.stop()` stops the cron runner, the health server, the adapter and the
-microservice transports - it does **not** call `ulak.dispose()`. Call it yourself if you
-need the cleanup (long-lived test processes, hot-reload loops); a normal process exit does
-not need it.
+::: tip It is called for you
+`AsenaServer.stop()` calls `ulak.dispose()` as part of its
+[shutdown sequence](/docs/concepts/lifecycle#stop-sequence) - after the components' `@OnStop`
+hooks and after the microservice transports are taken down, so nothing that still wanted to
+publish loses its namespaces first. Calling it yourself is harmless but no longer necessary.
+
+**Changed in 0.10.0:** up to 0.9.x `stop()` did **not** dispose Ulak, and long-lived test
+processes and hot-reload loops had to do it by hand.
 :::
 
 ## Best Practices
@@ -10522,6 +11230,8 @@ export class CronController {
 
 ::: info Lifecycle
 CronRunner starts all registered jobs when the server is ready and stops them during graceful shutdown. You don't need to manage the start/stop lifecycle manually.
+
+Relative to [component lifecycle hooks](/docs/concepts/lifecycle): jobs start **after** every `@OnStart` has returned, and stop **before** any `@OnStop` runs — the first step of `server.stop()` is "take no new work". A job already executing when shutdown begins is not cancelled; `stopAll()` only unschedules future runs.
 :::
 
 ## Real-World Examples
@@ -10951,7 +11661,7 @@ PostProcessor is Asena's component interception system. It lets you hook into th
 - **AOP Patterns** — Add cross-cutting concerns without modifying individual components
 
 ::: tip
-If you just need initialization logic for a single component, use `@PostConstruct` instead. PostProcessor is for cross-cutting concerns that apply to **multiple** components.
+If you just need initialization logic for a single component, use [`@OnStart`](/docs/concepts/lifecycle) instead. PostProcessor is for cross-cutting concerns that apply to **multiple** components.
 :::
 
 ## Quick Start
@@ -10985,7 +11695,7 @@ export interface ComponentPostProcessor {
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `instance` | `T` | The fully initialized component instance (after DI + PostConstruct) |
+| `instance` | `T` | The component instance with every `@Inject` / `@Strategy` field populated. Its `@OnStart` has **not** run yet |
 | `Class` | `any` | The original class constructor (for reading metadata) |
 | **Returns** | `T \| Promise<T>` | The processed instance. Return `null`/`undefined` to keep the original |
 
@@ -11009,16 +11719,25 @@ Accepts optional `ComponentParams`:
 PostProcessor runs at a specific point in the component initialization chain:
 
 ```
-Constructor → @Inject (DI) → @Strategy → @PostConstruct → postProcess()
+Constructor → @Inject (DI) → @Strategy → postProcess()   … later, from server.start() → @OnStart
 ```
 
 1. Component is instantiated (`new`)
 2. Dependencies are injected (`@Inject`)
-3. PostConstruct methods are called (`@PostConstruct`)
-4. **PostProcessors run** — instance is fully initialized at this point
+3. Strategy arrays are resolved (`@Strategy`)
+4. **PostProcessors run** — every injected field is populated at this point
+5. Much later, once the whole graph exists, [`@OnStart`](/docs/concepts/lifecycle) hooks run from `server.start()`
 
 ::: info Execution Order
 If multiple PostProcessors are registered, they execute in FIFO order (first registered, first executed). Each processor's output becomes the next processor's input (chaining).
+:::
+
+::: warning Changed in 0.10.0
+Up to 0.9.x `@PostConstruct` ran *before* `postProcess()`. Start hooks now run after it, and
+against the **post-processed** instance — a processor that returns a proxy hands the hook the
+same object every other component was injected with. A processor that relied on the wrapped
+instance already having run its own initialization no longer can; do that work in
+`postProcess()` itself, or in the processor's own `@OnStart` (see below).
 :::
 
 ## Two Modes of Operation
@@ -11090,7 +11809,7 @@ The `@asenajs/asena-openapi` package uses a PostProcessor to automatically gener
 
 ```typescript
 import { PostProcessor } from '@asenajs/asena/decorators';
-import { PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { OnStart } from '@asenajs/asena/decorators/ioc';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { ComponentPostProcessor } from '@asenajs/asena/ioc/types';
 import { extractControllerRouteInfo, isController, isValidator } from '@asenajs/asena/utils';
@@ -11104,7 +11823,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
   private controllers: { instance: any; Class: any }[] = [];
   private validators = new Map<string, any>();
 
-  @PostConstruct()
+  @OnStart()
   public onInit(): void {
     // Register the /openapi endpoint during initialization
     this.adapter.registerRoute({
@@ -11143,7 +11862,7 @@ export class OpenApiPostProcessor implements ComponentPostProcessor {
 
 **How it works:**
 
-1. `@PostConstruct` registers the `/openapi` GET endpoint on the adapter
+1. `@OnStart` registers the `/openapi` GET endpoint on the adapter
 2. `postProcess()` is called for every component — it selectively collects controllers and validators
 3. When `/openapi` is requested, the spec is lazily generated from collected metadata
 4. The original instances are never modified
@@ -11163,6 +11882,17 @@ This guarantees that PostProcessors are ready before any user component is creat
 
 ::: warning
 Dependencies of PostProcessors (services injected via `@Inject`) are also created in Phase A and are **not** post-processed. Keep PostProcessor dependencies minimal.
+:::
+
+::: warning Phase A keeps the old start-hook timing
+Phase B components have their [`@OnStart`](/docs/concepts/lifecycle) deferred to `server.start()`.
+Phase A components — the processors and their dependencies — run theirs at **construction**, as
+they always did, because `postProcess()` reads state the processor's own start hook sets up.
+Deferring it would wrap every Phase B component against an uninitialised processor.
+
+Two consequences: a processor's `@OnStart` cannot reach the microservice transports (they are not
+connected yet), and because it counts as started from construction, its `@OnStop` runs on
+`server.stop()` even if `start()` was never called.
 :::
 
 ## Dependency Injection in PostProcessors
@@ -11187,13 +11917,14 @@ export class MetricsPostProcessor implements ComponentPostProcessor {
 }
 ```
 
-## @PostConstruct vs @PostProcessor
+## @OnStart vs @PostProcessor
 
-| Aspect | `@PostConstruct` | `@PostProcessor` |
+| Aspect | [`@OnStart`](/docs/concepts/lifecycle) | `@PostProcessor` |
 |:-------|:-----------------|:-----------------|
 | **Type** | Method decorator | Class decorator |
 | **Scope** | Single component | All components |
-| **When** | After DI, before post-processing | After DI + PostConstruct |
+| **When** | From `server.start()`, once the whole graph exists | At construction, right after DI |
+| **Counterpart** | `@OnStop` | None |
 | **Purpose** | Component initialization | Cross-cutting concerns |
 | **Can transform** | No (runs on self) | Yes (returns modified instance) |
 | **Use case** | Setup resources, validate config | Tracing, metadata collection, AOP |
@@ -11257,6 +11988,7 @@ export class HeavyProcessor implements ComponentPostProcessor {
 
 - [Services](/docs/concepts/services) - Service layer architecture
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and why PostProcessors start earlier
 - [OpenAPI](/docs/packages/openapi) - PostProcessor in action
 - [Configuration](/docs/guides/configuration) - Server configuration
 
@@ -11319,7 +12051,7 @@ Everything declared on a method or a field is collected from the whole prototype
 | `@Inject` | ✅ | Fields declared on any ancestor are injected |
 | `@Strategy` | ✅ | |
 | `@Implements` | ✅ | A subclass joins its base's interface registration, so a `@Strategy` list picks it up — see below |
-| `@PostConstruct` | ✅ | Runs once per method, even when the chain is several levels deep |
+| `@OnStart` / `@OnStop` ([lifecycle](/docs/concepts/lifecycle)) | ✅ | Runs once per method, even when the chain is several levels deep. Start hooks are collected ancestors-first; stop hooks run in the reverse of that. `@PostConstruct` is a deprecated alias of `@OnStart` and behaves identically |
 | `@Override` | ✅ | Marks accumulate across the chain; a subclass cannot un-mark an inherited one |
 | `@Hidden` on a method ([openapi](/docs/packages/openapi)) | ✅ | A hidden base-class route stays out of the spec |
 | `@Transaction` ([drizzle](/docs/packages/drizzle)) | ✅ | A base class's transactional methods run inside a transaction |
@@ -11563,7 +12295,7 @@ Asena currently provides two official adapters:
 **The fastest adapter for production workloads**
 
 - ⚡ **Performance:** ~295k req/sec
-- 📦 **Dependencies:** Zero (except Zod)
+- 📦 **Dependencies:** Zero — Zod is a peer your project owns
 - 🔧 **Runtime:** Bun-exclusive
 - 🎯 **Use Case:** Production APIs, microservices
 
@@ -11572,7 +12304,7 @@ Asena currently provides two official adapters:
 **Familiar and battle-tested**
 
 - ⚡ **Performance:** ~233k req/sec
-- 📦 **Dependencies:** Hono framework
+- 📦 **Dependencies:** Hono and Zod, as peers your project owns
 - 🔧 **Runtime:** Bun (can be ported to Node)
 - 🎯 **Use Case:** Projects using Hono, gradual migration
 
@@ -11780,6 +12512,12 @@ or
 Check the [Hono-adapter source code](https://github.com/AsenaJs/hono-adapter) for a complete implementation example.
 :::
 
+::: warning `stop()` has to reach your WebSocket layer
+`server.stop()` calls the adapter's `stop()` before it runs any [`@OnStop`](/docs/concepts/lifecycle) hook, and an adapter with WebSocket support is responsible for tearing that layer down from there — clearing heartbeat timers and calling the [WebSocket transport's](/docs/concepts/websocket#multi-pod-websocket) optional `destroy()`.
+
+Both official adapters do this now. Neither did before: `destroy()` had no call site anywhere in the framework, so a Redis-backed multi-pod setup leaked a subscriber and a publisher connection on every stop.
+:::
+
 ## Recommendations
 
 ### For New Projects
@@ -11787,7 +12525,7 @@ Check the [Hono-adapter source code](https://github.com/AsenaJs/hono-adapter) fo
 Start with **Ergenecore** for optimal performance and native Bun features.
 
 ```bash
-bun add @asenajs/ergenecore
+bun add @asenajs/ergenecore zod
 ```
 
 ### For Existing Hono Projects
@@ -11795,7 +12533,7 @@ bun add @asenajs/ergenecore
 Use the **Hono adapter** for seamless migration and reuse of existing middleware.
 
 ```bash
-bun add @asenajs/hono-adapter
+bun add @asenajs/hono-adapter hono zod
 ```
 
 ### For Maximum Performance
@@ -11837,7 +12575,7 @@ Ergenecore is a high-performance adapter that:
 
 - **Built by Asena Team** - First-party adapter maintained alongside Asena core
 - **Bun-Native** - Uses `Bun.serve()` and native Bun APIs exclusively
-- **Zero Dependencies** - No external dependencies except Zod (for validation)
+- **Zero Dependencies** - no runtime dependencies at all; Zod is a peer your project owns
 - **SIMD-Accelerated** - Leverages Bun's SIMD-optimized routing engine
 - **Zero-Copy File Serving** - Uses `Bun.file()` for optimal static file performance
 - **Built-in Middleware** - Includes CorsMiddleware and RateLimiterMiddleware
@@ -11880,12 +12618,16 @@ For Hono adapter documentation, see [Hono Adapter](/docs/adapters/hono).
 ## Installation
 
 ```bash
-bun add @asenajs/ergenecore
+bun add @asenajs/ergenecore zod
 ```
+
+`zod` is a **peer dependency**: the adapter defines the validation contract, your project owns the
+library and its version.
 
 **Requirements:**
 - Bun v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
 
 ## Quick Start
@@ -12229,6 +12971,12 @@ export class AuthController {
 RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal performance. Each middleware instance maintains its own bucket storage for route-specific rate limiting.
 :::
 
+::: info Its sweep timer is released on shutdown
+`RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
+
+The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+:::
+
 ## Performance & Architecture
 
 ### SIMD-Accelerated Routing
@@ -12348,8 +13096,14 @@ A *domain* 404 — the route exists, the record does not — is still a throw, a
 `onError`:
 
 ```typescript
-throw new HttpException(404, { message: 'User not found' });
+import { HttpException } from '@asenajs/asena/adapter';
+
+throw new HttpException(404, { error: 'User not found' });
 ```
+
+`HttpException` lives in the framework core, not in this adapter, so the same throw works
+unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports it under the name it has always
+had, and that re-export is the same class object.
 
 ::: warning `onNotFound` also catches missing static files
 A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
@@ -12409,6 +13163,7 @@ import {
   type Context,
   type ValidationSchema,
 } from '@asenajs/ergenecore';
+import { isHttpException } from '@asenajs/asena/adapter';
 import { z } from 'zod';
 
 // MiddlewareService requires handle() - it is the only abstract member
@@ -12431,7 +13186,12 @@ export class MyValidator extends ValidationService {
 @Config()
 export class MyConfig extends ConfigService {
   public onError(error: Error, context: Context) {
-    return context.send({ error: error.message }, 500);
+    // Without this branch every deliberate 401/403/404 arrives at the client as a 500
+    if (isHttpException(error)) {
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+    }
+
+    return context.send({ error: 'Internal Server Error' }, 500);
   }
 }
 ```
@@ -12556,12 +13316,18 @@ For Ergenecore adapter documentation, see [Ergenecore Adapter](/docs/adapters/er
 ## Installation
 
 ```bash
-bun add @asenajs/hono-adapter
+bun add @asenajs/hono-adapter hono zod
 ```
+
+`hono` and `zod` are **peer dependencies**: this adapter defines the wrapper, your project owns
+the libraries it wraps. That is what keeps you and the adapter on one copy of `hono` — see
+[Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
+- [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
 
 ## Quick Start
@@ -12887,6 +13653,12 @@ export class AuthController {
 RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal performance. Each middleware instance maintains its own bucket storage for route-specific rate limiting.
 :::
 
+::: info Its sweep timer is released on shutdown
+`RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
+
+The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+:::
+
 ## Hono-Specific Features
 
 ### @Override Decorator
@@ -13023,6 +13795,7 @@ Extend `ConfigService` for server configuration:
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
 import { ConfigService, type Context } from '@asenajs/hono-adapter';
+import { isHttpException, type NotFoundRequest } from '@asenajs/asena/adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
@@ -13031,8 +13804,17 @@ export class ServerConfig extends ConfigService {
   }
 
   onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error);
-    return context.send({ error: error.message }, 500);
+    if (isHttpException(error)) {
+      // Answer with the body the exception carries; `error.message` is that body
+      // already flattened to a string, so re-wrapping it double-encodes an object
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+    }
+
+    return context.send({ error: 'Internal Server Error' }, 500);
+  }
+
+  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
@@ -13040,6 +13822,62 @@ export class ServerConfig extends ConfigService {
 ::: info
 For configuration, see [Configuration](/docs/guides/configuration).
 :::
+
+### The two handlers do not overlap
+
+`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
+route** — a routing outcome, not a failure — so neither handler has to ask which case it is
+looking at. An unmatched route never reaches `onError`.
+
+`request.path` is the path only, with no origin and no query string, and `request.method` is
+normalised by the adapter, so the same handler body works unchanged on Ergenecore. With no
+`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
+
+A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
+`onError`:
+
+```typescript
+import { HttpException } from '@asenajs/asena/adapter';
+
+throw new HttpException(404, { error: 'User not found' });
+```
+
+`HttpException` lives in the framework core, so that throw is identical on Ergenecore. This
+adapter deliberately does **not** re-export it: it already exports hono's `HTTPException`, and two
+throwable classes differing by the case of two letters is a trap for autocomplete.
+
+### Every thrown error reaches `onError` first
+
+Including `HttpException`, hono's `HTTPException`, and anything a hono middleware raised. Your
+handler sees all of them; the adapter falls back to answering from the exception itself only when
+there is no handler, when it returns nothing, or when it throws.
+
+::: warning Match with `isHttpException()`, not `instanceof`
+This adapter is the one where it matters most. Applications throw `HttpException`, while
+`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and hono's own validator throw `HTTPException` —
+two unrelated classes, so **either** `instanceof` check misses half of your 4xx responses and
+sends them down the generic 500 branch. `isHttpException()` matches both.
+
+It also survives a project resolving two copies of `@asenajs/asena`, where `instanceof` silently
+answers false: `HttpException` brands each instance, so the brand travels with the exception
+whichever copy built it.
+
+**Two copies of `hono` are a different matter, and the guard does not save you there.** The brand
+is patched onto the prototype of the `HTTPException` class *the adapter* resolved; it cannot reach
+another copy's class. An `HTTPException` thrown from a second copy is recognised by neither
+`instanceof` nor `isHttpException()`, and answers `500`.
+
+Since 3.0.0 `hono` is a **peer dependency**, so the adapter has no resolution slot of its own and a
+project normally resolves one copy — which is what makes the guard sufficient. Keep the habit
+anyway: always `import { HTTPException } from '@asenajs/hono-adapter'`, never from
+`hono/http-exception`. Preferring `HttpException` from `@asenajs/asena/adapter` for your own throws
+avoids the question entirely, since it brands each instance rather than a prototype. See
+[Error Handling](/docs/guides/error-handling#throwing-http-exceptions).
+:::
+
+With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+thrown message is deliberately not echoed to the caller — it is written to the log with its stack
+instead. See [Adapter logging](/docs/guides/error-handling#adapter-logging).
 
 ### Static File Serving
 
@@ -13201,6 +14039,10 @@ describe("UserController", () => {
 | `logger`     | `Logger`   | Logger instance                           |
 | `port`       | `number`   | Server port (optional)                    |
 | `components` | `Class[]`  | Controllers/services to register (for testing) |
+| `overrides`  | `Record<string, object>` | Replace registered components with test doubles, keyed by service name |
+| `health`     | `{ port, path? }` | Health probe endpoint — `path` defaults to `/healthz` ([health probes](/docs/concepts/lifecycle#health-probes)) |
+| `shutdown`   | `object`   | Signal handling and `@OnStop` timeouts ([signal handling](/docs/concepts/lifecycle#signal-handling)) |
+| `keepAlive`  | `boolean`  | Hold the event loop open. Defaults to `true` in headless mode, `false` otherwise |
 | `gc`         | `boolean`  | Enable garbage collection (optional)      |
 
 ::: tip Testing with Components
@@ -13785,7 +14627,8 @@ Drizzle ORM utilities for AsenaJS - A powerful and type-safe database integratio
 - 🔄 **Declarative Transactions** - `@Transaction` with `REQUIRED` / `NESTED` / `REQUIRES_NEW` propagation, propagated through `AsyncLocalStorage`
 - 🔧 **AsenaJS Integration** - Seamless IoC container integration
 - 📦 **Multiple Database Support** - Connect to different databases simultaneously
-- ⚡ **Performance Optimized** - Connection pooling and efficient queries
+- ⚡ **Performance Optimized** - Configurable connection pooling and efficient queries
+- 🔌 **Symmetric Connection Lifecycle** - the pool is opened by `@OnStart` and released by `@OnStop`
 
 ## Installation
 
@@ -13800,7 +14643,7 @@ bun add mysql2          # For MySQL
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 - [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
@@ -13989,14 +14832,22 @@ The `@Database` decorator configures a database connection:
 @Database({
   type: 'postgresql' | 'mysql' | 'bun-sql',
   config: {
-    host: string;
-    port: number;
-    database: string;
-    user: string;
-    password: string;
+    // All five are optional: supply them, or a connectionString, not both
+    host?: string;
+    port?: number;
+    database?: string;
+    user?: string;
+    password?: string;
     ssl?: boolean;
-    connectionString?: string; // Optional: overrides individual config
+    connectionString?: string; // Replaces the five fields above - see "Connection String" below
     name?: string;             // Optional: shown in the connection log
+    pool?: {                   // Optional: driver-agnostic pool sizing, all durations in ms
+      max?: number;
+      idleTimeoutMs?: number;
+      connectTimeoutMs?: number;
+      maxLifetimeMs?: number;
+    };
+    extra?: Record<string, unknown>; // Optional: driver-native options, spread last
   },
   name?: string;               // Optional: service name (recommended for multiple databases)
   logger?: ServerLogger;       // Optional: where the adapter logs connection events
@@ -14007,6 +14858,18 @@ The `@Database` decorator configures a database connection:
   }
 })
 ```
+
+The `pool` shape is exported as `DatabasePoolConfig` if you want to build it separately.
+
+::: tip The pool is released on shutdown
+`AsenaDatabaseService` connects from an [`@OnStart`](/docs/concepts/lifecycle) and releases the
+pool from an `@OnStop`, so `server.stop()` hands the connections back.
+
+Nothing did that before the framework grew a stop phase: the pool outlived the server that opened
+it. That is invisible for a process that exits straight after, and fatal for a test run where
+every file boots its own container — the pools accumulate until Postgres answers
+`sorry, too many clients already`, in whichever test happened to run last.
+:::
 
 ## @Repository Decorator API
 
@@ -14047,15 +14910,51 @@ The decorator chains `@PostProcessor()` onto your subclass and writes the option
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'password',
 
-    // Optional: Connection pool settings
-    max: 20, // Maximum number of clients
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    // Optional: driver-agnostic connection pool settings
+    pool: {
+      max: 20,                 // pg default: 20
+      idleTimeoutMs: 30_000,   // pg default: 30000
+      connectTimeoutMs: 2_000, // pg default: 2000
+    },
   },
   name: 'MainDatabase'
 })
 export class PostgresDB extends AsenaDatabaseService {}
 ```
+
+### Connection Pool
+
+`pool` is driver-agnostic: every duration on it is **milliseconds**, and each adapter translates
+it into its own driver's vocabulary. A field left undefined keeps the adapter's default, so
+adding a `pool` block never changes anything you did not ask to change.
+
+| Field | postgresql (`pg`) | mysql (`mysql2`) | bun-sql (`Bun.SQL`) |
+|:------|:------------------|:-----------------|:--------------------|
+| `max` | `max` — default **20** | `connectionLimit` — default **10** | `max` — Bun's own default (10) |
+| `idleTimeoutMs` | `idleTimeoutMillis` — default **30000** | `idleTimeout` — unset by default | `idleTimeout`, **converted to seconds** |
+| `connectTimeoutMs` | `connectionTimeoutMillis` — default **2000** | `connectTimeout` — unset by default | `connectionTimeout`, **converted to seconds** |
+| `maxLifetimeMs` | `maxLifetimeSeconds`, **converted to seconds**; unset by default | ❌ no mysql2 equivalent — ignored | `maxLifetime`, **converted to seconds** |
+
+::: tip `extra` is the escape hatch
+`config.extra` is a `Record<string, unknown>` spread **last** into the driver's option object, so
+it also wins over everything the rest of the config produced. It is passed through unvalidated and
+is not portable between database types.
+
+```typescript
+config: {
+  host: 'localhost', port: 5432, database: 'myapp', user: 'postgres', password: '…',
+  pool: { max: 50 },
+  extra: { application_name: 'billing-api' },  // pg-specific
+}
+```
+:::
+
+::: info New
+These numbers used to be literals inside each adapter, unreachable from configuration — the same
+image could ship an API wanting 50 connections and a worker wanting 5, and neither could say so.
+The former literals became the defaults, so an application that configures no `pool` block
+behaves exactly as before.
+:::
 
 ### MySQL
 
@@ -14093,22 +14992,55 @@ export class BunSQLDatabase extends AsenaDatabaseService {}
 
 ### Connection String
 
+Every adapter honours `connectionString`. Set it and leave the discrete fields out — they are
+optional, and when a connection string is present they are **not sent to the driver at all**.
+
 ```typescript
 @Database({
   type: 'postgresql',
   config: {
     connectionString: process.env.DATABASE_URL,
-    // Still required (can be empty if using connection string)
-    host: '',
-    port: 0,
-    database: '',
-    user: '',
-    password: ''
+    // Still applied on top of the URL
+    pool: { max: 20 },
   },
   name: 'MainDatabase'
 })
 export class DatabaseFromURL extends AsenaDatabaseService {}
 ```
+
+Each driver takes it under its own name — `pg` as `connectionString`, `mysql2` as `uri`,
+`Bun.SQL` as `url` — but the rule above is the same for all three. `ssl`, `pool` and `extra`
+still apply.
+
+::: warning Supplying both is not a merge
+Setting a connection string *and* the discrete fields does not fill the URL's gaps from the
+fields. The drivers do not even agree on who wins: `pg` lets the URL win, while `mysql2` keeps
+any truthy discrete option and ignores the URI entirely. And on `pg`, a key the URL omits falls
+back to `PGHOST`/`PGPORT`/pg's defaults — **never** to the discrete value you supplied, so
+`{ port: 5555, connectionString: 'postgres://u:p@host/db' }` resolves to 5432.
+
+That is why Asena omits the discrete fields outright rather than emitting both. Pick one.
+:::
+
+::: info Where `ssl` fits
+For `pg`, an `ssl`/`sslmode` in the query string wins in **both** directions — it overrides
+`config.ssl` whichever way each is set — because pg re-parses the URL over the whole config.
+`config.ssl` only decides what the URL is silent about.
+
+For `mysql2` and `bun-sql` the priority is the other way round: an explicit `ssl: true` beats
+the URL, and the URL applies when `ssl` is unset or `false`.
+:::
+
+::: info Fixed in 0.10.0
+`connectionString` was accepted by the config type and documented as supported, but only
+`bun-sql` ever read it — and even there it was dropped along with `ssl` and the pool size. The
+`postgresql` and `mysql` adapters built their options from the discrete fields alone, so a
+URL-configured application silently connected somewhere else: pg fell through to `PGHOST` and
+the OS username, mysql2 to `localhost:3306`.
+
+The five discrete fields are now optional, so the `host: '', port: 0` ceremony this page used to
+show is gone. `DatabaseAdapter.createConnectionString()` was removed in the same change.
+:::
 
 ## Repository Methods
 
@@ -14665,6 +15597,7 @@ export class UserRepository extends BaseRepository<typeof users> {
 
 - [Services](/docs/concepts/services)
 - [Dependency Injection](/docs/concepts/dependency-injection)
+- [Component Lifecycle](/docs/concepts/lifecycle) - when the pool is opened and released
 - [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration)
 - [Drizzle ORM Documentation](https://orm.drizzle.team/)
@@ -14707,7 +15640,7 @@ bun add @asenajs/asena-openapi
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 - [Zod](https://zod.dev) v4.3 or higher
 
 ## Quick Start
@@ -14956,6 +15889,7 @@ GET /api/users (SERVER)
 - **W3C Context Propagation** — Extract incoming `traceparent`, inject outgoing context
 - **Route Exclusion** — `ignoreRoutes` with exact and wildcard matching
 - **Custom Sampling** — `ratioBasedSampler` helper for production
+- **Flush on Shutdown** — `server.stop()` flushes and releases the SDK through an `@OnStop` hook
 - **Minimal Dependencies** — One runtime dependency (`@opentelemetry/context-async-hooks`); everything else is a peer dep
 
 ## Installation
@@ -14972,7 +15906,7 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 
 ::: info Requirements
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 :::
 
 ## Quick Start
@@ -15034,7 +15968,8 @@ Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context, HttpException } from '@asenajs/ergenecore';
+import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { isHttpException } from '@asenajs/asena/adapter';
 import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
@@ -15049,8 +15984,10 @@ export class AppConfig extends ConfigService {
   }
 
   public onError(error: Error, context: Context) {
-    if (error instanceof HttpException) {
-      return context.send(error.body, error.status);
+    if (isHttpException(error)) {
+      // Answer with the body the exception carries; `error.message` is that body
+      // already flattened to a string, so re-wrapping it double-encodes an object
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
     }
     return context.send({ error: 'Internal Server Error' }, 500);
   }
@@ -15186,6 +16123,30 @@ private meter: Meter;
 | `http.server.request.duration` | Histogram (ms) | Request duration by method/path |
 
 The middleware also extracts incoming W3C `traceparent` headers, enabling distributed tracing when other services call your API.
+
+## Shutdown
+
+`server.stop()` runs `shutdown()` on your `@Otel` class through an
+[`@OnStop`](/docs/concepts/lifecycle) hook: buffered spans and metrics are flushed, the exporter
+timers stop, and the context manager is unhooked. There is nothing to call by hand, and nothing to
+register — the hook is inherited from `OtelTracingPostProcessor`.
+
+Each step runs independently and every failure is logged rather than thrown, so a collector that
+cannot be reached does not take the application down with it. `shutdown()` is safe to call twice;
+the second call has nothing left to release.
+
+::: warning The package no longer installs its own signal handlers
+Up to now this package registered `process.on('SIGTERM')` and `process.on('SIGINT')` of its own.
+That was wrong three ways: the async listener's rejection was unheld, so an unreachable collector
+— the normal case for a local `Ctrl+C` — killed the process with `ECONNREFUSED`; the listeners were
+never removed, so repeated boots in one process piled them up; and `server.stop()` on its own
+flushed nothing, leaving the `BatchSpanProcessor` timer and the metric reader's export interval
+running.
+
+Signals are now [handled by the server](/docs/concepts/lifecycle#signal-handling), which calls
+`stop()`, which drives this hook. If you added a `SIGTERM` handler of your own to work around the
+missing flush, remove it.
+:::
 
 ## Configuration
 
@@ -15456,6 +16417,7 @@ await fetch('http://other-service/api', { headers });
 ## Related Documentation
 
 - [PostProcessor](/docs/concepts/post-processor) — How PostProcessors work in Asena
+- [Component Lifecycle](/docs/concepts/lifecycle) — `@OnStop`, signal handling and shutdown ordering
 - [Services](/docs/concepts/services) — Service layer architecture
 - [Middleware](/docs/concepts/middleware) — Middleware system and registration
 - [Dependency Injection](/docs/concepts/dependency-injection) — IoC container and `@Inject`
@@ -15501,7 +16463,7 @@ bun add @asenajs/asena-redis redis
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 
 ## Quick Start
 
@@ -15554,8 +16516,22 @@ export class CacheService {
 }
 ```
 
-::: tip
-The `@Redis` decorator automatically handles connection during IoC initialization and disconnection on server shutdown. You don't need to manage the lifecycle manually.
+::: tip Connection lifecycle is handled for you
+`AsenaRedisService` carries an [`@OnStart`](/docs/concepts/lifecycle) that connects during
+`server.start()`, and an `@OnStop` that closes on `server.stop()` — first every connection handed
+out by `createSubscriber()`, then the main client. Failures on individual subscribers are logged
+and stepped over so one dead socket cannot strand the others or the main client.
+
+A **user-supplied `client`** (the `client` option) is closed too: `@OnStart` adopts it as the
+connection the service runs on, and `@OnStop` treats it the same way. If you need to keep it
+alive past the server, do not hand it to `@Redis`.
+:::
+
+::: warning This was not true before
+This page previously claimed disconnection on shutdown was automatic. It was not — the framework
+had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
+that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.10.0
+or higher.
 :::
 
 ## Adapter Selection
@@ -15614,9 +16590,9 @@ export class AppRedis extends AsenaRedisService {}
 |:-------|:-----------|:--------|:------------|
 | `send(command, args)` | `command: string, args: string[]` | `any` | Execute raw Redis command |
 | `client` | — | `RedisClientAdapter` | Access underlying client |
-| `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub |
+| `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub. Tracked by the service and closed on `server.stop()` |
 | `testConnection()` | — | `boolean` | Returns `true` if connected |
-| `disconnect()` | — | `void` | Close connection |
+| `disconnect()` | — | `void` | Close the main connection. Called for you by `@OnStop`; calling it by hand leaves any subscriber you are still reading from open |
 
 ## Configuration
 
@@ -15935,7 +16911,7 @@ bun add @asenajs/asena-kafka kafkajs
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 - [kafkajs](https://kafka.js.org) v2.2 or higher
 
 ::: warning Broker compatibility
@@ -15966,7 +16942,7 @@ A complete produce-and-consume round trip in three steps.
 
 ### 1. Define a Kafka service
 
-Extend `AsenaKafkaService` and decorate with `@Kafka`. The decorator registers the class as an Asena `@Service`, so it is injectable everywhere, and connects it during bootstrap.
+Extend `AsenaKafkaService` and decorate with `@Kafka`. The decorator registers the class as an Asena `@Service`, so it is injectable everywhere; the connection is opened by an [`@OnStart`](/docs/concepts/lifecycle) during `server.start()` and closed by an `@OnStop` during `server.stop()`.
 
 ```typescript
 // src/kafka/AppKafka.ts
@@ -16022,12 +16998,12 @@ export class AuditService {
 
 ### 3. Consume messages
 
-`createConsumer()` returns a **caller-owned** consumer: you connect it, subscribe, run it, and disconnect it. A `@Service` with `@PostConstruct` is the natural home.
+`createConsumer()` returns a **caller-owned** consumer: you connect it, subscribe, run it, and disconnect it. A `@Service` with [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) is the natural home — components stop in the reverse of the order they started, so this service is torn down while `AppKafka` and its client are still up.
 
 ```typescript
 // src/services/AuditConsumer.ts
 import { Service } from '@asenajs/asena/decorators';
-import { Inject, PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { Inject, OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
 import type { KafkaConsumerLike } from '@asenajs/asena-kafka';
 import { AppKafka } from '../kafka/AppKafka';
 
@@ -16038,7 +17014,7 @@ export class AuditConsumer {
 
   private consumer: KafkaConsumerLike;
 
-  @PostConstruct()
+  @OnStart()
   async start() {
     // groupId is required - replicas sharing it split the partitions between them
     this.consumer = this.kafka.createConsumer({ groupId: 'audit-archiver' });
@@ -16055,11 +17031,22 @@ export class AuditConsumer {
     });
   }
 
+  @OnStop()
   async stop() {
     await this.consumer?.disconnect();
   }
 }
 ```
+
+::: tip What the service closes and what it does not
+`AsenaKafkaService` carries its own `@OnStop`, which disconnects the client `@OnStart` brought up
+— and with it the default producer behind `sendMessage()`. A client passed as the `client` option
+goes down there too.
+
+What `createProducer()`, `createConsumer()` and `createAdmin()` hand out stays **yours**: nothing
+tracks them, so nothing closes them at a moment your application did not choose. `@OnStop` is
+where you close them.
+:::
 
 ::: warning The topic must exist
 The service never auto-creates topics (`allowAutoTopicCreation: false`). Create them with your broker tooling, or via `createAdmin()`:
@@ -16085,10 +17072,10 @@ await admin.disconnect();
 | `createAdmin()` | New caller-owned admin client |
 | `client` | The underlying `KafkaClientAdapter` |
 | `config` | The `KafkaConfig` used |
-| `disconnect()` | Close the default producer |
+| `disconnect()` | Close the default producer. Called for you by `@OnStop` on `server.stop()` |
 | `testConnection()` | Bounded broker probe (3s), returns `boolean` |
 
-Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer.
+Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer, and `server.stop()` now calls it through the service's `@OnStop`. Before the framework grew a stop phase nothing did, so the client outlived the server that opened it.
 
 ### Configuration
 
@@ -18990,6 +19977,27 @@ onError?(error: Error, context: C): Response | Promise<Response>
 
 **Returns:** `Response` or `Promise<Response>`
 
+::: warning Branch on `isHttpException()` before answering 500
+The examples below answer every error with a 500, to keep the focus on logging and DI. A real
+handler needs one branch above that, or every deliberate `401`, `403` and `404` your application
+throws — and every one raised by an auth middleware — arrives at the client as a 500:
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+  }
+
+  // ... the 500 handling shown below
+}
+```
+
+See [Error Handling](/docs/guides/error-handling#global-error-handler) for why this is a guard
+rather than an `instanceof` check, and why the body comes from `getResponse()`.
+:::
+
 ### Basic Error Handler
 
 ```typescript
@@ -19147,6 +20155,8 @@ When the route exists but the record does not, throw instead - that reaches `onE
 other application decision:
 
 ```typescript
+import { HttpException } from '@asenajs/asena/adapter';
+
 if (!user) {
   throw new HttpException(404, { code: 'USER_NOT_FOUND' });
 }
@@ -19601,7 +20611,14 @@ The `@Config` decorator is processed during the application bootstrap sequence:
    - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
    - `transport()` is called and the WebSocket / microservice transports are wired
-6. **Phase: SERVER_READY** - Server starts with applied configuration
+6. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
+7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
+
+::: warning A `@Config` cannot use `@OnStart` to prepare configuration
+The config hooks above are read in step 5, *before* start hooks run in step 6. An `@OnStart` on a
+`@Config` class still fires, but anything it prepares arrives after the values were already taken —
+Asena logs a warning when it sees one.
+:::
 
 ### Singleton Validation
 
@@ -19852,16 +20869,14 @@ Asena's error handling philosophy:
 
 ### Throwing HTTP Exceptions
 
-The simplest way to handle errors in Asena is to throw an `HttpException` (Ergenecore) or `HTTPException` (Hono).
+Throw an `HttpException`. It comes from `@asenajs/asena/adapter` — the framework core, not an
+adapter — so the same import and the same throw work unchanged on Ergenecore and Hono:
 
-#### Ergenecore Adapter
-::: code-group
-
-```typescript [Ergenecore]
+```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
-import { HttpException } from '@asenajs/ergenecore';
-import type { Context } from '@asenajs/ergenecore';
+import { HttpException } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
 
 @Controller('/users')
 export class UserController {
@@ -19872,8 +20887,7 @@ export class UserController {
     const user = await findUserById(id);
 
     if (!user) {
-      // Throw HttpException with status code and message
-      throw new HttpException(404, 'User not found');
+      throw new HttpException(404, { error: 'User not found' });
     }
 
     return context.send(user);
@@ -19881,32 +20895,51 @@ export class UserController {
 }
 ```
 
+Only the `Context` type is adapter-specific. Everything else — the class, the constructor, the
+response it produces — is identical, so moving an application between adapters does not mean
+rewriting its error handling.
 
-```typescript [Hono]
-import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import { HTTPException } from 'hono/http-exception';
-import type { Context } from '@asenajs/hono-adapter';
+::: tip Upgrading from 0.9
+`HttpException` used to be declared by each adapter. Ergenecore exported its own class; the Hono
+adapter re-exported `HTTPException` from `hono/http-exception`, which takes
+`(status, { message })` rather than `(status, body)`. There is now one class, in core.
 
-@Controller('/users')
-export class UserController {
-  @Get('/:id')
-  async getUser(context: Context) {
-    const id = context.getParam('id');
-
-    const user = await findUserById(id);
-
-    if (!user) {
-      // Throw HTTPException with status code and response
-      const response = context.send({ error: 'User not found' }, 404);
-      throw new HTTPException(404, { res: response as Response });
-    }
-
-    return context.send(user);
-  }
-}
-```
+`import { HttpException } from '@asenajs/ergenecore'` still works and is the *same class object*,
+so nothing breaks — but prefer `@asenajs/asena/adapter` in new code. On the Hono adapter this is
+the only import path: `@asenajs/hono-adapter` deliberately does not re-export it, because
+`HttpException` and `HTTPException` sitting side by side in one package differ by the case of two
+letters and autocomplete cannot tell which you meant.
 :::
+
+::: info Hono's `HTTPException` keeps working
+`@asenajs/hono-adapter` still exports `HTTPException`, and hono packages that throw it —
+`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt`, hono's own validator — are unaffected by the
+move. Both classes are recognised by `isHttpException()` and both are answered from their own
+status, so your handler does not have to know which one it is holding.
+
+**Import it from `@asenajs/hono-adapter`, never from `hono/http-exception`.** This is not a style
+preference. If a project ever resolves *two* copies of `hono`, `HTTPException` from the other copy
+is a different class — `isHttpException()` does not recognise it, and every deliberate `401`/`403`
+thrown from it becomes a `500`, silently, with the API still responding. The brand cannot close
+that: it is installed on the prototype of the copy the adapter resolved and cannot reach another
+copy's class.
+
+Since **3.0.0 `hono` is a peer dependency**, so the adapter no longer has a resolution slot of its
+own and a project normally resolves exactly one copy. That is the real fix; importing from the
+adapter is the guarantee on top of it. Before 3.0.0 this happened in a real application, triggered
+by nothing more than a patch bump of `hono` in its own `package.json`.
+
+`HttpException` from `@asenajs/asena/adapter` sidesteps the question entirely — it brands each
+*instance*, so it is recognised no matter which copy of the framework constructed it. Another
+reason to prefer it for your own throws.
+
+If you suspect a duplicate, `bun pm ls --all | grep hono` shows a nested
+`@asenajs/hono-adapter/node_modules/hono` when there is one, and the adapter writes a startup
+warning if it finds itself resolving one. Note that removing the duplicate from the lockfile is not
+enough — the stale `node_modules` directory has to go too, so upgrade with
+`rm -rf node_modules bun.lock && bun install`.
+:::
+
 ### HttpException API
 
 The `HttpException` class accepts three parameters:
@@ -19944,6 +20977,30 @@ throw new HttpException(503, 'Service Unavailable', {
 });
 ```
 
+::: warning `message` is the body as a *string* — do not re-wrap it
+`body` is what the caller receives. `message` is the same thing flattened to a string, which for
+an object body is the **serialized JSON**:
+
+```typescript
+const error = new HttpException(404, { error: 'User not found' });
+
+error.message              // '{"error":"User not found"}'   <- a string, not an object
+error.getResponse()        // 404, body {"error":"User not found"}
+```
+
+So an `onError` that answers `context.send({ error: error.message }, error.status)` double-encodes
+an object body into `{"error":"{\"error\":\"User not found\"}"}`. Pick one of two styles and stay
+with it:
+
+- **The exception owns the body** — throw whatever shape you want and let your handler answer with
+  `error.getResponse()`. Works for hono's `HTTPException` too, which has no `body` at all.
+- **The handler owns the body** — throw a **string** and let `onError` build the envelope from
+  `error.message` and `error.status`. Use this when every error in your API must share one shape.
+
+The examples below use the first. `error.body` is only on `HttpException` itself, not on the
+`isHttpException()` contract, so a handler that reads it is assuming it threw the exception itself.
+:::
+
 ::: tip Your handler always gets first refusal
 Both adapters turn the exception into a proper HTTP response without you catching it, and
 both offer it to `onError` first:
@@ -19960,23 +21017,44 @@ bypassed here. If you worked around that by throwing a plain domain error, you c
 `HttpException` directly.
 :::
 
+::: info The log follows the response
+When the framework answers — no handler, or one that declined or threw — it also writes the line,
+at a level derived from *the status the caller actually received*. A 4xx is logged as a rejected
+request without a stack; a 5xx is logged as an application error with one. See
+[Adapter logging](#adapter-logging).
+:::
+
 ::: warning Match the exception with `isHttpException()`, not `instanceof`
-A project that resolves two copies of an adapter - or two copies of `hono`, which is a peer
-dependency - ends up with two distinct exception classes, and `instanceof` silently answers
-false for one of them. Every deliberate 401/403/404 then collapses to your generic 500 branch
-while the API keeps responding.
+There are two reasons, and on the Hono adapter both apply at once.
+
+**Two classes.** Anything hono's ecosystem raises is an `HTTPException`, not an `HttpException`.
+`instanceof HttpException` answers false for every 401 from `hono/bearer-auth`, and
+`instanceof HTTPException` answers false for everything your own code throws. `isHttpException()`
+matches both, which is the whole reason it exists.
+
+**Two copies.** A project that resolves two copies of `@asenajs/asena` — or of `hono` — ends up
+with two distinct exception classes, and `instanceof` silently answers false for one of them.
+Every deliberate 401/403/404 then collapses to your generic 500 branch while the API keeps
+responding, so nothing looks broken until someone reads the status codes.
 
 ```typescript
 import { isHttpException } from '@asenajs/asena/adapter';
 
 public onError(error: Error, context: Context) {
   if (isHttpException(error)) {
-    return context.send({ error: error.message }, error.status);
+    // Let the exception answer with the body it carries. `error.message` would be that body
+    // flattened to a string - re-wrapping it double-encodes an object body
+    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
   }
 
   return context.send({ error: 'Internal Server Error' }, 500);
 }
 ```
+
+The guard narrows to `status`, an optional `getResponse()` and the usual `Error` members. It
+deliberately does **not** guarantee `body` — a branded exception from another package may not
+carry one — so reach for `error.body` only after you have an `HttpException` you know you threw
+yourself. `getResponse` is optional for the same reason, hence the `?.` and the fallback.
 :::
 
 ---
@@ -20022,8 +21100,7 @@ For complex applications, use the **ExceptionMapper pattern** to handle differen
 import { Scope } from '@asenajs/asena/decorators/ioc';
 import { Component } from '@asenajs/asena/decorators';
 import type { Context } from '@asenajs/hono-adapter';
-import { HTTPException } from 'hono/http-exception';
-import { isValidationError } from '@asenajs/asena/adapter';
+import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
 import { ClientErrorStatusCode, ServerErrorStatusCode } from '@asenajs/asena/web-types';
 
 @Component({ name: 'ExceptionMapper', scope: Scope.SINGLETON })
@@ -20033,8 +21110,8 @@ export class ExceptionMapper {
     const requestMethod = context.req.method;
 
     // Handle request validation errors.
-    // Checked BEFORE HTTPException on purpose: ValidationError extends HTTPException,
-    // so the generic branch below would otherwise swallow it
+    // Checked BEFORE the HTTP exception branch on purpose: a ValidationError *is* an HTTP
+    // exception (status 400), so the generic branch below would otherwise swallow it
     if (isValidationError(error)) {
       const errors = error.issues.map((issue) => ({
         field: issue.path.join('.'),
@@ -20048,15 +21125,19 @@ export class ExceptionMapper {
       }, ClientErrorStatusCode.BadRequest);
     }
 
-    // Handle HTTPException (from Hono or middleware)
-    if (error instanceof HTTPException) {
+    // Handle every deliberate HTTP status: your own HttpException, and anything a
+    // hono middleware raised. One branch covers both - see the warning above on why
+    // this is not an `instanceof` check
+    if (isHttpException(error)) {
       console.warn(`HTTP Exception: ${error.message}`, {
         path: requestPath,
         method: requestMethod,
         status: error.status
       });
 
-      return context.send(error.message, error.status);
+      // The exception carries its own body - answer with it rather than re-wrapping
+      // `error.message`, which is that body already flattened to a string
+      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
     }
 
     // Handle custom domain errors
@@ -20179,7 +21260,7 @@ export class AuthController {
 import { Middleware } from '@asenajs/asena/decorators';
 import type { Context, MiddlewareService } from '@asenajs/hono-adapter';
 import type { Next } from 'hono';
-import { HTTPException } from 'hono/http-exception';
+import { HttpException } from '@asenajs/asena/adapter';
 
 @Middleware()
 export class AuthMiddleware implements MiddlewareService {
@@ -20187,18 +21268,18 @@ export class AuthMiddleware implements MiddlewareService {
     const authHeader = context.req.header('authorization');
 
     if (!authHeader) {
-      const response = context.send({
+      throw new HttpException(401, {
         error: 'Unauthorized',
         message: 'Missing Authorization header'
-      }, 401);
-
-      throw new HTTPException(401, { res: response as Response });
+      });
     }
 
     await next();
   }
 }
 ```
+
+The throw is the same on Ergenecore — only the `Context` and `MiddlewareService` imports change.
 
 ### Mapping Custom Errors
 
@@ -20491,7 +21572,9 @@ async getUser(context: Context) {
 // Service-level (Business Logic)
 async getUser(id: string) {
   if (!id) {
-    throw new ValidationError('User ID is required');
+    // `ValidationError` is the framework's own type for a failed *request* validation and
+    // takes a ZodError - it is not a general-purpose error to construct by hand
+    throw new HttpException(400, { code: 'USER_ID_REQUIRED' });
   }
 
   const user = await this.db.findUser(id);
@@ -20672,11 +21755,19 @@ Then run the production build:
 bun dist/index.asena.js
 ```
 
+## Graceful Shutdown and Probes
+
+Two things a deployment needs are already available:
+
+- **Signals are handled by default.** `SIGTERM`, `SIGINT` and `SIGHUP` call `server.stop()`, which stops taking new work, runs your components' `@OnStop` hooks while the transports are still up, then releases everything in order. See [Component Lifecycle](/docs/concepts/lifecycle#signal-handling).
+- **Liveness and readiness are separate endpoints.** Pass `health: { port }` and point your restart policy at `{path}/live` and your load balancer at `{path}/ready`. Readiness answers `503` for the whole drain, so an instance is pulled from rotation while it still has work to finish. See [Health probes](/docs/concepts/lifecycle#health-probes).
+
 ## Related Documentation
 
 - [CLI Build Command](/docs/cli/commands#build)
 - [CLI Configuration](/docs/cli/configuration)
 - [Server Configuration](/docs/guides/configuration)
+- [Component Lifecycle](/docs/concepts/lifecycle) - graceful shutdown, signals and health probes
 
 ---
 
@@ -20921,7 +22012,7 @@ See the [MockComponent API](/docs/testing/mock-component) documentation for deta
 
 ### mockComponentAsync
 
-Asynchronous version for components with `postConstruct` hooks.
+Asynchronous version, for when the `postConstruct` callback you pass is async. It is your callback, not the component's [`@OnStart`](/docs/concepts/lifecycle) — `mockComponent` never runs the component's own lifecycle hooks.
 
 ```typescript
 @Service()
@@ -21152,7 +22243,8 @@ interface MockComponentOptions {
   // Provide custom mocks instead of auto-generated ones (optional)
   overrides?: Record<string, any>;
 
-  // Lifecycle hook called after injection (optional, can be async)
+  // Your own callback, run after injection (optional, can be async).
+  // NOT the component's @OnStart - see below
   postConstruct?: (instance: any) => void | Promise<void>;
 }
 ```
@@ -21198,7 +22290,7 @@ An override is the **final** value injected into the field:
 
 #### `postConstruct`
 
-Lifecycle hook executed after dependencies are injected.
+A callback of **yours**, run after the dependencies are injected.
 
 ```typescript
 const { instance, mocks } = mockComponent(AuthService, {
@@ -21207,6 +22299,22 @@ const { instance, mocks } = mockComponent(AuthService, {
   }
 });
 ```
+
+::: warning It is not the component's `@OnStart`
+`mockComponent` builds the instance directly — it never goes through the container or the server,
+so the component's own [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) hooks are **not**
+invoked. This option is the hook you would otherwise write inline; if you want the real start
+hook, call it yourself:
+
+```typescript
+const { instance } = await mockComponentAsync(DatabaseService, {
+  postConstruct: async (inst) => inst.onStart(),   // the @OnStart method, called explicitly
+});
+```
+
+For hooks running in their real order against a real container, use
+[`createTestApp`](/docs/testing/test-app).
+:::
 
 ::: tip Async Support
 The `postConstruct` hook can be async. Use `mockComponentAsync` when you need to await the hook.
@@ -21604,7 +22712,7 @@ expect(userService.getAll).toHaveBeenCalledTimes(1);
 
 Overrides are seeded **before** any user component is registered, so:
 
-- the real class is never constructed, and its `@PostConstruct` never runs
+- the real class is never constructed, so its `@OnStart` (and its deprecated `@PostConstruct` alias) never runs
 - every dependent captures the double, because Asena builds injection closures eagerly at registration time
 
 ### What can and cannot be overridden
@@ -21615,6 +22723,10 @@ Overrides are seeded **before** any user component is registered, so:
 | ❌ Core services | `Container`, `ServerLogger`, `__Ulak__`, `EventEmitter`, … are wired during bootstrap phases 1–5 and have already captured their dependencies. Attempting it throws with a clear message. |
 | ❌ Controllers | A plain object carries no `@Controller` metadata, so an overridden controller's routes would never be registered. Override the services it depends on instead. |
 | ⚠️ `@Strategy` arrays | Overriding an interface name to displace one member of a strategy array is not supported. |
+
+::: tip Do not assign to an injected field
+`@Inject` and `@Strategy` install accessors with no setter, so `Object.assign(instance, { dep: fake })` throws. The error names the field and the class and points back here. Use `overrides`, or [`mockComponent()`](/docs/testing/mock-component) for a unit-level double.
+:::
 
 If a component is registered under a custom name (`@Service('Mailer')`), override it by **that** name.
 
@@ -21706,10 +22818,14 @@ expect(app.container.has('UserRepository')).toBe(true);
 ## Known behaviours
 
 - **Cron and schedules run for real.** `cronRunner.startAll()` executes as part of start-up, so a `@Schedule` component in your test set will fire.
+- **[`@OnStart` and `@OnStop` run for real.](/docs/concepts/lifecycle)** `createTestApp` calls `server.start()` and `app.stop()` calls `server.stop()`, so a component's start hook runs before the first request and its stop hook runs during cleanup — which is what releases pools, subscribers and timers between test files.
+- **A throwing `@OnStart` fails the boot, not the process.** `createTestApp()` rejects with an error naming the hook. Up to 0.9.x the container called `process.exit(1)` instead, which reported `0 pass / 1 fail` with no indication of why.
+- **Signals are not intercepted and the loop is not held open.** The harness passes `shutdown: { signals: false }` and `keepAlive: false`, so booting twenty apps in one suite installs no listeners and nothing keeps the process alive after the last test.
 - **`lib/test` requires Bun.** The utilities import `bun:test` at module scope.
 
 ## Related
 
+- **[Component Lifecycle](/docs/concepts/lifecycle)** — what `start()` and `stop()` run on your behalf
 - **[createWebTest](/docs/testing/web-test)** — controller-slice testing with automatic mocks
 - **[MockComponent API](/docs/testing/mock-component)** — unit-level dependency mocking
 - **[Testing Overview](/docs/testing/overview)** — introduction to testing in Asena
@@ -21880,7 +22996,7 @@ expect(mocks.UserService).toBe(double);
 
 ## Known behaviours
 
-- **`@PostConstruct` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its lifecycle hook. This matches `@WebMvcTest` semantics.
+- **`@OnStart` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its [start hook](/docs/concepts/lifecycle). This matches `@WebMvcTest` semantics.
 - **Only `@Controller` classes are accepted** in `controllers`. Pass services and middlewares through `components`.
 
 ## Related

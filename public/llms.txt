@@ -19,6 +19,7 @@
 - [Controllers](https://asena.sh/raw/concepts/controllers.md): Handle HTTP requests with decorator-based routing and dependency injection
 - [Services](https://asena.sh/raw/concepts/services.md): Business logic components with @Service, singleton and prototype scopes, and lifecycle hooks
 - [Dependency Injection](https://asena.sh/raw/concepts/dependency-injection.md): IoC container and field-based dependency injection in Asena
+- [Component Lifecycle](https://asena.sh/raw/concepts/lifecycle.md): Start and stop your components with @OnStart and @OnStop, including shutdown ordering, signal handling and health probes
 - [Middleware](https://asena.sh/raw/concepts/middleware.md): Global, pattern-based, controller-level and route-level middleware with @Middleware
 - [Context API](https://asena.sh/raw/concepts/context.md): Unified request/response handling across all Asena adapters
 - [Validation](https://asena.sh/raw/concepts/validation.md): Type-safe request validation with Zod integration in Asena

@@ -8,10 +8,6 @@ outline: deep
 
 Asena provides built-in support for serving static files through the `@StaticServe` decorator and `StaticServeService` base class.
 
-::: danger BREAKING CHANGES IN v0.7.0
-**This feature will undergo major changes in version 0.7.0.** The API and implementation described here may change significantly. If you're starting a new project, be prepared to update your static file serving implementation when v0.7.0 is released.
-:::
-
 ## Quick Start
 
 ### 1. Create a Static Serve Middleware
@@ -658,12 +654,6 @@ public rewriteRequestPath(reqPath: string): string {
   // This slows down every request!
 }
 ```
-
-### 6. Be Prepared for v0.7.0 Changes
-
-::: warning
-Since this API will change in v0.7.0, avoid building complex abstractions on top of the current implementation. Keep your static serving logic isolated and easy to refactor.
-:::
 
 ---
 

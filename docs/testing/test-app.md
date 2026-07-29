@@ -83,7 +83,7 @@ expect(userService.getAll).toHaveBeenCalledTimes(1);
 
 Overrides are seeded **before** any user component is registered, so:
 
-- the real class is never constructed, and its `@PostConstruct` never runs
+- the real class is never constructed, so its `@OnStart` (and its deprecated `@PostConstruct` alias) never runs
 - every dependent captures the double, because Asena builds injection closures eagerly at registration time
 
 ### What can and cannot be overridden
@@ -94,6 +94,10 @@ Overrides are seeded **before** any user component is registered, so:
 | ❌ Core services | `Container`, `ServerLogger`, `__Ulak__`, `EventEmitter`, … are wired during bootstrap phases 1–5 and have already captured their dependencies. Attempting it throws with a clear message. |
 | ❌ Controllers | A plain object carries no `@Controller` metadata, so an overridden controller's routes would never be registered. Override the services it depends on instead. |
 | ⚠️ `@Strategy` arrays | Overriding an interface name to displace one member of a strategy array is not supported. |
+
+::: tip Do not assign to an injected field
+`@Inject` and `@Strategy` install accessors with no setter, so `Object.assign(instance, { dep: fake })` throws. The error names the field and the class and points back here. Use `overrides`, or [`mockComponent()`](/docs/testing/mock-component) for a unit-level double.
+:::
 
 If a component is registered under a custom name (`@Service('Mailer')`), override it by **that** name.
 
@@ -185,10 +189,14 @@ expect(app.container.has('UserRepository')).toBe(true);
 ## Known behaviours
 
 - **Cron and schedules run for real.** `cronRunner.startAll()` executes as part of start-up, so a `@Schedule` component in your test set will fire.
+- **[`@OnStart` and `@OnStop` run for real.](/docs/concepts/lifecycle)** `createTestApp` calls `server.start()` and `app.stop()` calls `server.stop()`, so a component's start hook runs before the first request and its stop hook runs during cleanup — which is what releases pools, subscribers and timers between test files.
+- **A throwing `@OnStart` fails the boot, not the process.** `createTestApp()` rejects with an error naming the hook. Up to 0.9.x the container called `process.exit(1)` instead, which reported `0 pass / 1 fail` with no indication of why.
+- **Signals are not intercepted and the loop is not held open.** The harness passes `shutdown: { signals: false }` and `keepAlive: false`, so booting twenty apps in one suite installs no listeners and nothing keeps the process alive after the last test.
 - **`lib/test` requires Bun.** The utilities import `bun:test` at module scope.
 
 ## Related
 
+- **[Component Lifecycle](/docs/concepts/lifecycle)** — what `start()` and `stop()` run on your behalf
 - **[createWebTest](/docs/testing/web-test)** — controller-slice testing with automatic mocks
 - **[MockComponent API](/docs/testing/mock-component)** — unit-level dependency mocking
 - **[Testing Overview](/docs/testing/overview)** — introduction to testing in Asena
