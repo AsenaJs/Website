@@ -5012,6 +5012,34 @@ export class DynamicCors extends CorsMiddleware {
 }
 ```
 
+#### What a disallowed origin gets
+
+A request from an origin the config rejects is **served normally, without the CORS headers**. It is
+not refused with a 403. CORS is a policy the browser enforces on the user's behalf: a response
+carrying no `Access-Control-Allow-Origin` is one the browser refuses to expose to the calling page,
+which is the denial the spec describes.
+
+The practical consequence is that the middleware is safe to register unconditionally. Non-browser
+callers that happen to send an `Origin` header — server-to-server clients, proxies, webviews — are
+unaffected, and an environment where CORS is already terminated at the ingress needs no conditional
+registration to avoid rejecting forwarded requests.
+
+::: warning Changed in hono-adapter 3.1 / ergenecore 3.1
+Earlier versions answered `403 CORS: Origin not allowed`. If you relied on that as an access
+control, it was never one — put the check in a middleware or guard of your own.
+:::
+
+#### `Vary: Origin`
+
+With any `origin` config other than the literal `'*'`, the response depends on the request's
+`Origin` — the allowed value is reflected back for arrays and functions, and the CORS headers are
+present or absent depending on the caller. The middleware therefore sets `Vary: Origin` on both the
+actual response and the preflight `204`, so a CDN or shared proxy keys its cache on that header.
+
+Without it, a cache in front of the API can serve a response carrying one origin's
+`Access-Control-Allow-Origin` to a request from a different origin. With `origin: '*'` the answer is
+the same for everyone, so no `Vary` is set and cache hit rate is unaffected.
+
 ### Rate Limiter Middleware
 
 ```typescript
@@ -6474,7 +6502,7 @@ export class UserController {
   @Post({ path: '/', validator: CreateUserValidator })
   async create(context: Context) {
     const body = await context.getBody();
-    // body is guaranteed to be valid!
+    // body is the schema's parsed output, not the raw payload
 
     return context.send({ created: true, user: body }, 201);
   }
@@ -6483,6 +6511,47 @@ export class UserController {
 
 ::: tip Validation Happens Automatically
 The validator runs **before** your route handler. If validation fails, the handler is never called.
+:::
+
+## What `getBody()` returns
+
+When a route declares a `json` validator, `context.getBody()` returns the **schema's output** - the
+value Zod produced, not the JSON the client sent. That means unknown keys are gone, `default()`s are
+filled in, and `coerce` has been applied:
+
+```typescript
+json() {
+  return z.object({ voteLock: z.boolean() });
+}
+```
+
+```json
+{ "voteLock": true, "ownerId": "<attacker-id>", "password": "plaintext" }
+```
+
+```typescript
+await context.getBody(); // { voteLock: true }
+```
+
+This matters because `z.object()` **ignores** unknown keys rather than rejecting them. Before this
+behaviour existed, `getBody()` re-read the raw body and the two extra keys arrived at the handler
+intact, so the common shape
+
+```typescript
+await this.repository.updateById(id, await context.getBody());
+```
+
+was a mass-assignment sink on every validated route - with a schema sitting right next to it that
+looked like it prevented exactly that.
+
+::: warning Body only
+Only the body is swapped for its validated form. `query`, `param` and `header` schemas still run,
+and still reject bad input, but `getQuery()`, `getParam()` and `headers` return the raw request
+values - a `z.coerce.number()` on a query parameter validates, then hands you the string. Convert
+explicitly in the handler for those targets.
+
+Requires hono-adapter 3.1+ / ergenecore 3.1+. On earlier versions `getBody()` returns the raw body
+on every route, whatever the schema says.
 :::
 
 ## ValidationService API
@@ -8031,6 +8100,27 @@ export class ChatSocket extends AsenaWebSocketService<ChatData> {
 
 Use `ws.publish()` to broadcast messages to all subscribers of a room:
 
+::: warning `ws.publish()` excludes the sender
+`ws.publish()`, `ws.publishText()` and `ws.publishBinary()` deliver to every subscriber of the
+topic **except the socket that called them**. If the sender should see the message too, send it
+explicitly:
+
+```typescript
+const payload = JSON.stringify({ type: 'message', text });
+
+ws.publish(room, payload);
+ws.send(payload); // the sender, who publish() left out
+```
+
+The service-level `this.to()` / `this.in()` are the opposite: they reach every subscriber,
+sender included. Pick by whether the sender is meant to be in the audience.
+
+This rule does **not** change when you configure a `transport()`. Before `@asenajs/asena` 0.10.1
+it did - a transport routed `ws.publish()` through `server.publish()`, which cannot exclude
+anything, so adding one for multi-pod delivery silently started echoing every publish back to its
+sender.
+:::
+
 ```typescript
 protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
   const room = ws.data?.values.room || 'general';
@@ -8569,19 +8659,48 @@ public transport() {
 
 Each server instance gets a unique pod ID. When a WebSocket message is published:
 
-1. The message is delivered locally via `server.publish()`
+1. The message is delivered locally — via `server.publish()` for `this.to()`, via the socket's own
+   `ws.publish()` for `socket.publish()` (which is what keeps the sender excluded there)
 2. The message is sent to Redis pub/sub with the originating pod ID
 3. Other pods receive the message and deliver it to their local sockets
 4. Messages from the same pod are deduplicated automatically
 
 ::: tip No Code Changes
 Your WebSocket services, Ulak messaging, and room management work exactly the same with `RedisTransport`. The transport layer is transparent — just configure it in `@Config` and multi-pod support is enabled.
+
+A transport changes **where** a message can reach, never **who** receives it locally. Adding one
+does not start or stop delivering a socket's own publish back to it.
 :::
 
 ::: info Custom Transports
-The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `publishRemote()`, `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+
+`publish()` is responsible for **both** local and remote delivery — `server.publish()` plus the broker — and is what the service-level `this.to()` uses.
+
+`publishRemote()` is the wire half alone: the broker publish with **no** `server.publish()`. `socket.publish()` calls it after having done local delivery itself through Bun's socket-level `ws.publish()`, the only primitive that can leave the publishing socket out. A transport that does local delivery again here would both duplicate the message locally and echo it back to the sender.
+
+```typescript
+export class MyTransport implements WebSocketTransport {
+  public publish(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
+    this.server.publish(topic, data);  // local
+    this.publishRemote(topic, data);   // remote
+  }
+
+  public publishRemote(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
+    this.broker.publish(topic, envelope(data, this.podId)); // remote only
+  }
+}
+```
 
 `init(server)` is called during startup, before any connection is accepted. `destroy()` is called from `server.stop()`, when the adapter shuts the WebSocket layer down — under a 5s ceiling, with failures logged and stepped over so one unreachable broker cannot hold the shutdown open.
+:::
+
+::: warning Implement `publishRemote()` in custom transports
+It is optional only for backwards compatibility. A transport without it keeps the pre-0.10.1 behaviour — `socket.publish()` falls back to `publish()`, so the message is delivered to the sender as well — and the adapter warns once at startup. The fallback is removed in the next major version.
+
+It is optional rather than required because the alternative reading of a missing method, "do not forward anywhere", would drop every cross-pod message in silence. A wrong-but-delivered message beats a lost one.
+
+The same warning appears if the adapter is 3.1+ while `@asenajs/asena` is still `0.10.0` — the peer range `^0.10.0` permits that pairing, and on it `BunLocalTransport` has no `publishRemote()` either. Upgrading core to 0.10.1 clears it.
 :::
 
 ::: warning `destroy()` was never called before 0.10.0

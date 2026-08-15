@@ -359,6 +359,34 @@ export class DynamicCors extends CorsMiddleware {
 }
 ```
 
+#### What a disallowed origin gets
+
+A request from an origin the config rejects is **served normally, without the CORS headers**. It is
+not refused with a 403. CORS is a policy the browser enforces on the user's behalf: a response
+carrying no `Access-Control-Allow-Origin` is one the browser refuses to expose to the calling page,
+which is the denial the spec describes.
+
+The practical consequence is that the middleware is safe to register unconditionally. Non-browser
+callers that happen to send an `Origin` header — server-to-server clients, proxies, webviews — are
+unaffected, and an environment where CORS is already terminated at the ingress needs no conditional
+registration to avoid rejecting forwarded requests.
+
+::: warning Changed in hono-adapter 3.1 / ergenecore 3.1
+Earlier versions answered `403 CORS: Origin not allowed`. If you relied on that as an access
+control, it was never one — put the check in a middleware or guard of your own.
+:::
+
+#### `Vary: Origin`
+
+With any `origin` config other than the literal `'*'`, the response depends on the request's
+`Origin` — the allowed value is reflected back for arrays and functions, and the CORS headers are
+present or absent depending on the caller. The middleware therefore sets `Vary: Origin` on both the
+actual response and the preflight `204`, so a CDN or shared proxy keys its cache on that header.
+
+Without it, a cache in front of the API can serve a response carrying one origin's
+`Access-Control-Allow-Origin` to a request from a different origin. With `origin: '*'` the answer is
+the same for everyone, so no `Vary` is set and cache hit rate is unaffected.
+
 ### Rate Limiter Middleware
 
 ```typescript
