@@ -77,7 +77,7 @@ export class UserController {
   @Post({ path: '/', validator: CreateUserValidator })
   async create(context: Context) {
     const body = await context.getBody();
-    // body is guaranteed to be valid!
+    // body is the schema's parsed output, not the raw payload
 
     return context.send({ created: true, user: body }, 201);
   }
@@ -86,6 +86,47 @@ export class UserController {
 
 ::: tip Validation Happens Automatically
 The validator runs **before** your route handler. If validation fails, the handler is never called.
+:::
+
+## What `getBody()` returns
+
+When a route declares a `json` validator, `context.getBody()` returns the **schema's output** - the
+value Zod produced, not the JSON the client sent. That means unknown keys are gone, `default()`s are
+filled in, and `coerce` has been applied:
+
+```typescript
+json() {
+  return z.object({ voteLock: z.boolean() });
+}
+```
+
+```json
+{ "voteLock": true, "ownerId": "<attacker-id>", "password": "plaintext" }
+```
+
+```typescript
+await context.getBody(); // { voteLock: true }
+```
+
+This matters because `z.object()` **ignores** unknown keys rather than rejecting them. Before this
+behaviour existed, `getBody()` re-read the raw body and the two extra keys arrived at the handler
+intact, so the common shape
+
+```typescript
+await this.repository.updateById(id, await context.getBody());
+```
+
+was a mass-assignment sink on every validated route - with a schema sitting right next to it that
+looked like it prevented exactly that.
+
+::: warning Body only
+Only the body is swapped for its validated form. `query`, `param` and `header` schemas still run,
+and still reject bad input, but `getQuery()`, `getParam()` and `headers` return the raw request
+values - a `z.coerce.number()` on a query parameter validates, then hands you the string. Convert
+explicitly in the handler for those targets.
+
+Requires hono-adapter 3.1+ / ergenecore 3.1+. On earlier versions `getBody()` returns the raw body
+on every route, whatever the schema says.
 :::
 
 ## ValidationService API

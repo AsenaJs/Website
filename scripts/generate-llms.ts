@@ -9,7 +9,7 @@
  * Run via `bun run docs:llms` (also runs automatically as part of `bun run docs:build`).
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '..');
 const DOCS_DIR = join(ROOT, 'docs');
@@ -148,7 +148,10 @@ sections.unshift({ title: 'Docs', pages: topLevel });
 const orphans: Page[] = [];
 
 for (const absPath of listDocs(DOCS_DIR)) {
-  const docsPath = relative(DOCS_DIR, absPath);
+  // `seen` and the raw URLs are built from sidebar links, which are always POSIX. On Windows
+  // `relative()` answers with backslashes, so without this every page misses the dedupe and gets
+  // listed a second time under "Other" with a broken URL.
+  const docsPath = relative(DOCS_DIR, absPath).split(sep).join('/');
 
   if (seen.has(docsPath)) {
     continue;

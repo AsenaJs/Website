@@ -177,6 +177,27 @@ export class ChatSocket extends AsenaWebSocketService<ChatData> {
 
 Use `ws.publish()` to broadcast messages to all subscribers of a room:
 
+::: warning `ws.publish()` excludes the sender
+`ws.publish()`, `ws.publishText()` and `ws.publishBinary()` deliver to every subscriber of the
+topic **except the socket that called them**. If the sender should see the message too, send it
+explicitly:
+
+```typescript
+const payload = JSON.stringify({ type: 'message', text });
+
+ws.publish(room, payload);
+ws.send(payload); // the sender, who publish() left out
+```
+
+The service-level `this.to()` / `this.in()` are the opposite: they reach every subscriber,
+sender included. Pick by whether the sender is meant to be in the audience.
+
+This rule does **not** change when you configure a `transport()`. Before `@asenajs/asena` 0.10.1
+it did - a transport routed `ws.publish()` through `server.publish()`, which cannot exclude
+anything, so adding one for multi-pod delivery silently started echoing every publish back to its
+sender.
+:::
+
 ```typescript
 protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
   const room = ws.data?.values.room || 'general';
@@ -489,19 +510,19 @@ export class NotificationService {
 
   async sendSystemMessage(room: string, message: string) {
     // Broadcast from outside the WebSocket service
-    this.chatSocket.to(room, JSON.stringify({
+    this.chatSocket.to(room, {
       type: 'system_message',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 
   async notifyAllUsers(message: string) {
     // Broadcast to all connected clients
-    this.chatSocket.in(JSON.stringify({
+    this.chatSocket.in({
       type: 'notification',
       message
-    }));
+    });
   }
 }
 ```
@@ -582,20 +603,20 @@ export class UserService {
     // ... update user in database
 
     // Notify the user via WebSocket
-    this.notificationSocket.to(`user:${userId}`, JSON.stringify({
+    this.notificationSocket.to(`user:${userId}`, {
       type: 'profile_updated',
       message: 'Your profile has been updated',
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 
   async sendGlobalAnnouncement(message: string): Promise<void> {
     // Broadcast to all users subscribed to announcements
-    this.notificationSocket.to('announcements', JSON.stringify({
+    this.notificationSocket.to('announcements', {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 }
 ```
@@ -620,11 +641,11 @@ export class AdminController {
     const { message } = await context.getBody<{ message: string }>();
 
     // Broadcast to all connected clients
-    this.notificationSocket.to('announcements', JSON.stringify({
+    this.notificationSocket.to('announcements', {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
 
     return context.send({ success: true });
   }
@@ -715,19 +736,48 @@ public transport() {
 
 Each server instance gets a unique pod ID. When a WebSocket message is published:
 
-1. The message is delivered locally via `server.publish()`
+1. The message is delivered locally — via `server.publish()` for `this.to()`, via the socket's own
+   `ws.publish()` for `socket.publish()` (which is what keeps the sender excluded there)
 2. The message is sent to Redis pub/sub with the originating pod ID
 3. Other pods receive the message and deliver it to their local sockets
 4. Messages from the same pod are deduplicated automatically
 
 ::: tip No Code Changes
 Your WebSocket services, Ulak messaging, and room management work exactly the same with `RedisTransport`. The transport layer is transparent — just configure it in `@Config` and multi-pod support is enabled.
+
+A transport changes **where** a message can reach, never **who** receives it locally. Adding one
+does not start or stop delivering a socket's own publish back to it.
 :::
 
 ::: info Custom Transports
-The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+The `WebSocketTransport` interface (from `@asenajs/asena`) defines a required `publish()` plus optional `publishRemote()`, `init()` and `destroy()` hooks. You can implement custom transports for other message brokers like NATS or RabbitMQ.
+
+`publish()` is responsible for **both** local and remote delivery — `server.publish()` plus the broker — and is what the service-level `this.to()` uses.
+
+`publishRemote()` is the wire half alone: the broker publish with **no** `server.publish()`. `socket.publish()` calls it after having done local delivery itself through Bun's socket-level `ws.publish()`, the only primitive that can leave the publishing socket out. A transport that does local delivery again here would both duplicate the message locally and echo it back to the sender.
+
+```typescript
+export class MyTransport implements WebSocketTransport {
+  public publish(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
+    this.server.publish(topic, data);  // local
+    this.publishRemote(topic, data);   // remote
+  }
+
+  public publishRemote(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
+    this.broker.publish(topic, envelope(data, this.podId)); // remote only
+  }
+}
+```
 
 `init(server)` is called during startup, before any connection is accepted. `destroy()` is called from `server.stop()`, when the adapter shuts the WebSocket layer down — under a 5s ceiling, with failures logged and stepped over so one unreachable broker cannot hold the shutdown open.
+:::
+
+::: warning Implement `publishRemote()` in custom transports
+It is optional only for backwards compatibility. A transport without it keeps the pre-0.10.1 behaviour — `socket.publish()` falls back to `publish()`, so the message is delivered to the sender as well — and the adapter warns once at startup. The fallback is removed in the next major version.
+
+It is optional rather than required because the alternative reading of a missing method, "do not forward anywhere", would drop every cross-pod message in silence. A wrong-but-delivered message beats a lost one.
+
+The same warning appears if the adapter is 3.1+ while `@asenajs/asena` is still `0.10.0` — the peer range `^0.10.0` permits that pairing, and on it `BunLocalTransport` has no `publishRemote()` either. Upgrading core to 0.10.1 clears it.
 :::
 
 ::: warning `destroy()` was never called before 0.10.0
@@ -780,23 +830,26 @@ for (const socket of this.sockets.values()) {
 ### 3. Let Asena Handle Cleanup
 
 ```typescript
-// ✅ Good: Asena handles cleanup automatically
+// ✅ Good: leave cleanup alone and use onClose for your own state
 protected async onClose(ws: Socket) {
-  // Just unsubscribe from rooms
-  ws.unsubscribe('room-1');
+  await this.presenceService.markOffline(ws.data.id);
 
   // Asena automatically:
-  // - Removes socket from this.sockets
-  // - Cleans up room references
+  // - Removes the socket from this.sockets
+  // - Unsubscribes it from the topics it manages
   // - Handles connection termination
 }
 
 // ❌ Bad: Manual cleanup (unnecessary and error-prone)
 protected async onClose(ws: Socket) {
-  this.sockets.delete(ws.id);           // Asena does this!
-  this.rooms.forEach(r => r.delete(ws)); // Asena does this too!
+  this.sockets.delete(ws.id);  // Asena does this!
+  ws.unsubscribe('room-1');    // Bun drops every subscription when the socket closes!
 }
 ```
+
+Room subscriptions need no cleanup at all: they live in Bun's pub/sub topics and disappear with
+the connection. There is no `this.rooms` map to sweep — see
+[Built-in Room Management](#built-in-room-management) above.
 
 ## Breaking Circular Dependencies with Ulak
 
