@@ -904,4 +904,4 @@ export class MyHonoMiddleware extends AsenaMiddlewareService {
 **Next Steps:**
 - Learn about [Context API](/docs/concepts/context)
 - Explore [Middleware patterns](/docs/concepts/middleware)
-- Understand [@Override decorator](/docs/concepts/middleware#override-decorator)
+- Understand [@Override decorator](/docs/adapters/hono#override-decorator)

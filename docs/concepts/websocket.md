@@ -510,19 +510,19 @@ export class NotificationService {
 
   async sendSystemMessage(room: string, message: string) {
     // Broadcast from outside the WebSocket service
-    this.chatSocket.to(room, JSON.stringify({
+    this.chatSocket.to(room, {
       type: 'system_message',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 
   async notifyAllUsers(message: string) {
     // Broadcast to all connected clients
-    this.chatSocket.in(JSON.stringify({
+    this.chatSocket.in({
       type: 'notification',
       message
-    }));
+    });
   }
 }
 ```
@@ -603,20 +603,20 @@ export class UserService {
     // ... update user in database
 
     // Notify the user via WebSocket
-    this.notificationSocket.to(`user:${userId}`, JSON.stringify({
+    this.notificationSocket.to(`user:${userId}`, {
       type: 'profile_updated',
       message: 'Your profile has been updated',
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 
   async sendGlobalAnnouncement(message: string): Promise<void> {
     // Broadcast to all users subscribed to announcements
-    this.notificationSocket.to('announcements', JSON.stringify({
+    this.notificationSocket.to('announcements', {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
   }
 }
 ```
@@ -641,11 +641,11 @@ export class AdminController {
     const { message } = await context.getBody<{ message: string }>();
 
     // Broadcast to all connected clients
-    this.notificationSocket.to('announcements', JSON.stringify({
+    this.notificationSocket.to('announcements', {
       type: 'announcement',
       message,
       timestamp: new Date().toISOString()
-    }));
+    });
 
     return context.send({ success: true });
   }
@@ -830,23 +830,26 @@ for (const socket of this.sockets.values()) {
 ### 3. Let Asena Handle Cleanup
 
 ```typescript
-// ✅ Good: Asena handles cleanup automatically
+// ✅ Good: leave cleanup alone and use onClose for your own state
 protected async onClose(ws: Socket) {
-  // Just unsubscribe from rooms
-  ws.unsubscribe('room-1');
+  await this.presenceService.markOffline(ws.data.id);
 
   // Asena automatically:
-  // - Removes socket from this.sockets
-  // - Cleans up room references
+  // - Removes the socket from this.sockets
+  // - Unsubscribes it from the topics it manages
   // - Handles connection termination
 }
 
 // ❌ Bad: Manual cleanup (unnecessary and error-prone)
 protected async onClose(ws: Socket) {
-  this.sockets.delete(ws.id);           // Asena does this!
-  this.rooms.forEach(r => r.delete(ws)); // Asena does this too!
+  this.sockets.delete(ws.id);  // Asena does this!
+  ws.unsubscribe('room-1');    // Bun drops every subscription when the socket closes!
 }
 ```
+
+Room subscriptions need no cleanup at all: they live in Bun's pub/sub topics and disappear with
+the connection. There is no `this.rooms` map to sweep — see
+[Built-in Room Management](#built-in-room-management) above.
 
 ## Breaking Circular Dependencies with Ulak
 
