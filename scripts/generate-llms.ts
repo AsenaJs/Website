@@ -83,7 +83,10 @@ function listDocs(dir: string): string[] {
   return out;
 }
 
-/** Resolves a sidebar link like "/docs/concepts/ulak" to a page, or null for external/non-docs links. */
+/**
+ * Resolves a sidebar link like "/docs/concepts/ulak" to a page, or null for external links,
+ * non-docs links and pages that opted out with `llms: false`.
+ */
 function pageFromLink(link: string): Page | null {
   if (!link.startsWith('/docs/')) {
     return null;
@@ -99,6 +102,10 @@ function pageFromLink(link: string): Page | null {
   } catch {
     console.warn(`  ! sidebar link has no file: ${link}`);
 
+    return null;
+  }
+
+  if (parsed.data.llms === 'false') {
     return null;
   }
 
@@ -159,7 +166,7 @@ for (const absPath of listDocs(DOCS_DIR)) {
 
   const parsed = parsePage(absPath);
 
-  // Redirect stubs and other non-content pages opt out with `llms: false`
+  // Same opt-out as pageFromLink: redirect stubs and pages that would only add noise
   if (parsed.data.llms === 'false') {
     continue;
   }
