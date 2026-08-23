@@ -8,6 +8,39 @@ outline: deep
 
 Services contain your application's business logic and are the core of your application's functionality. They are injectable classes that can be used throughout your application using Asena's dependency injection system.
 
+<div class="card-grid">
+  <a class="info-card" href="#what-is-a-service">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">What is a Service</div>
+    <p class="ic-desc">The role services play in an Asena application.</p>
+  </a>
+  <a class="info-card" href="#creating-a-service">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Creating a Service</div>
+    <p class="ic-desc">The <code>@Service</code> decorator and its registration rules.</p>
+  </a>
+  <a class="info-card" href="#service-dependencies">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Dependencies</div>
+    <p class="ic-desc">Injecting one service into another.</p>
+  </a>
+  <a class="info-card" href="#layered-architecture">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Layered Architecture</div>
+    <p class="ic-desc">Controller, service and repository responsibilities.</p>
+  </a>
+  <a class="info-card" href="#service-scopes">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Service Scopes</div>
+    <p class="ic-desc">Singleton and per-request instances.</p>
+  </a>
+  <a class="info-card" href="#lifecycle-hooks">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Lifecycle Hooks</div>
+    <p class="ic-desc">Running setup and teardown inside a service.</p>
+  </a>
+</div>
+
 ## What is a Service?
 
 A service is a class decorated with `@Service()` that contains business logic, data manipulation, external API calls, or any other application-specific functionality. Services promote:
@@ -756,20 +789,13 @@ describe('UserService', () => {
 });
 ```
 
-## Related Documentation
+## Related
 
-- [Dependency Injection](/docs/concepts/dependency-injection)
+- [Dependency Injection](/docs/concepts/dependency-injection) - How services get wired together
 - [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and shutdown ordering
-- [Controllers](/docs/concepts/controllers)
+- [Controllers](/docs/concepts/controllers) - Calling services from route handlers
+- [Inheritance](/docs/concepts/inheritance) - Sharing behaviour through a base service
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
-- [WebSocket](/docs/concepts/websocket)
-- [Drizzle ORM](/docs/packages/drizzle)
-- [Testing Guide](/docs/guides/testing)
-
----
-
-**Next Steps:**
-- Learn about [Dependency Injection](/docs/concepts/dependency-injection)
-- Share behaviour across services with [Inheritance](/docs/concepts/inheritance)
-- Explore [Repository Pattern](/docs/packages/drizzle)
-- Understand [Testing Strategies](/docs/guides/testing)
+- [WebSocket](/docs/concepts/websocket) - Namespaces and socket handling
+- [Drizzle ORM](/docs/packages/drizzle) - Repository pattern for the data layer
+- [Testing Guide](/docs/guides/testing) - Testing services in isolation

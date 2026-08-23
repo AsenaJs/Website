@@ -111,17 +111,10 @@ bun remove -g @asenajs/asena-cli
 bun install -g @asenajs/asena-cli
 ```
 
-## Next Steps
+## Related
 
-Now that the CLI is installed:
-
-- [Create your first project](/docs/cli/examples)
-- [Learn CLI commands](/docs/cli/commands)
-- [Configure your project](/docs/cli/configuration)
-
----
-
-**Related Documentation:**
-- [CLI Overview](/docs/cli/overview)
-- [CLI Commands](/docs/cli/commands)
-- [Get Started Guide](/docs/get-started)
+- [CLI Overview](/docs/cli/overview) - What the CLI does
+- [CLI Commands](/docs/cli/commands) - All available commands
+- [CLI Configuration](/docs/cli/configuration) - Configure your project
+- [CLI Examples](/docs/cli/examples) - Create your first project step by step
+- [Get Started Guide](/docs/get-started) - Complete beginner's guide

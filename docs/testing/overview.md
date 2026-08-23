@@ -12,6 +12,29 @@ Asena provides built-in testing utilities that automatically mock dependencies f
 Asena's testing utilities work exclusively with Bun's native test runner. They use Bun's `mock()` function from `bun:test` and are not compatible with other testing frameworks.
 :::
 
+<div class="card-grid">
+  <a class="info-card" href="/docs/testing/mock-component">
+    <span class="ic-kicker">Unit</span>
+    <div class="ic-title">MockComponent API</div>
+    <p class="ic-desc">Automatic dependency mocking, field by field.</p>
+  </a>
+  <a class="info-card" href="/docs/testing/test-app">
+    <span class="ic-kicker">Integration</span>
+    <div class="ic-title">createTestApp</div>
+    <p class="ic-desc">A full application booted in a test, over real HTTP.</p>
+  </a>
+  <a class="info-card" href="/docs/testing/web-test">
+    <span class="ic-kicker">Slice</span>
+    <div class="ic-title">createWebTest</div>
+    <p class="ic-desc">Only the web layer is real; everything else is mocked.</p>
+  </a>
+  <a class="info-card" href="/docs/testing/examples">
+    <span class="ic-kicker">Patterns</span>
+    <div class="ic-title">Testing Examples</div>
+    <p class="ic-desc">Controllers, services, WebSockets and middleware.</p>
+  </a>
+</div>
+
 ## Bun Test Runner
 
 Asena's testing utilities integrate with [Bun's built-in test runner](https://bun.sh/docs/cli/test), which provides:
@@ -323,8 +346,10 @@ mocks.createUserFn.mockResolvedValue({ id: 'user-123' });
 3. **Injection** - Injects mocks into the component instance
 4. **Expression Support** - Applies expression transformations if defined
 
-## Next Steps
+## Related
 
-- **[MockComponent API](/docs/testing/mock-component)** - Complete API reference and advanced usage
-- **[Examples](/docs/testing/examples)** - Real-world testing patterns for controllers, services, and WebSockets
-- **[Bun Test Documentation](https://bun.sh/docs/cli/test)** - Learn more about Bun's test runner
+- [MockComponent API](/docs/testing/mock-component) - Complete API reference and advanced usage
+- [createTestApp](/docs/testing/test-app) - Full-application testing with real HTTP
+- [createWebTest](/docs/testing/web-test) - Controller-slice testing with automatic mocks
+- [Examples](/docs/testing/examples) - Real-world testing patterns for controllers, services, and WebSockets
+- [Bun Test Documentation](https://bun.sh/docs/cli/test) - Learn more about Bun's test runner

@@ -13,6 +13,39 @@ This package gives you **two independent things**:
 
 If you only need to publish and read Kafka messages, **part 1 is all you need** — start at [Quick Start](#quick-start) and stop after [Service Client](#service-client). Read the [Microservice Transport](#microservice-transport) section when you want service-to-service messaging on top of Kafka.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">The <code>@Kafka</code> service, connected and registered.</p>
+  </a>
+  <a class="info-card" href="#service-client">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Service Client</div>
+    <p class="ic-desc">Producer, consumer and admin access to your own topics.</p>
+  </a>
+  <a class="info-card" href="#microservice-transport">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Microservice Transport</div>
+    <p class="ic-desc">RPC, event fan-out, retry and DLQ over Kafka.</p>
+  </a>
+  <a class="info-card" href="#external-topics-interop">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">External Topics</div>
+    <p class="ic-desc">Consuming and emitting envelope-less foreign topics.</p>
+  </a>
+  <a class="info-card" href="#best-practices">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Best Practices</div>
+    <p class="ic-desc">Partitioning, keys and consumer group choices.</p>
+  </a>
+  <a class="info-card" href="#troubleshooting">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Troubleshooting</div>
+    <p class="ic-desc">When messages do not arrive as expected.</p>
+  </a>
+</div>
+
 ## Features
 
 - **Decorator-Based Setup** - `@Kafka` handles IoC registration and connection lifecycle
@@ -614,7 +647,7 @@ kafkajs 2.2.4 does not support brokers that dropped the old protocol API version
 
 Until then: kafkajs, with brokers pinned to 3.9.x.
 
-## Related Documentation
+## Related
 
 - [Microservices](/docs/concepts/microservices) - The transport-agnostic microservice layer
 - [Redis](/docs/packages/redis) - Redis Streams transport (same SPI, different broker)

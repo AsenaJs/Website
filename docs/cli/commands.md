@@ -459,7 +459,7 @@ Use `asena init` when:
 | `asena --version`    | `asena -V`      | Show CLI version                     |
 | `asena --help`       | `asena -h`      | Show help                            |
 
-## Related Documentation
+## Related
 
 - [Configuration](/docs/cli/configuration) - CLI configuration options
 - [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
@@ -468,10 +468,3 @@ Use `asena init` when:
 - [Services](/docs/concepts/services) - Service patterns
 - [Middleware](/docs/concepts/middleware) - Middleware patterns
 - [WebSocket](/docs/concepts/websocket) - WebSocket patterns
-
----
-
-**Next Steps:**
-- Learn about [CLI Configuration](/docs/cli/configuration)
-- See [CLI Examples](/docs/cli/examples) for project structure
-- Understand [Controllers](/docs/concepts/controllers)

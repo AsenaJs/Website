@@ -20,26 +20,28 @@ Asena CLI provides essential tools for building and managing Asena applications:
 
 ## Key Features
 
-### 🚀 Quick Project Setup
-
-Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.
-
-### 🔧 Code Generation
-
-Quickly generate boilerplate code for:
-- Controllers with route handlers
-- Services with business logic
-- Middleware for request processing
-- Config classes for server configuration
-- WebSocket namespaces for real-time features
-
-### ⚡ Fast Development
-
-Development mode with automatic building and component registration. No manual imports needed—the CLI discovers and registers all your components automatically.
-
-### 📦 Production Builds
-
-Bundle your application with Bun's fast bundler, with full control over minification, source maps, and output options.
+<div class="card-grid">
+  <div class="info-card">
+    <span class="ic-kicker">🚀 Setup</span>
+    <div class="ic-title">Quick Project Setup</div>
+    <p class="ic-desc">Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.</p>
+  </div>
+  <div class="info-card">
+    <span class="ic-kicker">🔧 Generation</span>
+    <div class="ic-title">Code Generation</div>
+    <p class="ic-desc">Generate controllers with route handlers, services with business logic, middleware, config classes and WebSocket namespaces.</p>
+  </div>
+  <div class="info-card">
+    <span class="ic-kicker">⚡ Development</span>
+    <div class="ic-title">Fast Development</div>
+    <p class="ic-desc">One-shot build and run — the CLI discovers and registers all your components automatically. No manual imports needed.</p>
+  </div>
+  <div class="info-card">
+    <span class="ic-kicker">📦 Production</span>
+    <div class="ic-title">Production Builds</div>
+    <p class="ic-desc">Bundle with Bun's fast bundler, with full control over minification, source maps and output options.</p>
+  </div>
+</div>
 
 ## Getting Started
 
@@ -74,15 +76,9 @@ asena dev start
 - **Bun Runtime** - v1.3.12 or higher
 - **TypeScript** - v5.8.2 or higher (installed automatically)
 
-## Related Resources
+## Related
 
 - [Get Started Guide](/docs/get-started) - Complete beginner's guide
 - [Adapters Overview](/docs/adapters/overview) - Choose between Ergenecore and Hono
-- [CLI Examples](/docs/cli/examples) - See project structure examples
-
----
-
-**Next Steps:**
-- [Install the CLI](/docs/cli/installation)
-- [Learn CLI Commands](/docs/cli/commands)
-- [Try the Examples](/docs/cli/examples)
+- [Controllers](/docs/concepts/controllers) - What the generated controllers do
+- [Deployment](/docs/guides/deployment) - Running a built project in production

@@ -8,6 +8,39 @@ outline: deep
 
 Asena provides a powerful IoC (Inversion of Control) container with field-based dependency injection. This allows you to inject services, repositories, and other components into your classes automatically.
 
+<div class="card-grid">
+  <a class="info-card" href="#what-is-dependency-injection">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">What is DI</div>
+    <p class="ic-desc">Inversion of control, and what the container does for you.</p>
+  </a>
+  <a class="info-card" href="#basic-injection-with-inject">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">@Inject</div>
+    <p class="ic-desc">Field-based injection by class or by name.</p>
+  </a>
+  <a class="info-card" href="#injection-with-expressions">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Expressions</div>
+    <p class="ic-desc">Resolving a dependency through an expression.</p>
+  </a>
+  <a class="info-card" href="#strategy-pattern-with-strategy">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">@Strategy</div>
+    <p class="ic-desc">Injecting every implementation of an interface.</p>
+  </a>
+  <a class="info-card" href="#lifecycle-hooks">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Lifecycle Hooks</div>
+    <p class="ic-desc">When injected fields become safe to use.</p>
+  </a>
+  <a class="info-card" href="#service-scopes">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Service Scopes</div>
+    <p class="ic-desc">How scope changes what the container hands you.</p>
+  </a>
+</div>
+
 ## What is Dependency Injection?
 
 Dependency Injection (DI) is a design pattern where dependencies are provided to a class rather than the class creating them itself. This promotes:
@@ -913,17 +946,10 @@ export interface PaymentProvider {
 }
 ```
 
-## Related Documentation
+## Related
 
 - [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop`, shutdown ordering and signals
-- [Services](/docs/concepts/services) - Creating injectable services
+- [Services](/docs/concepts/services) - Creating injectable services and choosing a scope
 - [Controllers](/docs/concepts/controllers) - Using DI in controllers
 - [Middleware](/docs/concepts/middleware) - DI in middleware
 - [Validation](/docs/concepts/validation) - DI in validators
-
----
-
-**Next Steps:**
-- Learn about [Service Scopes](/docs/concepts/services#service-scopes)
-- Explore [Controllers](/docs/concepts/controllers)
-- Understand [Middleware](/docs/concepts/middleware)

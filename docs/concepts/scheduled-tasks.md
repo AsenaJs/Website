@@ -298,15 +298,10 @@ async execute() {
 }
 ```
 
-## Related Documentation
+## Related
 
 - [Services](/docs/concepts/services) - Business logic layer
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Component Lifecycle](/docs/concepts/lifecycle) - Cron jobs start after the hooks and stop before them
 - [Configuration](/docs/guides/configuration) - Server configuration
-
----
-
-**Next Steps:**
-- Learn about [Services](/docs/concepts/services)
-- Explore [Dependency Injection](/docs/concepts/dependency-injection)
-- Set up [Redis](/docs/packages/redis) for cache warming tasks
+- [Redis](/docs/packages/redis) - Cache warming from a scheduled task

@@ -8,6 +8,39 @@ outline: deep
 
 Asena provides built-in support for serving static files through the `@StaticServe` decorator and `StaticServeService` base class.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">A static serve middleware in a few lines.</p>
+  </a>
+  <a class="info-card" href="#configuration">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Configuration</div>
+    <p class="ic-desc">Every <code>@StaticServe</code> option explained.</p>
+  </a>
+  <a class="info-card" href="#lifecycle-hooks">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Lifecycle Hooks</div>
+    <p class="ic-desc">Three optional hooks on <code>StaticServeService</code>.</p>
+  </a>
+  <a class="info-card" href="#examples">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Examples</div>
+    <p class="ic-desc">From a basic file server to protected assets.</p>
+  </a>
+  <a class="info-card" href="#common-use-cases">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Common Use Cases</div>
+    <p class="ic-desc">Serving build output, uploads and SPA fallbacks.</p>
+  </a>
+  <a class="info-card" href="#troubleshooting">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Troubleshooting</div>
+    <p class="ic-desc">When files are not being served as expected.</p>
+  </a>
+</div>
+
 ## Quick Start
 
 ### 1. Create a Static Serve Middleware
@@ -727,10 +760,8 @@ public rewriteRequestPath(reqPath: string): string {
 }
 ```
 
----
-
 ## Related
 
-- [Controllers](/docs/concepts/controllers.md) - Setting up controllers
-- [Middleware](/docs/concepts/middleware.md) - Understanding middleware
-- [Context](/docs/concepts/context.md) - Working with request context
+- [Controllers](/docs/concepts/controllers) - Setting up controllers
+- [Middleware](/docs/concepts/middleware) - Understanding middleware
+- [Context](/docs/concepts/context) - Working with request context

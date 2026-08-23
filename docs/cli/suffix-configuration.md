@@ -231,16 +231,10 @@ asena g config Database # Config
 asena g ws Chat         # WebSocket
 ```
 
-## Related Documentation
+## Related
 
 - [CLI Configuration](/docs/cli/configuration) - Complete CLI configuration reference
 - [CLI Commands](/docs/cli/commands) - Available CLI commands
 - [Controllers](/docs/concepts/controllers) - Controller patterns
 - [Services](/docs/concepts/services) - Service patterns
 - [Middleware](/docs/concepts/middleware) - Middleware patterns
-
----
-
-**Next Steps:**
-- Explore [CLI Commands](/docs/cli/commands) to start generating components
-- Learn about [Controllers](/docs/concepts/controllers) and other components

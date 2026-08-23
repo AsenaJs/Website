@@ -196,7 +196,7 @@ expect(app.container.has('UserRepository')).toBe(true);
 
 ## Related
 
-- **[Component Lifecycle](/docs/concepts/lifecycle)** — what `start()` and `stop()` run on your behalf
-- **[createWebTest](/docs/testing/web-test)** — controller-slice testing with automatic mocks
-- **[MockComponent API](/docs/testing/mock-component)** — unit-level dependency mocking
-- **[Testing Overview](/docs/testing/overview)** — introduction to testing in Asena
+- [Component Lifecycle](/docs/concepts/lifecycle) - What `start()` and `stop()` run on your behalf
+- [createWebTest](/docs/testing/web-test) - Controller-slice testing with automatic mocks
+- [MockComponent API](/docs/testing/mock-component) - Unit-level dependency mocking
+- [Testing Overview](/docs/testing/overview) - Introduction to testing in Asena

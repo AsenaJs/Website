@@ -8,6 +8,39 @@ outline: deep
 
 Redis integration for AsenaJS — service client with built-in multi-pod WebSocket transport. Your `@Redis` decorated service gives you full Redis operations with automatic IoC registration. For multi-pod deployments, `RedisTransport` synchronizes WebSocket messages across instances via Redis pub/sub.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">The <code>@Redis</code> service, connected and injected.</p>
+  </a>
+  <a class="info-card" href="#adapter-selection">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Adapter Selection</div>
+    <p class="ic-desc">Bun native <code>RedisClient</code> or the node-redis package.</p>
+  </a>
+  <a class="info-card" href="#api-reference">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">API Reference</div>
+    <p class="ic-desc">String, hash, set, key and raw command support.</p>
+  </a>
+  <a class="info-card" href="#configuration">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Configuration</div>
+    <p class="ic-desc">Connection options and lifecycle settings.</p>
+  </a>
+  <a class="info-card" href="#multi-pod-websocket-transport">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Multi-Pod WebSocket</div>
+    <p class="ic-desc">Synchronizing socket messages across pods via pub/sub.</p>
+  </a>
+  <a class="info-card" href="#microservice-transport-redis-streams">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Microservice Transport</div>
+    <p class="ic-desc">Service-to-service messaging over Redis Streams.</p>
+  </a>
+</div>
+
 ## Features
 
 - **Decorator-Based Setup** - `@Redis` decorator handles IoC registration and connection lifecycle
@@ -430,17 +463,11 @@ async health(context: Context) {
 It `PING`s the cache client and says nothing about whether this instance's **reply channel** is being served, which is what decides whether a `send()` can complete. For an instance running `RedisMicroserviceTransport`, the readiness signal is the transport's `isConnected` (already wired into Asena's health endpoint) — see [Delivery Guarantees](#delivery-guarantees).
 :::
 
-## Related Documentation
+## Related
 
 - [WebSocket](/docs/concepts/websocket) - WebSocket implementation guide
 - [Microservices](/docs/concepts/microservices) - Microservice messaging concepts and delivery semantics
 - [Configuration](/docs/guides/configuration) - Server configuration with `transport()`
 - [Services](/docs/concepts/services) - Service layer architecture
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
-
----
-
-**Next Steps:**
-- Set up [WebSocket](/docs/concepts/websocket) real-time communication
-- Configure [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket) for scaling
-- Learn about [Services](/docs/concepts/services)
+- [Kafka](/docs/packages/kafka) - The same transport SPI on a different broker

@@ -8,6 +8,39 @@ outline: deep
 
 **Ulak** (Turkish: Messenger/Courier) is Asena's centralized WebSocket message broker that solves the circular dependency problem between services and WebSocket handlers. It provides a unified API for sending messages to WebSocket clients from anywhere in your application.
 
+<div class="card-grid">
+  <a class="info-card" href="#the-problem">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">The Problem</div>
+    <p class="ic-desc">Why reaching sockets from a service gets circular.</p>
+  </a>
+  <a class="info-card" href="#getting-started">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Getting Started</div>
+    <p class="ic-desc">Injecting Ulak and sending your first message.</p>
+  </a>
+  <a class="info-card" href="#three-ways-to-use-ulak">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Three Ways to Use It</div>
+    <p class="ic-desc">The options for reaching a socket, room or namespace.</p>
+  </a>
+  <a class="info-card" href="#api-reference">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">API Reference</div>
+    <p class="ic-desc">Every method Ulak exposes.</p>
+  </a>
+  <a class="info-card" href="#testing">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Testing</div>
+    <p class="ic-desc">Stubbing Ulak in unit tests.</p>
+  </a>
+  <a class="info-card" href="#migration-guide">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Migration Guide</div>
+    <p class="ic-desc">Moving off direct WebSocket service injection.</p>
+  </a>
+</div>
+
 ::: tip Ulak Also Speaks Microservice
 Beyond WebSockets, Ulak is the client API for Asena's [microservice layer](/docs/concepts/microservices): `ulak.send()`/`ulak.emit()` reach other services through the configured transport, and `@Inject(ulak.messages('order'))` injects a pattern-scoped messaging view. The WebSocket API on this page is unchanged.
 :::
@@ -810,10 +843,10 @@ interface BulkResult {
 }
 ```
 
-## See Also
+## Related
 
-- [WebSocket](/docs/concepts/websocket.md) - Basic WebSocket usage
-- [Microservices](/docs/concepts/microservices.md) - Ulak's send/emit API for service-to-service messaging
-- [Dependency Injection](/docs/concepts/dependency-injection.md) - Understanding DI in Asena
-- [Services](/docs/concepts/services.md) - Creating services
-- [MockComponent](/docs/testing/mock-component.md) - Testing services with Ulak injections
+- [WebSocket](/docs/concepts/websocket) - Basic WebSocket usage
+- [Microservices](/docs/concepts/microservices) - Ulak's send/emit API for service-to-service messaging
+- [Dependency Injection](/docs/concepts/dependency-injection) - Understanding DI in Asena
+- [Services](/docs/concepts/services) - Creating services
+- [MockComponent](/docs/testing/mock-component) - Testing services with Ulak injections

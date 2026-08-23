@@ -8,6 +8,54 @@ outline: deep
 
 Practical examples showing how to build real applications with Asena. Each example demonstrates core concepts with working code.
 
+<div class="card-grid">
+  <a class="info-card" href="#complete-rest-api">
+    <span class="ic-kicker">Full Stack</span>
+    <div class="ic-title">Complete REST API</div>
+    <p class="ic-desc">Controllers, services, validation and database in one app.</p>
+  </a>
+  <a class="info-card" href="#websocket-chat-application">
+    <span class="ic-kicker">Real-time</span>
+    <div class="ic-title">WebSocket Chat</div>
+    <p class="ic-desc">Rooms, publishing and broadcasting.</p>
+  </a>
+  <a class="info-card" href="#authentication-with-middleware">
+    <span class="ic-kicker">Auth</span>
+    <div class="ic-title">JWT Authentication</div>
+    <p class="ic-desc">Token login and protected routes via middleware.</p>
+  </a>
+  <a class="info-card" href="#rate-limiting">
+    <span class="ic-kicker">Protection</span>
+    <div class="ic-title">Rate Limiting</div>
+    <p class="ic-desc">Token-bucket limits per user or IP.</p>
+  </a>
+  <a class="info-card" href="#cors-configuration">
+    <span class="ic-kicker">Cross-Origin</span>
+    <div class="ic-title">CORS Configuration</div>
+    <p class="ic-desc">Global CORS middleware setup.</p>
+  </a>
+  <a class="info-card" href="#openapi-auto-documentation">
+    <span class="ic-kicker">API Docs</span>
+    <div class="ic-title">OpenAPI</div>
+    <p class="ic-desc">Specs generated from existing validators.</p>
+  </a>
+  <a class="info-card" href="#redis-caching">
+    <span class="ic-kicker">Caching</span>
+    <div class="ic-title">Redis Caching</div>
+    <p class="ic-desc">Decorator-based cache with get-or-set.</p>
+  </a>
+  <a class="info-card" href="#scheduled-tasks">
+    <span class="ic-kicker">Background Jobs</span>
+    <div class="ic-title">Scheduled Tasks</div>
+    <p class="ic-desc">Cron jobs on Bun's native scheduler.</p>
+  </a>
+  <a class="info-card" href="#frontend-controller">
+    <span class="ic-kicker">HTML Pages</span>
+    <div class="ic-title">Frontend Controller</div>
+    <p class="ic-desc">Serve pages with native HTML imports.</p>
+  </a>
+</div>
+
 ## Complete REST API
 
 A full-featured REST API with controllers, services, validation, and database integration.
@@ -837,9 +885,7 @@ FrontendController routes bypass the middleware chain entirely (no CORS, auth, e
 For full documentation, see [Frontend Controller](/docs/concepts/frontend-controller).
 :::
 
----
-
-## Related Documentation
+## Related
 
 - [Controllers](/docs/concepts/controllers) - HTTP routing
 - [Services](/docs/concepts/services) - Business logic
@@ -853,7 +899,4 @@ For full documentation, see [Frontend Controller](/docs/concepts/frontend-contro
 - [Redis Package](/docs/packages/redis) - Redis integration
 - [Drizzle Package](/docs/packages/drizzle) - Database integration
 - [Logger Package](/docs/packages/logger) - Logging
-
----
-
-**Need more examples?** Check out the [AsenaExample repository](https://github.com/LibirSoft/AsenaExample) for additional use cases.
+- [AsenaExample repository](https://github.com/LibirSoft/AsenaExample) - Additional use cases

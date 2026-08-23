@@ -8,6 +8,39 @@ outline: deep
 
 Asena provides built-in WebSocket support with namespace management, allowing you to create real-time, bidirectional communication between clients and your server.
 
+<div class="card-grid">
+  <a class="info-card" href="#creating-a-websocket-service">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Creating a Service</div>
+    <p class="ic-desc">The <code>@WebSocket</code> decorator and its namespace.</p>
+  </a>
+  <a class="info-card" href="#websocket-lifecycle-methods">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Lifecycle Methods</div>
+    <p class="ic-desc">Open, message, close and drain callbacks.</p>
+  </a>
+  <a class="info-card" href="#socket-api">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Socket API</div>
+    <p class="ic-desc">Everything a connected socket can do.</p>
+  </a>
+  <a class="info-card" href="#built-in-room-management">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Rooms</div>
+    <p class="ic-desc">Built-in room membership and broadcasting.</p>
+  </a>
+  <a class="info-card" href="#websocket-middleware">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Middleware</div>
+    <p class="ic-desc">Guarding and enriching the upgrade handshake.</p>
+  </a>
+  <a class="info-card" href="#multi-pod-websocket">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Multi-Pod</div>
+    <p class="ic-desc">Broadcasting across more than one server instance.</p>
+  </a>
+</div>
+
 ## Creating a WebSocket Service
 
 Create a WebSocket service by extending `AsenaWebSocketService` and decorating it with `@WebSocket`:
@@ -941,17 +974,11 @@ Use **Ulak** when you need to:
 
 For complete documentation, see [Ulak - WebSocket Messaging System](/docs/concepts/ulak).
 
-## Related Documentation
+## Related
 
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies
-- [Ergenecore Adapter](/docs/adapters/ergenecore)
-- [Hono Adapter](/docs/adapters/hono)
-- [Services](/docs/concepts/services)
-- [Dependency Injection](/docs/concepts/dependency-injection)
-
----
-
-**Next Steps:**
-- Build a real-time application
-- Explore [Services](/docs/concepts/services)
-- Learn about [Middleware](/docs/concepts/middleware)
+- [Services](/docs/concepts/services) - Reaching sockets from your business logic
+- [Middleware](/docs/concepts/middleware) - Guarding the upgrade handshake
+- [Dependency Injection](/docs/concepts/dependency-injection) - Wiring WebSocket services
+- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
+- [Hono Adapter](/docs/adapters/hono) - Hono-specific features

@@ -278,16 +278,9 @@ export class PublicPages {
 For single-page applications, handle authentication on the client side. The SPA can call your authenticated API endpoints (`@Controller` with auth middleware) while the initial HTML page is served without middleware.
 :::
 
-## Related Documentation
+## Related
 
-- [Controllers](/docs/concepts/controllers) - HTTP route handling
+- [Controllers](/docs/concepts/controllers) - HTTP route handling for your API routes
 - [Static File Serving](/docs/concepts/static-files) - Serving static assets
-- [Middleware](/docs/concepts/middleware) - Middleware system
+- [Middleware](/docs/concepts/middleware) - Protecting page routes
 - [Configuration](/docs/guides/configuration) - Server configuration
-
----
-
-**Next Steps:**
-- Learn about [Controllers](/docs/concepts/controllers) for API routes
-- Explore [Static File Serving](/docs/concepts/static-files)
-- Set up [Middleware](/docs/concepts/middleware) for protected routes

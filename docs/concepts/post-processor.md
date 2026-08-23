@@ -14,7 +14,7 @@ PostProcessor is Asena's component interception system. It lets you hook into th
 - **Instance Transformation** — Wrap instances with Proxies for tracing, logging, or monitoring
 - **AOP Patterns** — Add cross-cutting concerns without modifying individual components
 
-::: tip
+::: tip Use @OnStart for a single component
 If you just need initialization logic for a single component, use [`@OnStart`](/docs/concepts/lifecycle) instead. PostProcessor is for cross-cutting concerns that apply to **multiple** components.
 :::
 
@@ -234,7 +234,7 @@ PostProcessors are registered in a special **Phase A** during bootstrap, before 
 
 This guarantees that PostProcessors are ready before any user component is created.
 
-::: warning
+::: warning PostProcessor dependencies are not post-processed
 Dependencies of PostProcessors (services injected via `@Inject`) are also created in Phase A and are **not** post-processed. Keep PostProcessor dependencies minimal.
 :::
 
@@ -338,17 +338,10 @@ export class HeavyProcessor implements ComponentPostProcessor {
 }
 ```
 
-## Related Documentation
+## Related
 
 - [Services](/docs/concepts/services) - Service layer architecture
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
 - [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStart` / `@OnStop` and why PostProcessors start earlier
 - [OpenAPI](/docs/packages/openapi) - PostProcessor in action
 - [Configuration](/docs/guides/configuration) - Server configuration
-
----
-
-**Next Steps:**
-- See PostProcessor in action with [OpenAPI](/docs/packages/openapi)
-- Learn about [Dependency Injection](/docs/concepts/dependency-injection)
-- Explore [Services](/docs/concepts/services)

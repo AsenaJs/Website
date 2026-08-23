@@ -8,6 +8,39 @@ outline: deep
 
 Asena provides a flexible multi-level middleware system that allows you to handle cross-cutting concerns like authentication, logging, rate limiting, and more. Middleware can be applied globally, at the controller level, or on individual routes.
 
+<div class="card-grid">
+  <a class="info-card" href="#what-is-middleware">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">What is Middleware</div>
+    <p class="ic-desc">Where middleware sits in the request pipeline.</p>
+  </a>
+  <a class="info-card" href="#creating-middleware">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Creating Middleware</div>
+    <p class="ic-desc">The <code>@Middleware</code> decorator and the handle method.</p>
+  </a>
+  <a class="info-card" href="#middleware-levels">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Middleware Levels</div>
+    <p class="ic-desc">Global, controller and route-level registration.</p>
+  </a>
+  <a class="info-card" href="#common-middleware-patterns">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Common Patterns</div>
+    <p class="ic-desc">Auth, logging, CORS and rate limiting.</p>
+  </a>
+  <a class="info-card" href="#middleware-with-dependency-injection">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Middleware with DI</div>
+    <p class="ic-desc">Injecting services into a middleware class.</p>
+  </a>
+  <a class="info-card" href="#middleware-execution-order">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Execution Order</div>
+    <p class="ic-desc">The order the levels run in, and how to stop the chain.</p>
+  </a>
+</div>
+
 ## What is Middleware?
 
 Middleware is code that executes **before** your route handler. It can:
@@ -56,7 +89,7 @@ export class LoggerMiddleware extends MiddlewareService {
 }
 ```
 
-::: tip
+::: tip Always call await next()
 Always call `await next()` to pass control to the next middleware or route handler!
 :::
 
@@ -681,17 +714,10 @@ public globalMiddlewares() {
 }
 ```
 
-## Related Documentation
+## Related
 
-- [Controllers](/docs/concepts/controllers)
-- [Ergenecore Adapter](/docs/adapters/ergenecore)
-- [Validation](/docs/concepts/validation)
-- [Configuration](/docs/guides/configuration)
-
----
-
-**Next Steps:**
-
-- Learn about [Validation](/docs/concepts/validation)
-- Explore [Context API](/docs/concepts/context)
-- Understand [Configuration](/docs/guides/configuration)
+- [Controllers](/docs/concepts/controllers) - Attaching middleware to routes
+- [Validation](/docs/concepts/validation) - Request validation with Zod
+- [Context API](/docs/concepts/context) - Working with Context inside middleware
+- [Configuration](/docs/guides/configuration) - Registering global middleware
+- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features

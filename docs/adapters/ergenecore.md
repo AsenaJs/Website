@@ -25,15 +25,14 @@ Ergenecore is a high-performance adapter that:
 
 Ergenecore is the **fastest** Asena adapter:
 
-| Adapter              | Requests/sec | Latency (avg) |
-|:---------------------|:-------------|:--------------|
-| **Ergenecore**       | **294,962**  | **1.34ms**    |
-| Hono (standalone)    | 266,476      | 1.49ms        |
-| Hono adapter         | 233,182      | 1.70ms        |
-| NestJS (Bun)         | 100,975      | 3.92ms        |
+| Adapter            | Runtime | Plaintext   | JSON serialization |
+|:-------------------|:--------|------------:|-------------------:|
+| **Ergenecore**     | Bun     | **202,066** | **195,494**        |
+| Hono adapter       | Bun     | 190,030     | 178,857            |
+| NestJS · Express   | Bun     | 131,281     | 119,195            |
 
-::: tip Benchmark Details
-12 threads, 400 connections, 120s duration
+::: tip
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
@@ -678,7 +677,7 @@ const adapter = createErgenecoreAdapter({
 });
 ```
 
-## Related Documentation
+## Related
 
 - [Adapters Overview](/docs/adapters/overview) - Compare Ergenecore vs Hono
 - [Hono Adapter](/docs/adapters/hono) - Alternative adapter
@@ -687,10 +686,3 @@ const adapter = createErgenecoreAdapter({
 - [Validation](/docs/concepts/validation) - Request validation with Zod
 - [WebSocket](/docs/concepts/websocket) - WebSocket support
 - [Configuration](/docs/guides/configuration) - Server configuration
-
----
-
-**Next Steps:**
-- Learn about [Context API](/docs/concepts/context)
-- Explore [Middleware patterns](/docs/concepts/middleware)
-- Understand [Validation strategies](/docs/concepts/validation)
