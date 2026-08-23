@@ -35,7 +35,7 @@ export default defineConfig({
 
     head: [
         ['link', { rel: 'icon', type: 'image/png', href: '/asena-logo-256.png' }],
-        ['meta', { name: 'theme-color', content: '#646cff' }],
+        ['meta', { name: 'theme-color', content: '#0dc6c4' }],
         ['meta', { name: 'og:type', content: 'website' }],
         ['meta', { name: 'og:locale', content: 'en' }],
         ['meta', { name: 'og:site_name', content: 'Asena Framework' }],

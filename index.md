@@ -1,41 +1,349 @@
 ---
 layout: home
-
-hero:
-  name: "Asena"
-  text: "A modern ioc web-framework for bun"
-  tagline: Fast, easy and Spring-like
-  image:
-    src: /asena-logo.svg
-    alt: Asena
-  actions:
-    - theme: brand
-      text: Get started
-      link: /docs/get-started
-    - theme: alt
-      text: View on GitHub
-      link: https://github.com/AsenaJs/Asena
-
-features:
-  - title: ⚡ High Performance
-    details: Built on Bun runtime with up to 295k req/sec. SIMD-accelerated routing and zero-copy file serving for maximum speed.
-
-  - title: 🎯 Full IoC Container
-    details: Field-based dependency injection for all components. Clean architecture with decorators for services, controllers, and middleware.
-
-  - title: 🔌 Pluggable Adapters
-    details: Choose between Ergenecore (native Bun) or Hono adapter. Switch adapters without changing your business logic.
-
-  - title: 🌐 WebSocket Support
-    details: Built-in WebSocket handling with namespace management. Create real-time applications with ease.
-
-  - title: 🛡️ Type-Safe Validation
-    details: Integrated Zod validation with automatic error handling. Request validation at route, controller, or global level.
-
-  - title: 📦 Official Packages
-    details: Logger, Drizzle ORM integration, and CLI tools. Everything you need to build production-ready applications.
-
+title: Asena
 ---
+
+<div class="lp">
+
+<section class="lp-hero lp-bleed">
+
+<img class="lp-hero-logo" src="/asena-logo.svg" alt="Asena" />
+
+<h1 class="lp-hero-title">Asena</h1>
+
+<p class="lp-hero-text">The IoC web framework for Bun</p>
+
+<p class="lp-hero-tagline">Spring-style component discovery and field injection, in TypeScript — running at native Bun speed. Controllers, services, validation, OpenAPI, tracing and microservices all come out of one container.</p>
+
+<CopyCmd cmd="bun install -g @asenajs/asena-cli && asena create my-app" />
+
+<div class="lp-hero-actions">
+<a class="lp-btn-brand" href="/docs/get-started">Get Started</a>
+<a class="lp-btn-alt" href="https://github.com/AsenaJs/Asena" target="_blank" rel="noopener">View on GitHub</a>
+</div>
+
+<a class="lp-hero-hint" href="#dx" aria-label="Scroll down">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</a>
+
+</section>
+
+<section class="lp-section" id="dx">
+
+<div class="lp-wrap">
+
+<div class="lp-cols" data-reveal>
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">Design for humans</span>
+<h2 class="lp-h2">Declare the component. Ask for the dependency.</h2>
+<p class="lp-lead">No modules to wire, no providers array to keep in sync, no factory boilerplate. Decorate a class and Asena's container finds it at boot, builds it once, and hands it to whoever declared it.</p>
+<ul class="lp-bullets">
+<li><b>IoC container</b> — components are discovered by scanning, never registered by hand.</li>
+<li><b>Field injection</b> — <code>@Inject</code> sits on the field; constructors stay yours.</li>
+<li><b>Pluggable adapters</b> — Ergenecore or Hono behind the same business code.</li>
+<li><b>Type-safe validation</b> — Zod schemas at route, controller or global level.</li>
+</ul>
+<a class="lp-more" href="/docs/concepts/dependency-injection">How injection works →</a>
+</div>
+
+<div class="lp-code">
+
+::: code-group
+
+```typescript [Ergenecore]
+import { Controller, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Service()
+export class UserService {
+  findAll() {
+    return [{ id: 1, name: 'Ada' }];
+  }
+}
+
+@Controller('/users')
+export class UserController {
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Get('/')
+  async list(context: Context) {
+    return context.send({ users: this.userService.findAll() });
+  }
+}
+```
+
+```typescript [Hono]
+import { Controller, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/hono-adapter';
+
+@Service()
+export class UserService {
+  findAll() {
+    return [{ id: 1, name: 'Ada' }];
+  }
+}
+
+@Controller('/users')
+export class UserController {
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Get('/')
+  async list(context: Context) {
+    return context.send({ users: this.userService.findAll() });
+  }
+}
+```
+
+:::
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<section class="lp-bench lp-bleed lp-section">
+
+<div class="lp-wrap">
+
+<div class="lp-bench-grid" data-reveal>
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">Benchmarks</span>
+<div class="lp-bench-num">2.49<span>×</span></div>
+<h2 class="lp-h2">Faster than NestJS, with nothing tuned</h2>
+<p class="lp-lead">Byte-for-byte identical workloads on the same machine, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
+<a class="lp-more" href="/docs/benchmarks">Full methodology →</a>
+</div>
+
+<div class="lp-bars">
+
+<div class="lp-bar-row">
+<div class="lp-bar-head"><b>Plaintext</b><span>2.49× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:100%"></span></div><span class="lp-bar-val"><b>202,066</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:40.1%"></span></div><span class="lp-bar-val"><b>80,988</b> NestJS</span></div>
+</div>
+
+<div class="lp-bar-row">
+<div class="lp-bar-head"><b>Request validation</b><span>3.76× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:66.7%"></span></div><span class="lp-bar-val"><b>134,793</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:17.8%"></span></div><span class="lp-bar-val"><b>35,873</b> NestJS</span></div>
+</div>
+
+<div class="lp-bar-row">
+<div class="lp-bar-head"><b>Database · read by id</b><span>2.80× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:38.6%"></span></div><span class="lp-bar-val"><b>78,023</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:13.8%"></span></div><span class="lp-bar-val"><b>27,883</b> NestJS</span></div>
+</div>
+
+<div class="lp-bar-row">
+<div class="lp-bar-head"><b>Full API endpoint</b><span>2.24× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:58.9%"></span></div><span class="lp-bar-val"><b>119,095</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:26.3%"></span></div><span class="lp-bar-val"><b>53,236</b> NestJS</span></div>
+</div>
+
+</div>
+
+</div>
+
+<p class="lp-bench-foot">Requests per second, higher is better. Numbers for NestJS on Fastify, NestJS on Bun and every other scenario are published alongside the harness.</p>
+
+</div>
+
+</section>
+
+<section class="lp-section">
+
+<div class="lp-wrap">
+
+<div class="lp-rail">
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">OpenAPI</span>
+<h2 class="lp-h2">A spec you never write</h2>
+<p class="lp-lead">Extend one class and Asena walks the container at boot — every controller, route, Zod schema and status code lands in an OpenAPI 3.1 document. Swagger UI is served from the same config.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/packages/openapi">asena-openapi</a><span class="lp-pill">OpenAPI 3.1</span><span class="lp-pill">Swagger UI</span></div>
+</div>
+
+<div class="lp-code">
+
+```typescript
+@OpenApi({
+  info: { title: 'My API', version: '1.0.0' },
+  path: '/api/openapi',
+  ui: true, // Swagger UI at /api/openapi/ui
+})
+export class AppOpenApi extends OpenApiPostProcessor {}
+```
+
+</div>
+
+</div>
+</div>
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">OpenTelemetry</span>
+<h2 class="lp-h2">Every request, already traced</h2>
+<p class="lp-lead">One decorated class boots the SDK. From there each request produces a full waterfall — server span, controller span, service span — with W3C context propagated in and out, plus request counters and duration histograms per route.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/packages/opentelemetry">asena-otel</a><span class="lp-pill">OTLP</span><span class="lp-pill">Auto-trace</span></div>
+</div>
+
+<div class="lp-stack">
+
+<div class="lp-trace">
+<div class="lp-trace-row"><span class="lp-trace-name">GET /api/users</span><span class="lp-trace-kind">SERVER</span><span class="lp-trace-track"><span class="lp-trace-span" style="--s:0%;--w:100%"></span></span><span class="lp-trace-ms">18.4ms</span></div>
+<div class="lp-trace-row is-d1"><span class="lp-trace-name">UserController.list</span><span class="lp-trace-kind">INTERNAL</span><span class="lp-trace-track"><span class="lp-trace-span" style="--s:9%;--w:84%"></span></span><span class="lp-trace-ms">15.5ms</span></div>
+<div class="lp-trace-row is-d2"><span class="lp-trace-name">UserService.getAll</span><span class="lp-trace-kind">INTERNAL</span><span class="lp-trace-track"><span class="lp-trace-span" style="--s:19%;--w:66%"></span></span><span class="lp-trace-ms">12.1ms</span></div>
+</div>
+
+<div class="lp-code">
+
+```typescript
+@Otel({
+  serviceName: 'my-app',
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+  autoTrace: { services: true, controllers: true },
+})
+export class AppOtel extends OtelTracingPostProcessor {}
+```
+
+</div>
+
+</div>
+
+</div>
+</div>
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">Microservices</span>
+<h2 class="lp-h2">Same decorators, different transport</h2>
+<p class="lp-lead">Swap HTTP for a broker without changing how you write code. Request/response and fire-and-forget events sit on the same controller, with retry, DLQ, graceful drain and trace propagation handled by the transport.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/packages/redis">Redis Streams</a><a class="lp-pill" href="/docs/packages/kafka">Kafka</a><span class="lp-pill">Headless mode</span></div>
+<a class="lp-more" href="/docs/concepts/microservices">Read the messaging guide →</a>
+</div>
+
+<div class="lp-code">
+
+```typescript
+@MessageController('order') // prefixes every handler below
+export class OrderHandler {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  @MessagePattern('create') // handles 'order.create'
+  async create(data: CreateOrderDto) {
+    return this.orderService.create(data);
+  }
+
+  @EventPattern('created') // handles 'order.created'
+  async onCreated(event: OrderEvent) {
+    await this.orderService.index(event);
+  }
+}
+```
+
+</div>
+
+</div>
+</div>
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">PostProcessor</span>
+<h2 class="lp-h2">The extension point the framework uses on itself</h2>
+<p class="lp-lead">Spring's BeanPostProcessor, in TypeScript. Every component passes through your hook on its way out of the container, so cross-cutting concerns land in one place instead of every class. OpenAPI and OpenTelemetry are built on this exact API — nothing is reserved for the framework.</p>
+<a class="lp-more" href="/docs/concepts/post-processor">See what you can hook →</a>
+</div>
+
+<div class="lp-code">
+
+```typescript
+@PostProcessor()
+export class TimingPostProcessor
+  implements ComponentPostProcessor
+{
+
+  postProcess<T>(instance: T, Class: any): T {
+    return withTimers(instance, Class.name);
+  }
+
+}
+```
+
+</div>
+
+</div>
+</div>
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">Testing</span>
+<h2 class="lp-h2">Boot the web layer, mock the rest</h2>
+<p class="lp-lead">The equivalent of Spring's @WebMvcTest. Controllers, middlewares and validators run for real; every other dependency is auto-mocked into a stub shaped like the real class. No database, no Redis, no HTTP client — just the routing and validation you meant to test.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/testing/web-test">createWebTest</a><span class="lp-pill">createTestApp</span><span class="lp-pill">mockComponent</span></div>
+</div>
+
+<div class="lp-code">
+
+```typescript
+import { createWebTest, silentLogger } from '@asenajs/asena/test';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+
+test('returns a user', async () => {
+  const adapter = createErgenecoreAdapter({ logger: silentLogger });
+
+  const { app, mocks } = await createWebTest({
+    adapter,
+    controllers: [UserController],
+  });
+
+  mocks.UserService.findById.mockResolvedValue({ id: '1' });
+
+  await app
+    .get('/users/1')
+    .expectStatus(200)
+    .expectJson({ id: '1' });
+
+  await app.stop();
+});
+```
+
+</div>
+
+</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<section class="lp-section lp-section-tight" data-reveal>
 
 <div class="showcase-section">
   <h2 class="showcase-title">Built with Asena</h2>
@@ -45,117 +353,22 @@ features:
   <a href="/docs/showcase" class="view-all">View All Projects →</a>
 </div>
 
-<style>
-.showcase-section {
-  max-width: 1152px;
-  margin: 3rem auto 4rem;
-  padding: 0 1.5rem;
-  text-align: center;
-}
+</section>
 
-.showcase-title {
-  font-size: 1.75rem;
-  font-weight: 600;
-  margin-bottom: 1.5rem;
-  color: var(--vp-c-text-1);
-}
+<section class="lp-cta lp-bleed">
 
-.showcase-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
+<div class="lp-cta-inner">
+<h2 class="lp-h2">Start in one command</h2>
+<p class="lp-lead">The CLI scaffolds the project, the adapter, the logger and the lint setup. You write the first controller.</p>
 
-.showcase-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1.5rem;
-  background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  text-decoration: none;
-  transition: all 0.2s ease;
-}
+<CopyCmd cmd="bun install -g @asenajs/asena-cli && asena create my-app" />
 
-.showcase-card:hover {
-  border-color: var(--vp-c-brand-1);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.1);
-}
+<div class="lp-hero-actions">
+<a class="lp-btn-brand" href="/docs/get-started">Get Started</a>
+<a class="lp-btn-alt" href="/docs/examples">Browse Examples</a>
+</div>
+</div>
 
-.card-logo {
-  margin-bottom: 1rem;
-}
+</section>
 
-.crypto-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-weight: 600;
-  font-size: 1.375rem;
-}
-
-.ctext {
-  color: var(--vp-c-text-1);
-}
-
-.ctext-grad {
-  background: linear-gradient(135deg, #4dabf7, #339af0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.card-desc {
-  font-size: 0.875rem;
-  color: var(--vp-c-text-2);
-  margin: 0 0 1rem 0;
-  line-height: 1.5;
-}
-
-.card-tags {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.ctag {
-  padding: 0.25rem 0.625rem;
-  background: var(--vp-c-brand-soft);
-  color: var(--vp-c-brand-1);
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.view-all {
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: color 0.2s ease;
-}
-
-.view-all:hover {
-  color: var(--vp-c-brand-2);
-}
-
-@media (max-width: 768px) {
-  .showcase-section {
-    margin: 2rem auto 3rem;
-  }
-  .showcase-title {
-    font-size: 1.5rem;
-  }
-  .showcase-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+</div>
