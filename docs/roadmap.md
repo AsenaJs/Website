@@ -14,7 +14,7 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## ✅ Current Release (v0.10.x)
+## Current Release <span class="pill pill-live">v0.10.x · Stable</span>
 
 These features are **stable and production-ready** in the current release:
 
@@ -94,7 +94,7 @@ Adapters and official packages version independently of the core framework. `@as
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 
-## 📋 Planned for v1.0
+## Planned for v1.0 <span class="pill pill-teal">Planned</span>
 
 These features are **planned for the v1.0 release** and will make Asena enterprise-ready:
 
@@ -115,7 +115,7 @@ A powerful plugin architecture allowing third-party extensions.
 
 ---
 
-## 💡 Future Ideas (CLI)
+## Future Ideas · CLI <span class="pill pill-planned">Under discussion</span>
 
 These features are **under consideration** for future CLI releases:
 

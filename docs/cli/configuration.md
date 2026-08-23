@@ -163,7 +163,7 @@ export default defineConfig({
 
 After build, `public/` is copied to `dist/public/`, and HTML import paths are automatically rewritten to resolve correctly.
 
-::: tip
+::: tip Directories are copied recursively
 You can include both files and directories. Directories are copied recursively.
 ```typescript
 include: [
@@ -249,7 +249,7 @@ export default defineConfig({
 });
 ```
 
-::: tip
+::: tip Prefer ESM
 Asena works best with ESM format since Bun has native ESM support. CJS is supported but not recommended unless you have specific compatibility requirements.
 :::
 
@@ -524,7 +524,7 @@ export default defineConfig({
 
 Asena uses Bun's bundler under the hood and exposes only the options relevant for backend framework builds.
 
-::: info
+::: info Entrypoints and target are managed by the CLI
 The `entrypoints` and `target` are managed internally by Asena CLI. All exposed options are **optional** (wrapped in `Partial<>`).
 :::
 
@@ -656,17 +656,10 @@ Configure how component names are suffixed when using `asena generate` commands.
 
 For complete suffix configuration options and examples, see [Suffix Configuration](/docs/cli/suffix-configuration).
 
-## Related Documentation
+## Related
 
 - [CLI Commands](/docs/cli/commands) - Available CLI commands
 - [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See project structure examples
 - [Deployment](/docs/guides/deployment) - Production deployment
 - [Bun Bundler](https://bun.com/docs/bundler) - Complete bundler reference
-
----
-
-**Next Steps:**
-- Explore [CLI Commands](/docs/cli/commands)
-- Learn about [Deployment](/docs/guides/deployment)
-- See [CLI Examples](/docs/cli/examples) for project structure

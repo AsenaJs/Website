@@ -26,14 +26,15 @@ Hono Adapter brings together the best of both worlds:
 
 Hono Adapter delivers excellent performance powered by Bun and Hono:
 
-| Adapter              | Requests/sec | Latency (avg) |
-|:---------------------|:-------------|:--------------|
-| Ergenecore           | 294,962      | 1.34ms        |
-| **Hono Adapter**     | **233,182**  | **1.70ms**    |
-| Hono (standalone)    | 266,476      | 1.49ms        |
+| Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
+|:-------------------|:--------|------------:|-------------------:|------------------:|
+| Ergenecore         | Bun     | 202,066     | 195,494            | 119,095           |
+| **Hono adapter**   | Bun     | **190,030** | **178,857**        | **126,251**       |
 
-::: tip Benchmark Details
-12 threads, 400 connections, 120s duration
+The Hono adapter pulls ahead on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
+
+::: tip
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
@@ -46,7 +47,7 @@ Hono Adapter delivers excellent performance powered by Bun and Hono:
 - ✅ You value ecosystem compatibility over raw performance
 
 **Choose Ergenecore when:**
-- ✅ You need maximum performance (~26% faster)
+- ✅ You need maximum raw throughput
 - ✅ You want zero external dependencies
 - ✅ You're building a greenfield Bun-exclusive project
 
@@ -889,7 +890,7 @@ export class MyHonoMiddleware extends AsenaMiddlewareService {
 }
 ```
 
-## Related Documentation
+## Related
 
 - [Adapters Overview](/docs/adapters/overview) - Compare Hono vs Ergenecore
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Alternative adapter
@@ -898,10 +899,3 @@ export class MyHonoMiddleware extends AsenaMiddlewareService {
 - [Validation](/docs/concepts/validation) - Request validation with Zod
 - [Testing Guide](/docs/guides/testing) - Testing strategies
 - [Hono Documentation](https://hono.dev/) - Official Hono docs
-
----
-
-**Next Steps:**
-- Learn about [Context API](/docs/concepts/context)
-- Explore [Middleware patterns](/docs/concepts/middleware)
-- Understand [@Override decorator](/docs/adapters/hono#override-decorator)

@@ -43,6 +43,39 @@ metadata. Nothing needs to change beyond the import. What *did* change is **when
 runs; see [Upgrading from 0.9.x](#upgrading-from-0-9-x).
 :::
 
+<div class="card-grid">
+  <a class="info-card" href="#onstart">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">@OnStart</div>
+    <p class="ic-desc">Runs once the whole component graph exists.</p>
+  </a>
+  <a class="info-card" href="#onstop">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">@OnStop</div>
+    <p class="ic-desc">The counterpart, run during <code>server.stop()</code>.</p>
+  </a>
+  <a class="info-card" href="#ordering-rules">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Ordering Rules</div>
+    <p class="ic-desc">Start walks registration order; stop walks it backwards.</p>
+  </a>
+  <a class="info-card" href="#failure-policy">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Failure Policy</div>
+    <p class="ic-desc">The two halves fail differently on purpose.</p>
+  </a>
+  <a class="info-card" href="#signal-handling">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Signal Handling</div>
+    <p class="ic-desc">On by default, installed by <code>start()</code>.</p>
+  </a>
+  <a class="info-card" href="#health-probes">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Health Probes</div>
+    <p class="ic-desc">A zero-dependency endpoint under <code>/healthz</code>.</p>
+  </a>
+</div>
+
 ## `@OnStart`
 
 The hook runs once the whole component graph exists, and before the framework starts consuming

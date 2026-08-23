@@ -22,36 +22,38 @@ An adapter is a bridge between Asena's core framework and the underlying HTTP se
 
 Asena currently provides two official adapters:
 
-### Ergenecore (Native Bun)
+<div class="card-grid">
+  <a class="info-card" href="/docs/adapters/ergenecore">
+    <span class="ic-kicker">Native Bun</span>
+    <div class="ic-title">Ergenecore</div>
+    <p class="ic-desc">Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices.</p>
+    <span class="ic-stat">202k req/s</span>
+    <span class="ic-stat-label">plaintext · measured on the published benchmark</span>
+  </a>
+  <a class="info-card" href="/docs/adapters/hono">
+    <span class="ic-kicker">Hono Ecosystem</span>
+    <div class="ic-title">Hono Adapter</div>
+    <p class="ic-desc"><code>hono</code> and <code>zod</code> as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun.</p>
+    <span class="ic-stat">190k req/s</span>
+    <span class="ic-stat-label">plaintext · measured on the published benchmark</span>
+  </a>
+</div>
 
-**The fastest adapter for production workloads**
-
-- ⚡ **Performance:** ~295k req/sec
-- 📦 **Dependencies:** Zero — Zod is a peer your project owns
-- 🔧 **Runtime:** Bun-exclusive
-- 🎯 **Use Case:** Production APIs, microservices
-
-### Hono Adapter
-
-**Familiar and battle-tested**
-
-- ⚡ **Performance:** ~233k req/sec
-- 📦 **Dependencies:** Hono and Zod, as peers your project owns
-- 🔧 **Runtime:** Bun (can be ported to Node)
-- 🎯 **Use Case:** Projects using Hono, gradual migration
+Identical application code runs on both — only the adapter import changes. See [Benchmarks](/docs/benchmarks) for the full comparison across eleven scenarios.
 
 ## Performance Comparison
 
-| Adapter              | Requests/sec | Latency (avg) | Memory Usage |
-|:---------------------|:-------------|:--------------|:-------------|
-| **Ergenecore**       | **294,962**  | **1.34ms**    | Low          |
-| **Hono**             | **233,182**  | **1.70ms**    | Low          |
-| Hono (standalone)    | 266,476      | 1.49ms        | Low          |
-| NestJS (Bun)         | 100,975      | 3.92ms        | Medium       |
-| NestJS (Node)        | 88,083       | 5.33ms        | High         |
+Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections:
+
+| Adapter            | Runtime | Plaintext | JSON serialization | DB read by id |
+|:-------------------|:--------|----------:|-------------------:|--------------:|
+| **Ergenecore**     | Bun     | **202,066** | **195,494**      | **78,023**    |
+| **Hono adapter**   | Bun     | 190,030   | 178,857            | 76,780        |
+| NestJS · Express   | Bun     | 131,281   | 119,195            | 29,178        |
+| NestJS · Express   | Node    | 80,988    | 82,459             | 27,883        |
 
 ::: tip
-Benchmark conditions: 12 threads, 400 connections, 120s duration, Hello World endpoint
+Full methodology — hardware, load generator, isolation and the byte-level conformance gate — is documented on the [Benchmarks](/docs/benchmarks) page.
 :::
 
 ## Feature Comparison
@@ -275,17 +277,9 @@ bun add @asenajs/hono-adapter hono zod
 - Native Bun optimizations
 - Minimal dependency overhead
 
-## Related Documentation
+## Related
 
-- [Ergenecore Adapter](/docs/adapters/ergenecore)
-- [Hono Adapter](/docs/adapters/hono)
-- [Context API](/docs/concepts/context)
-- [Middleware Guide](/docs/concepts/middleware)
-
----
-
-**Next Steps:**
-
-- Learn about [Ergenecore features](/docs/adapters/ergenecore)
-- Explore [Hono adapter usage](/docs/adapters/hono)
-- Understand [Context API](/docs/concepts/context)
+- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore features and API
+- [Hono Adapter](/docs/adapters/hono) - Hono adapter usage and API
+- [Context API](/docs/concepts/context) - The adapter-agnostic request/response object
+- [Middleware Guide](/docs/concepts/middleware) - Middleware across both adapters

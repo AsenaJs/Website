@@ -23,9 +23,9 @@ The package has no peer dependency on `@asenajs/asena` - it only implements the
 
 ## Quick Start
 
-### With Ergenecore Adapter
+::: code-group
 
-```typescript
+```typescript [Ergenecore]
 import { AsenaServerFactory } from '@asenajs/asena';
 import { createErgenecoreAdapter } from '@asenajs/ergenecore';
 import { AsenaLogger } from '@asenajs/asena-logger';
@@ -46,9 +46,7 @@ const server = await AsenaServerFactory.create({
 await server.start();
 ```
 
-### With Hono Adapter
-
-```typescript
+```typescript [Hono]
 import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { AsenaLogger } from '@asenajs/asena-logger';
@@ -68,6 +66,8 @@ const server = await AsenaServerFactory.create({
 
 await server.start();
 ```
+
+:::
 
 ## Using Logger in Your Application
 
@@ -425,17 +425,11 @@ logger.info('User logged in', {
 });
 ```
 
-## Related Documentation
+## Related
 
 - [Services](/docs/concepts/services) - Service layer patterns
 - [Middleware](/docs/concepts/middleware) - Middleware patterns
-- [Configuration](/docs/guides/configuration) - Server configuration
 - [Dependency Injection](/docs/concepts/dependency-injection) - IoC container
+- [Configuration](/docs/guides/configuration) - Server configuration
+- [Error Handling](/docs/guides/error-handling) - Logging errors from a global handler
 - [Winston Documentation](https://github.com/winstonjs/winston) - Advanced configuration
-
----
-
-**Next Steps:**
-- Learn about [Error Handling](/docs/guides/configuration)
-- Explore [Middleware patterns](/docs/concepts/middleware)
-- Understand [Services architecture](/docs/concepts/services)

@@ -8,6 +8,39 @@ outline: deep
 
 This guide walks you through creating your first Asena project from scratch, including creating components and building for production.
 
+<div class="card-grid">
+  <a class="info-card" href="#step-1-install-asena-cli">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Install the CLI</div>
+    <p class="ic-desc">Getting <code>asena</code> onto your PATH.</p>
+  </a>
+  <a class="info-card" href="#step-2-create-a-new-project">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Create a Project</div>
+    <p class="ic-desc">Scaffolding with the interactive prompts.</p>
+  </a>
+  <a class="info-card" href="#step-3-verify-project-setup">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Verify Setup</div>
+    <p class="ic-desc">What the generated project looks like.</p>
+  </a>
+  <a class="info-card" href="#step-4-create-a-controller">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Create a Controller</div>
+    <p class="ic-desc">Generating and filling in your first routes.</p>
+  </a>
+  <a class="info-card" href="#step-5-create-a-service">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Create a Service</div>
+    <p class="ic-desc">Moving the logic out of the controller.</p>
+  </a>
+  <a class="info-card" href="#step-6-build-for-production">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Build for Production</div>
+    <p class="ic-desc">Bundling the app with <code>asena build</code>.</p>
+  </a>
+</div>
+
 ## Prerequisites
 
 - [Bun runtime](https://bun.sh) v1.3.12 or higher
@@ -126,9 +159,9 @@ Enter the controller name when prompted:
 
 This creates `src/controllers/UserController.ts`. Let's modify it:
 
-### For Ergenecore Adapter
+::: code-group
 
-```typescript
+```typescript [Ergenecore]
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
@@ -157,9 +190,7 @@ export class UserController {
 }
 ```
 
-### For Hono Adapter
-
-```typescript
+```typescript [Hono]
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/hono-adapter';
@@ -187,6 +218,8 @@ export class UserController {
   }
 }
 ```
+
+:::
 
 Restart the development server:
 
@@ -419,21 +452,15 @@ my-asena-app/
 └── tsconfig.json
 ```
 
-## Next Steps
+## Related
 
-Now that you've created your first Asena application:
-
-- Learn about [Controllers](/docs/concepts/controllers)
-- Explore [Services](/docs/concepts/services)
-- Understand [Middleware](/docs/concepts/middleware)
-- Set up [Database integration](/docs/packages/drizzle)
-- Configure [WebSocket](/docs/concepts/websocket)
-- Deploy to [Production](/docs/guides/deployment)
-
----
-
-**Related Documentation:**
 - [CLI Commands](/docs/cli/commands) - All CLI commands
 - [CLI Configuration](/docs/cli/configuration) - Configure your project
 - [Get Started Guide](/docs/get-started) - Complete guide
 - [Adapters](/docs/adapters/overview) - Learn about adapters
+- [Controllers](/docs/concepts/controllers) - Controller patterns
+- [Services](/docs/concepts/services) - Service patterns
+- [Middleware](/docs/concepts/middleware) - Middleware patterns
+- [WebSocket](/docs/concepts/websocket) - WebSocket namespaces
+- [Database integration](/docs/packages/drizzle) - Repositories with Drizzle ORM
+- [Deployment](/docs/guides/deployment) - Running in production

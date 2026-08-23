@@ -8,6 +8,39 @@ outline: deep
 
 The Context API is the heart of request/response handling in Asena. It provides a **unified interface** that works consistently across all adapters (Ergenecore and Hono), allowing you to write adapter-agnostic code.
 
+<div class="card-grid">
+  <a class="info-card" href="#what-is-context">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">What is Context</div>
+    <p class="ic-desc">The wrapper around the underlying request and response.</p>
+  </a>
+  <a class="info-card" href="#core-properties">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Core Properties</div>
+    <p class="ic-desc"><code>req</code>, <code>res</code> and the raw adapter objects.</p>
+  </a>
+  <a class="info-card" href="#request-data-methods">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Request Data</div>
+    <p class="ic-desc">Route params, query, body, headers and form data.</p>
+  </a>
+  <a class="info-card" href="#response-methods">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Response Methods</div>
+    <p class="ic-desc">JSON, text, HTML, redirects and status codes.</p>
+  </a>
+  <a class="info-card" href="#cookie-management">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Cookies</div>
+    <p class="ic-desc">Reading, setting and deleting cookies.</p>
+  </a>
+  <a class="info-card" href="#api-reference">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">API Reference</div>
+    <p class="ic-desc">Every request and response method in one table.</p>
+  </a>
+</div>
+
 ## What is Context?
 
 The Context object wraps the underlying HTTP request and response, providing convenient methods for:
@@ -231,7 +264,7 @@ Access specific headers using `req.headers` (via native request object).
 
 
 
-::: tip
+::: tip Hono returns headers from a function
 `Hono` req.headers is a function that returns headers as values
 
 ```typescript
@@ -606,7 +639,7 @@ export class WsAuthMiddleware implements MiddlewareService {
 
 ### Get WebSocket Value - `getWebSocketValue()`
 
-::: warning
+::: warning Socket data is injected automatically
 Socket data will automaticly injectining in `ws.data.values` by adapter. So you dont need to use this.
 :::
 
@@ -1061,11 +1094,11 @@ const page = (await context.getQuery('page')) || '1';
 `getParam()`, `getAllQueries()`, `getValue()`, `setValue()` and `send()` are synchronous.
 :::
 
-## Related Documentation
+## Related
 
 - [Controllers](/docs/concepts/controllers) - Using Context in controllers
 - [Middleware](/docs/concepts/middleware) - Context in middlewares
-- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
-- [Hono Adapter](/docs/adapters/hono) - Hono-specific features
 - [WebSocket](/docs/concepts/websocket) - WebSocket integration with Context
 - [Error Handling](/docs/guides/error-handling) - HttpException and error responses
+- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
+- [Hono Adapter](/docs/adapters/hono) - Hono-specific features

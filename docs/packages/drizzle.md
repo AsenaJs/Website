@@ -8,6 +8,39 @@ outline: deep
 
 Drizzle ORM utilities for AsenaJS - A powerful and type-safe database integration package that provides generic Database services and Repository patterns.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">A database, a schema and a repository wired up.</p>
+  </a>
+  <a class="info-card" href="#database-decorator-api">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">@Database</div>
+    <p class="ic-desc">Declaring a connection and its pool options.</p>
+  </a>
+  <a class="info-card" href="#repository-decorator-api">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">@Repository</div>
+    <p class="ic-desc">Type-safe repositories bound to a table.</p>
+  </a>
+  <a class="info-card" href="#repository-methods">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Repository Methods</div>
+    <p class="ic-desc">Everything a generated repository can do.</p>
+  </a>
+  <a class="info-card" href="#transactions">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Transactions</div>
+    <p class="ic-desc">Declarative <code>@Transaction</code> with propagation modes.</p>
+  </a>
+  <a class="info-card" href="#multiple-databases">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Multiple Databases</div>
+    <p class="ic-desc">Connecting to more than one database at once.</p>
+  </a>
+</div>
+
 ## Features
 
 - 🚀 **Generic Database Service** - Support for multiple database types
@@ -274,7 +307,7 @@ The `@Repository` decorator configures a repository:
 
 ## @Drizzle Decorator API
 
-`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#4-activate-the-transaction-post-processor-optional)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
+`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
 
 ```typescript
 @Drizzle({
@@ -765,7 +798,7 @@ export class EventRepository extends BaseRepository<typeof events> {}
 asena-drizzle ships a Spring-style `@Transaction` decorator backed by Bun's native `AsyncLocalStorage`. Repository calls made inside a `@Transaction`-wrapped method automatically pick up the active transaction — you do not have to thread a `tx` parameter through your code.
 
 ::: warning Setup required
-`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#4-activate-the-transaction-post-processor-optional). Without it the decorator silently does nothing because AsenaJS never sees the post-processor.
+`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional). Without it the decorator silently does nothing because AsenaJS never sees the post-processor.
 :::
 
 ### `@Transaction` Decorator
@@ -982,19 +1015,12 @@ export class UserRepository extends BaseRepository<typeof users> {
 }
 ```
 
-## Related Documentation
+## Related
 
-- [Services](/docs/concepts/services)
-- [Dependency Injection](/docs/concepts/dependency-injection)
-- [Component Lifecycle](/docs/concepts/lifecycle) - when the pool is opened and released
+- [Services](/docs/concepts/services) - Calling repositories from your domain services
+- [Dependency Injection](/docs/concepts/dependency-injection) - How repositories get injected
+- [Component Lifecycle](/docs/concepts/lifecycle) - When the pool is opened and released
 - [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
-- [Configuration](/docs/guides/configuration)
-- [Drizzle ORM Documentation](https://orm.drizzle.team/)
-
----
-
-**Next Steps:**
-- Set up your database schema
-- Create repositories for your entities
-- Learn about [Services](/docs/concepts/services)
-- Explore [Testing](/docs/guides/testing) with repositories
+- [Configuration](/docs/guides/configuration) - Server configuration
+- [Testing](/docs/guides/testing) - Testing code that uses repositories
+- [Drizzle ORM Documentation](https://orm.drizzle.team/) - The underlying ORM

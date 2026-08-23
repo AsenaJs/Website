@@ -45,6 +45,73 @@ interface Page {
   docsPath: string;
 }
 
+/** Inline HTML back to markdown: `<code>` and `<strong>` survive, everything else is dropped. */
+function inlineText(html: string): string {
+  return html
+    .replace(/<code>([\s\S]*?)<\/code>/g, '`$1`')
+    .replace(/<(strong|b)>([\s\S]*?)<\/\1>/g, '**$2**')
+    .replace(/<(em|i)>([\s\S]*?)<\/\1>/g, '*$2*')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Joins a card's parts into one `- [Title](href) - description` line. */
+function cardLine(inner: string, href?: string): string {
+  const title = inlineText(/<(?:div|h\d) class="(?:ic-title|proj-title)">([\s\S]*?)<\/(?:div|h\d)>/.exec(inner)?.[1] ?? '');
+  const desc = inlineText(/<p class="(?:ic-desc|proj-desc)">([\s\S]*?)<\/p>/.exec(inner)?.[1] ?? '');
+  const stat = inlineText(/<span class="ic-stat">([\s\S]*?)<\/span>/.exec(inner)?.[1] ?? '');
+  const statLabel = inlineText(/<span class="ic-stat-label">([\s\S]*?)<\/span>/.exec(inner)?.[1] ?? '');
+  const tags = [...inner.matchAll(/<span class="ctag">([\s\S]*?)<\/span>/g)].map((m) => inlineText(m[1]));
+
+  const parts = [desc];
+
+  if (stat) parts.push(statLabel ? `${stat} (${statLabel})` : stat);
+  if (tags.length) parts.push(tags.join(', '));
+
+  const label = href ? `[${title}](${href})` : `**${title}**`;
+  const tail = parts.filter(Boolean).join(' - ');
+
+  return tail ? `- ${label} - ${tail}` : `- ${label}`;
+}
+
+/**
+ * Docs pages build their card grids in raw HTML, which is layout for a human reader and
+ * pure noise in a file whose only consumer is a model. Cards are flattened back to markdown
+ * lists here, so the pages keep their design and llms-full.txt keeps its signal. Fenced code
+ * is left alone - some pages document HTML files.
+ */
+function flattenLayoutHtml(body: string, docsPath: string): string {
+  const segments = body.split(/(^```[\s\S]*?^```)/m);
+
+  return segments
+    .map((segment, i) => {
+      if (i % 2 === 1) return segment; // a fenced code block
+
+      const out = segment
+        .replace(/^[ \t]*<a class="info-card" href="([^"]+)">([\s\S]*?)<\/a>/gm, (_, href, inner) => cardLine(inner, href))
+        .replace(/^[ \t]*<a href="([^"]+)"[^>]*class="proj-card">([\s\S]*?)<\/a>/gm, (_, href, inner) => cardLine(inner, href))
+        .replace(/^[ \t]*<div class="info-card">([\s\S]*?<p class="ic-desc">[\s\S]*?<\/p>)\s*<\/div>/gm, (_, inner) => cardLine(inner))
+        .replace(/^[ \t]*<div class="card-grid">[ \t]*\n/gm, '')
+        .replace(/^[ \t]*<\/div>[ \t]*\n/gm, '')
+        .replace(/<span class="pill[^"]*">([\s\S]*?)<\/span>/g, (_, inner) => `(${inlineText(inner)})`);
+
+      const leftover = /^[ \t]*<(?!!--)[a-zA-Z/]/m.exec(out);
+
+      if (leftover) {
+        console.warn(`  ! ${docsPath}: HTML left in llms output near "${out.slice(leftover.index, leftover.index + 60).trim()}"`);
+      }
+
+      return out;
+    })
+    .join('');
+}
+
 /** Splits frontmatter from the markdown body. */
 function parsePage(absPath: string): { data: Record<string, string>; body: string } {
   const raw = readFileSync(absPath, 'utf8');
@@ -226,7 +293,7 @@ for (const section of sections) {
     full.push(`# ${page.title}`);
     full.push(`Section: ${section.title}`);
     full.push(`Source: ${page.rawUrl}\n`);
-    full.push(page.body.trim());
+    full.push(flattenLayoutHtml(page.body, page.docsPath).trim());
     full.push('');
   }
 }

@@ -8,6 +8,39 @@ outline: deep
 
 Error handling is a critical part of building robust web applications. Asena provides a powerful and flexible error handling system that works seamlessly with both Ergenecore and Hono adapters.
 
+<div class="card-grid">
+  <a class="info-card" href="#philosophy">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Philosophy</div>
+    <p class="ic-desc">The model Asena's error handling is built on.</p>
+  </a>
+  <a class="info-card" href="#basic-error-handling">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Basics</div>
+    <p class="ic-desc">Throwing and answering from a route handler.</p>
+  </a>
+  <a class="info-card" href="#global-error-handler">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Global Handler</div>
+    <p class="ic-desc">One place to catch everything that escapes.</p>
+  </a>
+  <a class="info-card" href="#custom-error-classes">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Custom Errors</div>
+    <p class="ic-desc">Your own exception types on top of HttpException.</p>
+  </a>
+  <a class="info-card" href="#not-found">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Not Found</div>
+    <p class="ic-desc">Handling routes that never matched.</p>
+  </a>
+  <a class="info-card" href="#validation-errors">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Validation Errors</div>
+    <p class="ic-desc">Shaping the 400 responses Zod produces.</p>
+  </a>
+</div>
+
 ## Why Error Handling Matters
 
 Proper error handling ensures:
@@ -874,11 +907,10 @@ public map(error: Error, context: Context): Response {
 }
 ```
 
----
-
 ## Related
 
+- [Configuration](/docs/guides/configuration) - Registering the global `onError` handler
 - [Middleware](/docs/concepts/middleware) - Error handling in middleware
 - [Validation](/docs/concepts/validation) - Handling validation errors
-- [Logger Package](/docs/packages/logger) - Structured logging with AsenaLogger
 - [Context API](/docs/concepts/context) - Understanding request context
+- [Logger Package](/docs/packages/logger) - Structured logging with AsenaLogger

@@ -18,19 +18,15 @@ If you've built a project with Asena and want to showcase it here, please [open 
 
 ### ScrumPoker.me
 
-<div style="margin: 1.5rem 0;">
-  <a href="https://scrumpoker.me/" target="_blank" rel="noopener" style="text-decoration: none; color: inherit;">
-    <div style="padding: 1.5rem; border: 1px solid var(--vp-c-divider); border-radius: 8px; transition: all 0.3s;">
-      <h4 style="margin-top: 0;">🃏 ScrumPoker.me</h4>
-      <p style="color: var(--vp-c-text-2); margin: 0.5rem 0;">Modern Scrum poker planning application for agile teams</p>
-      <div style="margin-top: 1rem;">
-        <span style="display: inline-block; padding: 0.25rem 0.75rem; margin-right: 0.5rem; background: var(--vp-c-brand-soft); border-radius: 4px; font-size: 0.875rem;">WebSocket</span>
-        <span style="display: inline-block; padding: 0.25rem 0.75rem; margin-right: 0.5rem; background: var(--vp-c-brand-soft); border-radius: 4px; font-size: 0.875rem;">REST API</span>
-        <span style="display: inline-block; padding: 0.25rem 0.75rem; background: var(--vp-c-brand-soft); border-radius: 4px; font-size: 0.875rem;">Real-time</span>
-      </div>
-    </div>
-  </a>
-</div>
+<a href="https://scrumpoker.me/" target="_blank" rel="noopener" class="proj-card">
+  <h4 class="proj-title">🃏 ScrumPoker.me</h4>
+  <p class="proj-desc">Modern Scrum poker planning application for agile teams</p>
+  <div class="card-tags">
+    <span class="ctag">WebSocket</span>
+    <span class="ctag">REST API</span>
+    <span class="ctag">Real-time</span>
+  </div>
+</a>
 
 **Description:**
 ScrumPoker.me is a production-grade Scrum poker application built entirely with Asena Framework from the ground up. It leverages Asena's WebSocket capabilities for real-time voting and collaboration, combined with REST API endpoints for user management and session persistence.
@@ -42,18 +38,14 @@ ScrumPoker.me is a production-grade Scrum poker application built entirely with 
 
 ### Check Crypto Address
 
-<div style="margin: 1.5rem 0;">
-  <a href="https://checkcryptoaddress.com/" target="_blank" rel="noopener" style="text-decoration: none; color: inherit;">
-    <div style="padding: 1.5rem; border: 1px solid var(--vp-c-divider); border-radius: 8px; transition: all 0.3s;">
-      <h4 style="margin-top: 0;">🔐 Check Crypto Address</h4>
-      <p style="color: var(--vp-c-text-2); margin: 0.5rem 0;">Internal tooling for cryptocurrency address validation and verification</p>
-      <div style="margin-top: 1rem;">
-        <span style="display: inline-block; padding: 0.25rem 0.75rem; margin-right: 0.5rem; background: var(--vp-c-brand-soft); border-radius: 4px; font-size: 0.875rem;">REST API</span>
-        <span style="display: inline-block; padding: 0.25rem 0.75rem; background: var(--vp-c-brand-soft); border-radius: 4px; font-size: 0.875rem;">Internal Tool</span>
-      </div>
-    </div>
-  </a>
-</div>
+<a href="https://checkcryptoaddress.com/" target="_blank" rel="noopener" class="proj-card">
+  <h4 class="proj-title">🔐 Check Crypto Address</h4>
+  <p class="proj-desc">Internal tooling for cryptocurrency address validation and verification</p>
+  <div class="card-tags">
+    <span class="ctag">REST API</span>
+    <span class="ctag">Internal Tool</span>
+  </div>
+</a>
 
 **Description:**
 Internal tooling application for cryptocurrency address validation, verification, and security checks. Built with Asena to handle high-throughput validation requests efficiently.

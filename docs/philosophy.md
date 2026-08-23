@@ -16,6 +16,39 @@ The framework eliminates boilerplate through automatic scanning of decorator-ann
 
 These are the rules we hold ourselves to. They explain most of the design decisions you will encounter in the codebase.
 
+<div class="card-grid">
+  <a class="info-card" href="#zero-dependencies">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Zero Dependencies</div>
+    <p class="ic-desc">The core depends on exactly one package: <code>reflect-metadata</code>.</p>
+  </a>
+  <a class="info-card" href="#bun-native-first">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Bun Native First</div>
+    <p class="ic-desc"><code>Bun.serve()</code>, <code>Bun.file()</code> and native cron directly - not portable shims.</p>
+  </a>
+  <a class="info-card" href="#adapter-agnostic">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Adapter Agnostic</div>
+    <p class="ic-desc">The framework defines the contract; adapters implement it.</p>
+  </a>
+  <a class="info-card" href="#convention-over-configuration">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Convention Over Configuration</div>
+    <p class="ic-desc">Decorators announce what a component is; wiring is automatic.</p>
+  </a>
+  <a class="info-card" href="#testability-is-a-feature-not-an-afterthought">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Testability Is a Feature</div>
+    <p class="ic-desc"><code>mockComponent</code>, <code>createWebTest</code> and <code>createTestApp</code> ship in the box.</p>
+  </a>
+  <a class="info-card" href="#honest-performance">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Honest Performance</div>
+    <p class="ic-desc">Every number published with its adapter, machine and methodology attached.</p>
+  </a>
+</div>
+
 ### Zero Dependencies
 
 The core framework depends on exactly one package: `reflect-metadata`. Nothing else.
@@ -28,7 +61,7 @@ This is why Redis, Kafka, OpenTelemetry, Drizzle and Winston all live in optiona
 
 Asena is not a framework that happens to run on Bun. It is built for Bun.
 
-`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches roughly 295k requests/sec.
+`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 202,066 req/s on plaintext in [our published benchmarks](/docs/benchmarks).
 
 The trade-off is deliberate: Asena will not run on Node.js. In exchange, it does not pay the abstraction tax that portability demands.
 

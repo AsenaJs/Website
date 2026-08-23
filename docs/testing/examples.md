@@ -8,6 +8,34 @@ outline: deep
 
 This page provides practical testing examples for common Asena components.
 
+<div class="card-grid">
+  <a class="info-card" href="#testing-controllers">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Controllers</div>
+    <p class="ic-desc">Asserting on routes, status codes and payloads.</p>
+  </a>
+  <a class="info-card" href="#testing-services">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Services</div>
+    <p class="ic-desc">Unit-testing business logic with mocked dependencies.</p>
+  </a>
+  <a class="info-card" href="#testing-websockets">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">WebSockets</div>
+    <p class="ic-desc">Driving a namespace and checking what it sends.</p>
+  </a>
+  <a class="info-card" href="#testing-middleware">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Middleware</div>
+    <p class="ic-desc">Verifying a middleware runs, passes or blocks.</p>
+  </a>
+  <a class="info-card" href="#integration-testing-patterns">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Integration Patterns</div>
+    <p class="ic-desc">Putting the pieces together in one test suite.</p>
+  </a>
+</div>
+
 ## Testing Controllers
 
 ### Basic Controller Testing
@@ -540,12 +568,12 @@ const socket = new WebSocket(app.wsUrl('/ws/chat'));
 
 ## Related
 
-- **[Testing Overview](/docs/testing/overview)** - Introduction to testing in Asena
-- **[MockComponent API](/docs/testing/mock-component)** - Complete API reference
-- **[createTestApp](/docs/testing/test-app)** - Full-application testing
-- **[createWebTest](/docs/testing/web-test)** - Controller-slice testing
-- **[Dependency Injection](/docs/concepts/dependency-injection)** - Understanding DI in Asena
-- **[Controllers](/docs/concepts/controllers)** - Controller documentation
-- **[Services](/docs/concepts/services)** - Service documentation
-- **[WebSocket](/docs/concepts/websocket)** - WebSocket documentation
-- **[Middleware](/docs/concepts/middleware)** - Middleware documentation
+- [Testing Overview](/docs/testing/overview) - Introduction to testing in Asena
+- [MockComponent API](/docs/testing/mock-component) - Complete API reference
+- [createTestApp](/docs/testing/test-app) - Full-application testing
+- [createWebTest](/docs/testing/web-test) - Controller-slice testing
+- [Dependency Injection](/docs/concepts/dependency-injection) - Understanding DI in Asena
+- [Controllers](/docs/concepts/controllers) - Controller documentation
+- [Services](/docs/concepts/services) - Service documentation
+- [WebSocket](/docs/concepts/websocket) - WebSocket documentation
+- [Middleware](/docs/concepts/middleware) - Middleware documentation

@@ -8,6 +8,39 @@ outline: deep
 
 Controllers are the backbone of your Asena application. They handle incoming HTTP requests, process them, and return responses to the client. Using TypeScript decorators, you can define routes, inject services, and integrate middleware seamlessly.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">A working controller from decorator to response.</p>
+  </a>
+  <a class="info-card" href="#the-controller-decorator">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">@Controller</div>
+    <p class="ic-desc">Path prefixes, naming and controller-level options.</p>
+  </a>
+  <a class="info-card" href="#http-method-decorators">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">HTTP Methods</div>
+    <p class="ic-desc"><code>@Get</code>, <code>@Post</code>, <code>@Put</code>, <code>@Delete</code> and their options.</p>
+  </a>
+  <a class="info-card" href="#working-with-request-data">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Request Data</div>
+    <p class="ic-desc">Route params, query strings, bodies and headers.</p>
+  </a>
+  <a class="info-card" href="#sending-responses">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Responses</div>
+    <p class="ic-desc">JSON, text, HTML, status codes and redirects.</p>
+  </a>
+  <a class="info-card" href="#service-injection">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Service Injection</div>
+    <p class="ic-desc">Reaching your business logic from a route handler.</p>
+  </a>
+</div>
+
 ## Quick Start
 
 Here's a complete controller example with both Ergenecore and Hono adapters:
@@ -753,7 +786,7 @@ Always use `async` handlers when working with asynchronous operations like datab
 Do not forget `await` your `Promises`. If not awaited promises throws an error, it will shut down server.
 :::
 
-## Related Documentation
+## Related
 
 - [Services](/docs/concepts/services) - Business logic separation
 - [Middleware](/docs/concepts/middleware) - Request/response interception

@@ -235,16 +235,10 @@ response() {
 }
 ```
 
-## Related Documentation
+## Related
 
-- [Validation](/docs/concepts/validation) - Request validation with Zod
+- [Validation](/docs/concepts/validation) - Request validation with Zod, the source of the schemas
 - [Controllers](/docs/concepts/controllers) - HTTP route handling
 - [Middleware](/docs/concepts/middleware) - Middleware and validators
+- [PostProcessor](/docs/concepts/post-processor) - The interception system this package is built on
 - [Configuration](/docs/guides/configuration) - Server configuration
-
----
-
-**Next Steps:**
-- Set up [request validation](/docs/concepts/validation) with Zod
-- Learn about [Controllers](/docs/concepts/controllers)
-- Explore [Middleware patterns](/docs/concepts/middleware)

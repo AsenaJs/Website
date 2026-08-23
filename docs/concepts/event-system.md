@@ -8,6 +8,39 @@ outline: deep
 
 Asena's Event System provides a decoupled, event-driven architecture for your application. It allows different parts of your application to communicate without tight coupling, making your code more maintainable and testable.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">Emitting and handling your first event.</p>
+  </a>
+  <a class="info-card" href="#core-features">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">Core Features</div>
+    <p class="ic-desc">What the in-process event bus gives you.</p>
+  </a>
+  <a class="info-card" href="#decorators">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Decorators</div>
+    <p class="ic-desc">Declaring handlers and emitters.</p>
+  </a>
+  <a class="info-card" href="#event-patterns">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Event Patterns</div>
+    <p class="ic-desc">Naming and matching the events you listen for.</p>
+  </a>
+  <a class="info-card" href="#advanced-usage">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Advanced Usage</div>
+    <p class="ic-desc">Beyond the basics of emit and handle.</p>
+  </a>
+  <a class="info-card" href="#troubleshooting">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Troubleshooting</div>
+    <p class="ic-desc">When a handler does not fire.</p>
+  </a>
+</div>
+
 ## Key Features
 
 - **🔥 Fire-and-Forget Pattern** - Events are emitted without waiting for handlers (Spring-like behavior)
@@ -82,7 +115,7 @@ The event system automatically:
 - Matches patterns when events are emitted
 - Executes handlers without blocking
 
-::: tip
+::: tip Handlers run in the background
 Handlers run in the background. If a handler throws an error, it won't affect other handlers or your service code.
 :::
 
@@ -134,7 +167,7 @@ export class OrderEventService {
 // 5. Email sent (after 3 seconds)
 ```
 
-::: info
+::: info emit() returns immediately
 The `emit()` method returns immediately. Async handlers run in the background without blocking your code.
 :::
 
@@ -218,7 +251,7 @@ export class TestService {
 // Handler 3 executes successfully ✓
 ```
 
-::: tip
+::: tip Errors are caught and logged
 Errors are automatically caught and logged. Your application continues running normally.
 :::
 
@@ -557,7 +590,7 @@ class NotificationService {
 // → Execution order is NOT guaranteed
 ```
 
-::: warning
+::: warning Handler order is not guaranteed
 Don't rely on handler execution order. If you need sequential operations, use event chaining instead.
 :::
 
@@ -938,7 +971,7 @@ onAnyUserEvent(event: string, data: any) {}
 @On('*')
 ```
 
-::: warning
+::: warning Wildcards are for cross-cutting concerns
 Only use wildcards for cross-cutting concerns like logging, monitoring, and error handling.
 :::
 
@@ -1048,11 +1081,10 @@ this.emitter.emit('user.created', {
 
 **Remember:** Fire-and-forget pattern means `emit()` doesn't wait for async handlers. This is by design.
 
----
-
 ## Related
 
-- [Dependency Injection](/docs/concepts/dependency-injection.md) - Understanding DI in Asena
-- [Inheritance](/docs/concepts/inheritance.md) - Sharing `@On` handlers through a base class
-- [Services](/docs/concepts/services.md) - Creating services
-- [Ulak](/docs/concepts/ulak.md) - WebSocket messaging system
+- [Dependency Injection](/docs/concepts/dependency-injection) - Understanding DI in Asena
+- [Inheritance](/docs/concepts/inheritance) - Sharing `@On` handlers through a base class
+- [Services](/docs/concepts/services) - Creating services
+- [Ulak](/docs/concepts/ulak) - WebSocket messaging system
+- [Microservices](/docs/concepts/microservices) - The cross-process counterpart to in-process events

@@ -168,6 +168,6 @@ expect(mocks.UserService).toBe(double);
 
 ## Related
 
-- **[createTestApp](/docs/testing/test-app)** — full-application testing and the fluent HTTP client
-- **[MockComponent API](/docs/testing/mock-component)** — unit-level dependency mocking
-- **[Testing Overview](/docs/testing/overview)** — introduction to testing in Asena
+- [createTestApp](/docs/testing/test-app) - Full-application testing and the fluent HTTP client
+- [MockComponent API](/docs/testing/mock-component) - Unit-level dependency mocking
+- [Testing Overview](/docs/testing/overview) - Introduction to testing in Asena

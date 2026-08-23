@@ -72,7 +72,7 @@ function mockComponent<T extends object>(
 - `ComponentClass` - The component class to instantiate
 - `options` - Optional configuration (see [MockComponentOptions](#mockcomponentoptions))
 
-**Returns:** [MockedComponent&lt;T&gt;](#mockedcomponentt)
+**Returns:** [MockedComponent&lt;T&gt;](#mockedcomponent-lt-t-gt)
 
 **Example:**
 ```typescript
@@ -92,7 +92,7 @@ async function mockComponentAsync<T extends object>(
 
 **Parameters:** Same as `mockComponent`
 
-**Returns:** Promise&lt;[MockedComponent&lt;T&gt;](#mockedcomponentt)&gt;
+**Returns:** Promise&lt;[MockedComponent&lt;T&gt;](#mockedcomponent-lt-t-gt)&gt;
 
 **Example:**
 ```typescript
@@ -402,7 +402,7 @@ test('broadcasts stats on user creation', async () => {
 });
 ```
 
-::: tip
+::: tip createTestUlakStub stays in sync with the framework
 `createTestUlakStub` implements the full `Ulak.NameSpace` interface (`broadcast`, `to`, `toSocket`, `toMany`, `getSocketCount`) with Bun mocks, so it stays in sync with the framework at compile time.
 :::
 
@@ -511,9 +511,9 @@ Package export configuration:
 
 ## Related
 
-- **[Testing Overview](/docs/testing/overview)** - Introduction to testing in Asena
-- **[createTestApp](/docs/testing/test-app)** - Full-application testing with real HTTP
-- **[createWebTest](/docs/testing/web-test)** - Controller-slice testing (note: `mocks` there is keyed by *service* name, not field name)
-- **[Examples](/docs/testing/examples)** - Real-world testing patterns
-- **[Dependency Injection](/docs/concepts/dependency-injection)** - Understanding DI in Asena
-- **[Bun Test Documentation](https://bun.sh/docs/cli/test)** - Learn more about Bun's test runner
+- [Testing Overview](/docs/testing/overview) - Introduction to testing in Asena
+- [createTestApp](/docs/testing/test-app) - Full-application testing with real HTTP
+- [createWebTest](/docs/testing/web-test) - Controller-slice testing (note: `mocks` there is keyed by *service* name, not field name)
+- [Examples](/docs/testing/examples) - Real-world testing patterns
+- [Dependency Injection](/docs/concepts/dependency-injection) - Understanding DI in Asena
+- [Bun Test Documentation](https://bun.sh/docs/cli/test) - Learn more about Bun's test runner

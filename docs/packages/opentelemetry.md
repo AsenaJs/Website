@@ -14,6 +14,39 @@ GET /api/users (SERVER)
        └─ UserService.getAll (INTERNAL)
 ```
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">The <code>@Otel</code> decorator and your first trace.</p>
+  </a>
+  <a class="info-card" href="#how-auto-tracing-works">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">How Auto-Tracing Works</div>
+    <p class="ic-desc">The HTTP → Controller → Service span waterfall.</p>
+  </a>
+  <a class="info-card" href="#otelservice-api">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">OtelService API</div>
+    <p class="ic-desc">Creating spans and recording metrics by hand.</p>
+  </a>
+  <a class="info-card" href="#configuration">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Configuration</div>
+    <p class="ic-desc">Exporters, resource attributes and instrumentation options.</p>
+  </a>
+  <a class="info-card" href="#sampling">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Sampling</div>
+    <p class="ic-desc"><code>ratioBasedSampler</code> for production traffic.</p>
+  </a>
+  <a class="info-card" href="#outgoing-request-context-propagation">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Context Propagation</div>
+    <p class="ic-desc">W3C <code>traceparent</code> in and out of your service.</p>
+  </a>
+</div>
+
 ## Features
 
 - **Decorator-Based Setup** — `@Otel` decorator handles SDK initialization and IoC registration
@@ -358,7 +391,7 @@ export class AppOtel extends OtelTracingPostProcessor {}
 
 Ignored routes produce no spans and no metrics.
 
-::: warning
+::: warning Match the static path, not the route pattern
 Routes are matched against the URL path before route matching occurs. Use the static path, not the route pattern.
 :::
 
@@ -549,18 +582,11 @@ const headers = this.otelService.injectTraceContext();
 await fetch('http://other-service/api', { headers });
 ```
 
-## Related Documentation
+## Related
 
-- [PostProcessor](/docs/concepts/post-processor) — How PostProcessors work in Asena
-- [Component Lifecycle](/docs/concepts/lifecycle) — `@OnStop`, signal handling and shutdown ordering
-- [Services](/docs/concepts/services) — Service layer architecture
-- [Middleware](/docs/concepts/middleware) — Middleware system and registration
-- [Dependency Injection](/docs/concepts/dependency-injection) — IoC container and `@Inject`
-- [Configuration](/docs/guides/configuration) — Server configuration with `@Config`
-
----
-
-**Next Steps:**
-- Set up [Middleware](/docs/concepts/middleware) for CORS and rate limiting
-- Learn about [Services](/docs/concepts/services) and dependency injection
-- Configure [Sampling](#sampling) for production deployments
+- [PostProcessor](/docs/concepts/post-processor) - How PostProcessors work in Asena
+- [Component Lifecycle](/docs/concepts/lifecycle) - `@OnStop`, signal handling and shutdown ordering
+- [Services](/docs/concepts/services) - Service layer architecture
+- [Middleware](/docs/concepts/middleware) - Middleware system and registration
+- [Dependency Injection](/docs/concepts/dependency-injection) - IoC container and `@Inject`
+- [Configuration](/docs/guides/configuration) - Server configuration with `@Config`

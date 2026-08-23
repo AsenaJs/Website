@@ -8,6 +8,39 @@ outline: deep
 
 The `@Config` decorator provides a centralized way to configure your Asena application, including server options, error handling, and global middleware. It allows you to customize both Bun's native server settings and Asena-specific features in a type-safe manner.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">A <code>@Config</code> class wired into the server.</p>
+  </a>
+  <a class="info-card" href="#serveoptions-method">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">serveOptions()</div>
+    <p class="ic-desc">Bun's native server settings, type-safe.</p>
+  </a>
+  <a class="info-card" href="#onerror-method">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">onError()</div>
+    <p class="ic-desc">One global handler for everything that throws.</p>
+  </a>
+  <a class="info-card" href="#onnotfound-method">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">onNotFound()</div>
+    <p class="ic-desc">Your own answer for unmatched routes.</p>
+  </a>
+  <a class="info-card" href="#globalmiddlewares-method">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">globalMiddlewares()</div>
+    <p class="ic-desc">Middleware applied to every route at once.</p>
+  </a>
+  <a class="info-card" href="#transport-method">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">transport()</div>
+    <p class="ic-desc">Wiring Redis or Kafka transports into the server.</p>
+  </a>
+</div>
+
 ## Quick Start
 
 ::: code-group
@@ -848,7 +881,7 @@ export class AppConfig extends ConfigService {
 
 A single microservice transport is registered under the name `default`. Multi-broker projects can pass a named map instead and bind controllers per transport — see [Microservices - Multiple Named Transports](/docs/concepts/microservices#multiple-named-transports).
 
-::: info
+::: info Where to read more about transports
 For details on how transport works with WebSocket pub/sub, see [WebSocket - Multi-Pod](/docs/concepts/websocket#multi-pod-websocket). For RedisTransport setup and configuration, see [Redis Package](/docs/packages/redis#multi-pod-websocket-transport). For microservice messaging concepts, see [Microservices](/docs/concepts/microservices).
 :::
 
@@ -1255,16 +1288,10 @@ serveOptions: {
 }
 ```
 
-## Related Documentation
+## Related
 
 - [Middleware](/docs/concepts/middleware) - Learn about middleware patterns
 - [Error Handling](/docs/guides/error-handling) - Advanced error handling strategies
 - [WebSocket](/docs/concepts/websocket) - WebSocket implementation guide
+- [Microservices](/docs/concepts/microservices) - What `transport()` plugs into
 - [CLI Configuration](/docs/cli/configuration) - Asena CLI build configuration
-
----
-
-**Next Steps:**
-- Learn about [Middleware patterns](/docs/concepts/middleware)
-- Explore [Error Handling](/docs/guides/error-handling) strategies
-- Set up [WebSocket](/docs/concepts/websocket) communication

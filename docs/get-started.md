@@ -276,16 +276,58 @@ my-app/
 
 Now that you have a working Asena application:
 
-- **Add more routes** - Learn about [Controllers](/docs/concepts/controllers)
-- **Add business logic** - Learn about [Services](/docs/concepts/services)
-- **Add middleware** - Learn about [Middleware](/docs/concepts/middleware)
-- **Add validation** - Learn about [Validation](/docs/concepts/validation)
-- **Add cron jobs** - Learn about [Scheduled Tasks](/docs/concepts/scheduled-tasks)
-- **Serve HTML pages** - Learn about [Frontend Controller](/docs/concepts/frontend-controller)
-- **Auto-generate API docs** - Set up [OpenAPI](/docs/packages/openapi)
-- **Add caching** - Integrate [Redis](/docs/packages/redis)
-- **Explore CLI** - Check out [CLI Commands](/docs/cli/commands)
-- **See examples** - Browse [Examples](/docs/examples)
+<div class="card-grid">
+  <a class="info-card" href="/docs/concepts/controllers">
+    <span class="ic-kicker">Routing</span>
+    <div class="ic-title">Controllers</div>
+    <p class="ic-desc">Add more routes to your application.</p>
+  </a>
+  <a class="info-card" href="/docs/concepts/services">
+    <span class="ic-kicker">Business Logic</span>
+    <div class="ic-title">Services</div>
+    <p class="ic-desc">Injectable components that carry your logic.</p>
+  </a>
+  <a class="info-card" href="/docs/concepts/middleware">
+    <span class="ic-kicker">Requests</span>
+    <div class="ic-title">Middleware</div>
+    <p class="ic-desc">Intercept requests at any level.</p>
+  </a>
+  <a class="info-card" href="/docs/concepts/validation">
+    <span class="ic-kicker">Type Safety</span>
+    <div class="ic-title">Validation</div>
+    <p class="ic-desc">Zod-based request validation on routes.</p>
+  </a>
+  <a class="info-card" href="/docs/concepts/scheduled-tasks">
+    <span class="ic-kicker">Background Jobs</span>
+    <div class="ic-title">Scheduled Tasks</div>
+    <p class="ic-desc">Cron-based task scheduling.</p>
+  </a>
+  <a class="info-card" href="/docs/concepts/frontend-controller">
+    <span class="ic-kicker">HTML Pages</span>
+    <div class="ic-title">Frontend Controller</div>
+    <p class="ic-desc">Serve HTML pages with native imports.</p>
+  </a>
+  <a class="info-card" href="/docs/packages/openapi">
+    <span class="ic-kicker">API Docs</span>
+    <div class="ic-title">OpenAPI</div>
+    <p class="ic-desc">Auto-generate OpenAPI 3.1 specs.</p>
+  </a>
+  <a class="info-card" href="/docs/packages/redis">
+    <span class="ic-kicker">Caching</span>
+    <div class="ic-title">Redis</div>
+    <p class="ic-desc">Caching and multi-pod WebSocket transport.</p>
+  </a>
+  <a class="info-card" href="/docs/cli/commands">
+    <span class="ic-kicker">Tooling</span>
+    <div class="ic-title">CLI Commands</div>
+    <p class="ic-desc">Scaffold, generate and build from the terminal.</p>
+  </a>
+  <a class="info-card" href="/docs/examples">
+    <span class="ic-kicker">Reference</span>
+    <div class="ic-title">Examples</div>
+    <p class="ic-desc">Browse ready-to-run example projects.</p>
+  </a>
+</div>
 
 ---
 

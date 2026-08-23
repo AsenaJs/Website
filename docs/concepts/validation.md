@@ -8,6 +8,39 @@ outline: deep
 
 Asena provides built-in validation support using [Zod](https://zod.dev). Validation ensures that incoming request data meets your requirements before reaching your route handlers.
 
+<div class="card-grid">
+  <a class="info-card" href="#quick-start">
+    <span class="ic-kicker">01</span>
+    <div class="ic-title">Quick Start</div>
+    <p class="ic-desc">A validator class wired to a route.</p>
+  </a>
+  <a class="info-card" href="#what-getbody-returns">
+    <span class="ic-kicker">02</span>
+    <div class="ic-title">What getBody() Returns</div>
+    <p class="ic-desc">The schema's output, not the raw client JSON.</p>
+  </a>
+  <a class="info-card" href="#validationservice-api">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">ValidationService API</div>
+    <p class="ic-desc"><code>json()</code>, <code>query()</code>, <code>param()</code> and header validation.</p>
+  </a>
+  <a class="info-card" href="#validation-hooks">
+    <span class="ic-kicker">04</span>
+    <div class="ic-title">Validation Hooks</div>
+    <p class="ic-desc">Custom logic that runs after validation.</p>
+  </a>
+  <a class="info-card" href="#validation-error-responses">
+    <span class="ic-kicker">05</span>
+    <div class="ic-title">Error Responses</div>
+    <p class="ic-desc">The 400 Bad Request shape Asena returns.</p>
+  </a>
+  <a class="info-card" href="#zod-schema-definition">
+    <span class="ic-kicker">06</span>
+    <div class="ic-title">Zod Schemas</div>
+    <p class="ic-desc">Defining the schemas the validators return.</p>
+  </a>
+</div>
+
 ::: info Adapter Support
 Both the **Ergenecore** and the **Hono** adapter ship validation. Each exports its own `ValidationService` and `ValidationSchemaWithHook`, so import them from the adapter you use.
 
@@ -742,17 +775,11 @@ Note also that Ergenecore invokes the hook **only on failure**, while Hono invok
 every attempt. Guard on `result.success` so the same hook works under both adapters.
 :::
 
-## Related Documentation
+## Related
 
 - [Controllers](/docs/concepts/controllers) - Using validators in controllers
 - [Middleware](/docs/concepts/middleware) - Understanding middleware flow
-- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Context API](/docs/concepts/context) - Working with Context in hooks
+- [Configuration](/docs/guides/configuration) - Global error and validation setup
+- [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Zod Documentation](https://zod.dev) - Complete Zod schema guide
-
----
-
-**Next Steps:**
-- Learn about [Middleware](/docs/concepts/middleware)
-- Explore [Error Handling](/docs/guides/configuration)
-- Understand [Context API](/docs/concepts/context)
