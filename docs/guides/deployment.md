@@ -20,7 +20,14 @@ This guide is currently under development. Check back soon for comprehensive dep
 
 ## Quick Start
 
-For now, you can build your application with:
+Check the project first — the mistakes that only surface in production are exactly the ones
+`doctor` looks for, and it exits non-zero so it fits in a CI step:
+
+```bash
+asena doctor
+```
+
+Then build your application:
 
 ```bash
 asena build
@@ -32,6 +39,16 @@ Then run the production build:
 bun dist/index.asena.js
 ```
 
+::: warning Two things worth checking before a first production deploy
+- **`buildOptions.minify.identifiers` must be `false`.** Component names are read at runtime, and
+  a bundle built with identifiers minified fails to resolve them — in production only. The build
+  forces it off and `asena doctor` reports it. `keepNames: true` does not substitute for it. See
+  [Minification and component names](/docs/cli/commands#minification-and-component-names).
+- **One copy of `@asenajs/asena`, `hono` and `zod` each.** Two copies break `instanceof` and the
+  `HttpException` brand, turning a deliberate `404` into a `500` with no clue as to why.
+  `asena doctor` checks for this.
+:::
+
 ## Graceful Shutdown and Probes
 
 Two things a deployment needs are already available:
@@ -41,7 +58,8 @@ Two things a deployment needs are already available:
 
 ## Related
 
-- [CLI Build Command](/docs/cli/commands#build) - Building a production bundle
+- [CLI Build Command](/docs/cli/commands#asena-build) - Building a production bundle
+- [asena doctor](/docs/cli/commands#asena-doctor) - Pre-flight check for the project's configuration
 - [CLI Configuration](/docs/cli/configuration) - Build options and output
 - [Server Configuration](/docs/guides/configuration) - Runtime server settings
 - [Component Lifecycle](/docs/concepts/lifecycle) - Graceful shutdown, signals and health probes

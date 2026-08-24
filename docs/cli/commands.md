@@ -1,6 +1,6 @@
 ---
 title: CLI Commands
-description: Reference for every CLI command - create, generate, dev start, build and init, including shortcuts
+description: Reference for every CLI command - create, generate, dev start, build, init and doctor, including shortcuts
 outline: deep
 ---
 
@@ -356,10 +356,9 @@ Build the project for production deployment.
 ### Features
 
 - **Configuration Processing** - Reads and processes `asena-config.ts`
-- **Code Generation** - Creates a temporary build file combining all components
-- **Import Management** - Automatically organizes imports based on project structure
-- **Server Integration** - Integrates all components with AsenaServer
-- **No Manual Registration** - Controllers are automatically discovered and registered
+- **Wrapper Entry** - Bundles through a temporary wrapper created **outside** your source folder; your entry file is never rewritten and its module-level code is not executed at build time
+- **Import Management** - Detected components are handed to the server through the build component list. No manual imports needed
+- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list
 
 ### Usage
 
@@ -370,10 +369,12 @@ asena build
 ### Build Process
 
 1. Reads `asena-config.ts`
-2. Scans source folder for controllers, services, middlewares, configs, and websockets
-3. Generates a temporary build file with all imports
-4. Bundles the application using Bun's bundler
-5. Outputs compiled files to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
+2. Scans the source folder for controllers, services, middlewares, configs and websockets
+3. Writes a temporary wrapper entry in the OS temp directory: it imports every scanned component, publishes them on `globalThis[Symbol.for('asena.buildComponents')]`, then imports your entry file
+4. Bundles that wrapper with Bun's bundler and deletes the temporary files
+5. Outputs the bundle to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
+
+The output is always `<outdir>/index.asena.js`, whatever your entry file is called.
 
 ### Build Output
 
@@ -387,6 +388,57 @@ After building, you can run your application with:
 ```bash
 bun dist/index.asena.js
 ```
+:::
+
+::: warning Upgrading from asena-cli 0.x builds
+The build used to rewrite your entry file: it parsed the `AsenaServerFactory.create({...})` call
+and injected a `components: [...]` array into it. That imposed formatting rules nobody could see
+in the source — the call had to match an exact shape, the options object could not contain
+comments, the factory token could appear only once — and it executed the entry's module-level
+code at build time ([#25](https://github.com/AsenaJs/Asena-cli/issues/25)).
+
+The wrapper entry removes all of it. **What you need to know:**
+
+- **Your entry file is untouched.** Any formatting, any comments, arbitrary code around the
+  bootstrap call — all fine now.
+- **A `components: [...]` array you wrote is yours.** It is no longer overwritten, and a
+  non-empty one takes precedence over the build's list. Delete it to let the build supply the
+  components; keep it to pin them by hand. See
+  [Which source wins](/docs/concepts/dependency-injection#which-source-wins).
+- **This requires `@asenajs/asena` 0.11 or newer.** That is the first core version that reads
+  the build component list. On an older core the bundle falls back to the filesystem scan and
+  dies in production with `No components or configuration found`, so the CLI declares
+  `^0.11.0`.
+- **`minify.identifiers` is forced off.** See below.
+:::
+
+### Minification and component names
+
+Component registration is name-based: `@Inject('UserService')` and
+`@Repository({ databaseService: 'MainDb' })` look their target up by the class's runtime `.name`.
+Minifying identifiers renames the class, and the component registers under the mangled name — the
+lookup then fails in production and only in production.
+
+So when `buildOptions.minify` enables identifier minification, **the build turns it off** and says
+so:
+
+```
+[build] minify.identifiers disabled: component names are read at runtime
+```
+
+`minify: true` (which implies all three flags) is likewise narrowed to
+`{ whitespace: true, syntax: true, identifiers: false }`. Whitespace and syntax minification are
+untouched — they are where the size win is anyway.
+
+::: danger `keepNames` does not save you
+`keepNames: true` looks like the answer and is not: Bun's bundler (measured on 1.4.0) does **not**
+preserve class names under identifier minification, whether `keepNames` sits inside `minify` or
+beside it. The only rule that works is `identifiers: false`, which is what `asena init` writes and
+what the build now enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
+as a safeguard.
+
+[`asena doctor`](#asena-doctor) flags a config that enables identifier minification, so a project
+that hand-edits `asena-config.ts` finds out before the deploy rather than after it.
 :::
 
 ## asena init
@@ -428,9 +480,11 @@ export default defineConfig({
 });
 ```
 
-::: tip Why `identifiers: false` and `keepNames: true`
-Component registration is name-based. Minifying identifiers would rename your classes and
-break `@Inject('UserService')` lookups at runtime.
+::: tip Why `identifiers: false`
+Component registration is name-based. Minifying identifiers renames your classes and breaks
+`@Inject('UserService')` lookups at runtime. `keepNames: true` is written alongside it for
+readable stack traces, but it is **not** what protects the component names — see
+[Minification and component names](#minification-and-component-names).
 :::
 
 ::: info When to Use `asena init`
@@ -438,6 +492,51 @@ Use `asena init` when:
 - Adding Asena to an existing project
 - Manually setting up a project without `asena create`
 - Resetting configuration to defaults
+:::
+
+## asena doctor
+
+Check the current project for common static configuration mistakes that the other commands do not
+catch. It is **read-only** — it reports and never modifies anything.
+
+### Usage
+
+```bash
+asena doctor        # one line per check
+asena doctor --json # the result array as JSON
+```
+
+The exit code is `1` when any check failed and `0` otherwise, so it drops straight into CI.
+
+### Checks
+
+| Check | What it verifies |
+|:------|:-----------------|
+| `tsconfig-decorators` | `experimentalDecorators` and `emitDecoratorMetadata` are both `true` in `tsconfig.json` |
+| `asena-config` | An `asena-config.ts` is found and importable, its `rootFile` and `sourceFolder` exist on disk, and `minify.identifiers` is not enabled |
+| `direct-dependencies` | `@asenajs/asena` and `reflect-metadata` are direct dependencies, plus `hono` / `zod` when the matching adapter is installed — they are [peer dependencies](/docs/adapters/overview) your project owns |
+| `duplicate-packages` | `@asenajs/asena`, `hono` and `zod` each resolve to a single version under `node_modules` (including the `.bun` store) |
+| `peer-ranges` | Every installed `@asenajs/*` package's peer range for `@asenajs/asena` is satisfied by the installed core version |
+
+### Output
+
+```
+✓ tsconfig-decorators — experimentalDecorators and emitDecoratorMetadata are enabled
+✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
+  hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
+✓ direct-dependencies — all required packages are direct dependencies
+✓ duplicate-packages — @asenajs/asena@0.11.0, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.11.0
+```
+
+A failing check prints an indented `hint:` line with the fix. A check that cannot run at all — no
+`tsconfig.json`, unparsable JSON — reports as a failure explaining why rather than throwing.
+
+::: tip Why `duplicate-packages` is worth a check of its own
+Two installed copies of `@asenajs/asena`, `hono` or `zod` break every `instanceof`-shaped test in
+the framework — most visibly the [`HttpException` brand](/docs/guides/error-handling), which stops
+matching and turns a deliberate `404` into a `500`. The symptom never points at the cause. This
+check is the fastest way to rule it in or out.
 :::
 
 ## Command Reference
@@ -456,6 +555,7 @@ Use `asena init` when:
 | `asena dev start`    | -               | Start development server             |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
+| `asena doctor`       | -               | Check the project for configuration mistakes |
 | `asena --version`    | `asena -V`      | Show CLI version                     |
 | `asena --help`       | `asena -h`      | Show help                            |
 
