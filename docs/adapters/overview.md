@@ -160,6 +160,21 @@ return context.send({ id, page, body }, 200);
 The differences are in what `context.req` gives you: a native `Request` on Ergenecore,
 a `HonoRequest` on Hono. See [Context API](/docs/concepts/context) for the full surface.
 
+Three parts of that surface used to differ between the adapters and no longer do:
+
+| | Both adapters |
+|:--|:--|
+| `getQuery(name)` | `Promise<string \| undefined>` — `undefined` when absent, `''` when present but empty. Ergenecore returned `''` for both until `4.0.0`. |
+| `setResponseHeader(key, value)` | Replaces any value already set. Hono appended until `4.0.0`. |
+| `appendResponseHeader(key, value)` | Appends, keeping existing values — for `Vary`, `Link` and other multi-valued headers. New in `4.0.0` on both. |
+
+::: warning Upgrading to adapter 4.0.0
+Both adapters release the change above as a **major**. Neither one moved on its own: the core
+`AsenaContext` contract in `@asenajs/asena` 0.11 is what both now implement, which is why
+handler code stays portable. The per-case migration notes live on
+[Context API](/docs/concepts/context#query-parameters).
+:::
+
 ## Migration Between Adapters
 
 ::: tip
