@@ -1457,13 +1457,28 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
+## Next Release (In progress)
+
+Not published yet. Tracked here so the behaviour changes are visible before the release lands. Version numbers are settled at release time; the adapters go out as a **major** because their context semantics change.
+
+- **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
+- **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
+- **[`createTestApp` walks the injection closure](/docs/testing/test-app#components)** - a test names its roots; classes reached through `@Inject(Class)` come along, and a dependency nobody provides fails before the boot instead of mid-boot
+- **[`asena doctor`](/docs/cli/commands#asena-doctor)** - a read-only check for decorator flags, duplicate package copies, unsatisfied peer ranges and build settings that mangle component names
+- **[`asena build` no longer rewrites your entry file](/docs/cli/commands#asena-build)** - it bundles through a temporary wrapper instead, so the entry's formatting rules are gone and its module-level code no longer runs at build time
+- **Unified context semantics** *(adapter majors)* - [`getQuery` returns `undefined` when absent](/docs/concepts/context#query-parameters) on both adapters, [`setResponseHeader` replaces and `appendResponseHeader` appends](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader) on both, and [SSE messages can carry a `comment`](/docs/concepts/context#keep-alive-comments) for keep-alive pings
+- **[Lazy decorator options](/docs/packages/drizzle#lazy-options)** - `@Database`, `@Redis` and `@Otel` accept a thunk, so a service configured from the environment can ship inside a package
+- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method now fails the boot instead of silently running with autocommit
+
+---
+
 ## Current Release (v0.10.x · Stable)
 
 These features are **stable and production-ready** in the current release:
 
 ### New in v0.10
 
-- **[Component Lifecycle](/docs/concepts/lifecycle)** - `@OnStart` and `@OnStop`, a symmetric pair around `server.start()` and `server.stop()`. `@PostConstruct` is now a deprecated alias of `@OnStart`, and start hooks moved out of the component scan into `start()` - so a hook sees the finished graph, can publish through `ulak`, and no request can reach a component whose hook has not run
+- **[Component Lifecycle](/docs/concepts/lifecycle)** - `@OnStart` and `@OnStop`, a symmetric pair around `server.start()` and `server.stop()`. `@PostConstruct` is now a deprecated alias of `@OnStart`, and start hooks moved out of the component scan into `start()` - so a hook sees the finished graph, a `@Config` finds its injected components already started, and no request can reach a component whose hook has not run. A hook still cannot publish through `ulak`: it runs before the transports are wired
 - **Graceful shutdown, completed** - `stop()` reordered around the new hooks, `ulak.dispose()` called automatically, the WebSocket transport's `destroy()` actually invoked, and every teardown step contained so one failure cannot strand the rest
 - **[Signal handling](/docs/concepts/lifecycle#signal-handling)** - `SIGTERM` / `SIGINT` / `SIGHUP` call `stop()` by default; handlers are installed in `start()` and removed in `stop()`, with `forceExitAfter` and `onUnhandledError` as opt-ins
 - **[`keepAlive`](/docs/concepts/lifecycle#keepalive-and-headless-workers)** - a headless worker starts its loop in `@OnStart`, returns, and the process stays alive. The run loop no longer has to live in the entry file
@@ -1545,7 +1560,31 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**Features:**
+**The first step is landing in the next release:**
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
+gap that made a plugin impossible to write at all — the component scan never walks
+`node_modules`, so a package's components had no way into the container short of the consumer
+re-declaring them. A package can now export its components and the application hands them in:
+
+```typescript
+imports: [...platformComponents, OtelService]
+```
+
+Combined with the [lazy decorator options](/docs/packages/drizzle#lazy-options) that landed
+alongside it, a package can also ship a *configured* `@Database`, `@Redis` or `@Otel` service and
+still read the consuming application's environment at the right moment.
+
+**What `imports` does not do**, and what the plugin system is for:
+
+| Missing | Why it matters |
+|:--------|:---------------|
+| A plugin *unit* | `imports` takes a flat list of classes. There is no object a package can export that carries its components, its configuration schema and its identity together |
+| Lifecycle hooks of its own | A plugin cannot run anything at load time. Only its components have [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) |
+| Dependency resolution between plugins | Nothing declares "this plugin needs that one", so ordering is the application's problem |
+| Configuration management | A plugin's options are whatever its own decorators read. There is no per-plugin config surface and no validation |
+| A registry | Discovery is npm search |
+
+**Features still planned:**
 - Plugin lifecycle hooks (`onLoad`, plus the plugin-level equivalents of the component `@OnStart` / `@OnStop` [shipped in v0.10](/docs/concepts/lifecycle))
 - Plugin dependency resolution
 - Plugin configuration management
@@ -1712,7 +1751,7 @@ import type { Context } from '@asenajs/ergenecore';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = await context.getQuery('page') || '1';
+    const page = (await context.getQuery('page')) ?? '1';
     return context.send({ users: [], page });
   }
 
@@ -1739,7 +1778,7 @@ import type { Context } from '@asenajs/hono-adapter';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = await context.getQuery('page') || '1';
+    const page = (await context.getQuery('page')) ?? '1';
     return context.send({ users: [], page });
   }
 
@@ -1896,8 +1935,8 @@ Access URL query strings:
 @Get('/search')
 async search(context: Context) {
   const query = await context.getQuery('q');
-  const page = await context.getQuery('page') || '1';
-  const limit = await context.getQuery('limit') || '10';
+  const page = (await context.getQuery('page')) ?? '1';
+  const limit = (await context.getQuery('limit')) ?? '10';
 
   return context.send({ query, page, limit });
 }
@@ -1994,7 +2033,7 @@ import type { Context } from '@asenajs/hono-adapter'
 | Method | Description | Example |
 |:-------|:------------|:--------|
 | `getParam(key)` | Get route parameter | `context.getParam('id')` |
-| `getQuery(key)` | Get single query parameter | `await context.getQuery('page')` |
+| `getQuery(key)` | Get single query parameter (`undefined` when absent) | `await context.getQuery('page')` |
 | `getQueryAll(key)` | Get all values for query parameter | `await context.getQueryAll('colors')` |
 | `getBody<T>()` | Get typed request body | `await context.getBody<User>()` |
 | `getParseBody()` | Get parsed multipart/form-data body | `await context.getParseBody()` |
@@ -2023,8 +2062,9 @@ import type { Context } from '@asenajs/hono-adapter'
 The whole table above is unified - `setResponseHeader()` included. What actually differs is
 the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
 
-One behavioural difference worth knowing: calling `setResponseHeader()` twice with the same
-key **replaces** the value on Ergenecore but **appends** a second header on Hono.
+Response-header semantics are now identical too: `setResponseHeader()` **replaces** on both
+adapters, and `appendResponseHeader()` **appends** on both. Hono's `setResponseHeader()` used to
+append — see [Response Headers](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader).
 
 See adapter documentation for the complete API reference.
 :::
@@ -3244,6 +3284,7 @@ Asena provides a powerful IoC (Inversion of Control) container with field-based 
 - [What is DI](#what-is-dependency-injection) - Inversion of control, and what the container does for you.
 - [@Inject](#basic-injection-with-inject) - Field-based injection by class or by name.
 - [Expressions](#injection-with-expressions) - Resolving a dependency through an expression.
+- [@Value](#value-configuration-injection) - Reading configuration straight from the environment.
 - [@Strategy](#strategy-pattern-with-strategy) - Injecting every implementation of an interface.
 - [Lifecycle Hooks](#lifecycle-hooks) - When injected fields become safe to use.
 - [Service Scopes](#service-scopes) - How scope changes what the container hands you.
@@ -3330,6 +3371,19 @@ export class UserController {
 - **String-based** - Loose coupling, dynamic resolution
 :::
 
+::: tip A missing name names its caller
+When nothing is registered under the key, the container reports which component asked for it:
+
+```
+'UserService' is not registered (injected into UserController.userService)
+```
+
+The original `'UserService' is not registered` is attached as `cause`. In a test,
+[`createTestApp`](/docs/testing/test-app#missing-dependencies-fail-before-the-boot) catches the
+same mistake earlier still — before the boot rather than during it — because a name-injected
+dependency is the one edge its component walk cannot follow.
+:::
+
 ## Injection with Expressions
 
 Expressions allow you to transform the injected dependency or extract specific properties.
@@ -3406,6 +3460,78 @@ export class ApiService {
 |:----------|:-----|:------------|
 | `ServiceClass` | `Class` or `string` | Service to inject |
 | `expression` | `(service) => any` | Optional transformation function |
+
+## @Value: configuration injection
+
+`@Inject` wires collaborators. `@Value` wires **configuration**: it reads a field's value from
+`process.env` when the container builds the component, so a service does not have to reach for
+`process.env` itself — which is what makes the value hard to see and hard to replace in a test.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, Value } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class PoolService {
+  @Inject(DataSource)
+  private dataSource: DataSource;
+
+  @Value('DB_POOL_MAX', { parse: Number, default: 10 })
+  private poolMax: number;
+
+  @Value('JWT_SECRET')          // required: no default
+  private jwtSecret: string;
+}
+```
+
+### Options
+
+```typescript
+@Value(key: string, options?: {
+  default?: unknown;               // used when the variable is not set
+  parse?: (raw: string) => unknown; // converts the raw string
+})
+```
+
+| Option | Behaviour |
+|:-------|:----------|
+| `parse` | Runs on the raw environment string only. `parse: Number`, `parse: (v) => v === 'true'`, `parse: JSON.parse` — anything that takes a string. A `default` is used **as given** and never goes through `parse`. |
+| `default` | Its **presence** is what counts, not its truthiness — `0`, `''` and `null` are honoured as defaults. |
+
+### Required values fail loudly
+
+A field with no `default` whose variable is unset fails the component's construction with an
+error naming the class, the field and the key:
+
+```
+@Value('JWT_SECRET') on PoolService.jwtSecret: environment variable is not set and no default was given
+```
+
+For a singleton that happens at registration, so a misconfigured deployment cannot boot; for a
+[transient](#prototype-scope) it happens on the first resolve. Either way the application never
+runs with the value quietly `undefined`.
+
+### Precedence
+
+**Field initializer > environment.** An initializer that produced a value is left alone, exactly
+as it is for `@Inject`:
+
+```typescript
+@Value('REGION', { default: 'eu-central-1' })
+private region: string = 'local';   // stays 'local' - the environment is not consulted
+```
+
+In a test, [`mockComponent`](/docs/testing/mock-component#overriding-value-fields) adds one more
+level in front: **override > initializer > environment**.
+
+::: tip `@Value` fields are writable
+Unlike `@Inject` and `@Strategy`, which install accessors with no setter, `@Value` lands as a
+plain writable property. There is no resolved service behind it to protect, so a test can assign
+to it directly.
+:::
+
+Inheritance follows the same rule as `@Inject`: a field redeclared in a subclass wins over the
+base class's declaration. See [Inheritance](/docs/concepts/inheritance).
 
 ## Strategy Pattern with @Strategy
 
@@ -3735,17 +3861,21 @@ export class CountryService {
 Construction, per component:
 
 1. Class constructor runs
-2. All `@Inject` dependencies are resolved
-3. All `@Strategy` arrays are resolved (a separate pass)
-4. Registered `@PostProcessor`s run
+2. All [`@Value`](#value-configuration-injection) fields are read from the environment
+3. All `@Inject` dependencies are resolved
+4. All `@Strategy` arrays are resolved (a separate pass)
+5. Registered `@PostProcessor`s run
 
 Then, once every component exists, from `server.start()`:
 
-5. All `@OnStart` methods are called, in registration order — dependencies before dependents
+6. All `@OnStart` methods are called, in registration order — dependencies before dependents
 
 And from `server.stop()`, in the reverse of that order:
 
-6. All `@OnStop` methods are called
+7. All `@OnStop` methods are called
+
+Configuration lands before collaborators on purpose: a component missing a required `@Value`
+fails before the container starts resolving the graph underneath it.
 
 ::: danger A throwing `@OnStart` aborts the boot
 The error is **not** swallowed. The components that already started are rolled back and
@@ -3935,6 +4065,64 @@ export class ChatSocket extends AsenaWebSocketService<void> {
   }
 }
 ```
+
+## Registering components from packages
+
+The component scan walks your `sourceFolder`. It never walks `node_modules`, so a component that
+ships **inside a package** — a shared platform library, `OtelService`, a database service your
+team publishes — is invisible to it. The `imports` option is how a package hands its components
+in:
+
+```typescript
+import { AsenaServerFactory } from '@asenajs/asena';
+import { platformComponents } from '@acme/asena-platform';
+import { OtelService } from '@asenajs/asena-otel';
+
+await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...platformComponents, OtelService],
+});
+```
+
+Four rules define it:
+
+- **`imports` adds, it never replaces.** Whatever the scan, an explicit `components` list or the
+  build found is registered as well. There is no configuration in which `imports` is the reason a
+  component went missing.
+- **Every entry must carry its own component decorator** — `@Service`, `@Controller`,
+  `@Middleware`, … An undecorated class throws
+  `imports entry <Name> carries no component decorator`, because a silently dropped import is
+  exactly the failure this option exists to prevent.
+- **The list is flattened one level**, so a package can export an array of its components and you
+  can spread or nest it.
+- **Name collisions still fail.** An import whose registered name clashes with a scanned class
+  raises the usual `Duplicate component name detected`. Give the package component an explicit
+  `@Service('name')` if that happens.
+
+`imports` on its own is a valid component source: an application made only of packages — no
+`sourceFolder` to scan, no `components` list — boots instead of failing with
+`No components or configuration found`.
+
+The same option exists on [`createTestApp`](/docs/testing/test-app#imports).
+
+### Which source wins
+
+`imports` sits beside the *primary* component source, which is picked in this order:
+
+| Order | Source | When it applies |
+|:------|:-------|:----------------|
+| 1 | `components: [...]` | You passed a non-empty list to `AsenaServerFactory.create` |
+| 2 | The build component list | The bundle was produced by [`asena build`](/docs/cli/commands#asena-build), which publishes its scanned classes on `globalThis[Symbol.for('asena.buildComponents')]` before your entry module evaluates |
+| 3 | The `sourceFolder` scan | Neither of the above — the classic development path driven by `asena-config.ts` |
+
+Whichever wins, `imports` is registered on top of it.
+
+::: tip A hand-written `components:` list is yours
+Because an explicit list outranks the build list, a `components: [...]` array you wrote by hand
+survives `asena build` and wins. Earlier CLI versions rewrote that array during the build; they
+no longer touch your entry file at all. See [`asena build`](/docs/cli/commands#asena-build).
+:::
 
 ## Reaching the container from outside
 
@@ -5050,6 +5238,14 @@ Without it, a cache in front of the API can serve a response carrying one origin
 `Access-Control-Allow-Origin` to a request from a different origin. With `origin: '*'` the answer is
 the same for everyone, so no `Vary` is set and cache hit rate is unaffected.
 
+::: tip Since hono-adapter 4.0 / ergenecore 4.0, `Vary` is appended
+Both middlewares now add `Origin` through
+[`appendResponseHeader`](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader)
+with an "already listed" guard. A `Vary: Accept-Encoding` written by an upstream middleware
+survives instead of being replaced, and `Origin` is never listed twice when the CORS middleware
+runs more than once (a global plus a route-level registration).
+:::
+
 ### Rate Limiter Middleware
 
 ```typescript
@@ -5528,6 +5724,15 @@ const id = Number(context.getParam('id'));
 
 Extract query string values using `getQuery()` and `getQueryAll()`.
 
+`getQuery()` returns `Promise<string | undefined>`. It distinguishes the two cases a query string
+can express, and both adapters answer identically:
+
+| URL | `await getQuery('page')` |
+|:----|:-------------------------|
+| `/search` | `undefined` — the parameter is absent |
+| `/search?page=` | `''` — present but empty |
+| `/search?page=2` | `'2'` |
+
 ```typescript
 @Get('/search')
 async search(context: Context) {
@@ -5537,9 +5742,9 @@ async search(context: Context) {
   // Multiple values: ?tags=node&tags=bun
   const tags = await context.getQueryAll('tags');
 
-  // Optional with default
-  const page = await context.getQuery('page') || '1';
-  const limit = await context.getQuery('limit') || '10';
+  // Optional with default - ?? keeps a deliberate empty value intact
+  const page = (await context.getQuery('page')) ?? '1';
+  const limit = (await context.getQuery('limit')) ?? '10';
 
   return context.send({
     query,
@@ -5549,6 +5754,15 @@ async search(context: Context) {
   });
 }
 ```
+
+::: warning Upgrading from ergenecore 3.x
+Ergenecore used to return `''` for an absent parameter, which made "not given" and "given as
+empty" indistinguishable. It now returns `undefined`, matching Hono and the core contract.
+
+`|| default` behaves the same as before for an absent parameter and is safe to keep. It is only
+wrong where the empty string is meaningful — `?q=` used to mean "clear the filter" and now falls
+through to the default with `||`. Switch those to `?? default`, which only fires on `undefined`.
+:::
 
 ### Request Body
 
@@ -5999,12 +6213,43 @@ async events(context: Context) {
 
 ```typescript
 interface SSEMessage {
-  data: string;    // Event data (multi-line strings auto-split into separate data: lines)
-  event?: string;  // Event type name
-  id?: string;     // Event ID for reconnection
-  retry?: number;  // Reconnection time in milliseconds
+  data?: string;    // Event data (multi-line strings auto-split into separate data: lines)
+  comment?: string; // Comment lines, emitted as ": <line>" and invisible to EventSource
+  event?: string;   // Event type name
+  id?: string;      // Event ID for reconnection
+  retry?: number;   // Reconnection time in milliseconds
 }
 ```
+
+At least one of `data` and `comment` must be set — a frame carrying neither would say nothing at
+all, so `writeSSE` throws `writeSSE: message needs data or comment`.
+
+#### Keep-alive comments
+
+A comment is emitted as `: <line>` (one line per newline in the string), which the SSE
+specification defines as a no-op. `EventSource` clients never see it, so it does not fire an
+`onmessage` handler or advance the last-event-id — but it *is* traffic, which is exactly what
+keeps an idle connection from being closed by a proxy:
+
+```typescript
+@Get('/live')
+async live(context: Context) {
+  return context.streamSSE(async (stream) => {
+    while (!stream.aborted) {
+      await stream.writeSSE({ comment: 'ping' });   // writes ": ping\n\n"
+      await Bun.sleep(15_000);
+    }
+  });
+}
+```
+
+A message may carry both: the comment lines are written first, then the event.
+
+::: tip Before, a heartbeat had to be a real event
+The usual workaround was `writeSSE({ data: 'heartbeat', event: 'ping' })`, which every client had
+to know about and filter out. It still works — nothing about `data` changed — but a `comment` is
+the shape that needs no cooperation from the client.
+:::
 
 #### Error Handling
 
@@ -6116,7 +6361,7 @@ The SSE stream writer (`streamSSE`) additionally provides:
 
 | Method | Parameters | Description |
 |:-------|:-----------|:------------|
-| `writeSSE(message)` | `SSEMessage` | Write a formatted SSE message |
+| `writeSSE(message)` | `SSEMessage` | Write a formatted SSE message. Needs `data`, `comment`, or both — throws when given neither |
 
 ::: tip Auto-Close
 Streams are automatically closed after the callback completes. You don't need to call `stream.close()` manually unless you want to close early.
@@ -6258,9 +6503,19 @@ async search(context: Context) {
 }
 ```
 
-### Set Response Header - `setResponseHeader()`
+### Response Headers - `setResponseHeader()` and `appendResponseHeader()`
 
-Set a response header that will be merged into the final response. Useful in middleware for adding headers that carry through to streaming responses.
+Both write a header that is merged into the final response — useful in middleware for headers that
+must carry through to streaming responses. They differ in what happens to a value that is already
+there:
+
+| Method | Existing value |
+|:-------|:---------------|
+| `setResponseHeader(key, value)` | **Replaced.** The last write wins. |
+| `appendResponseHeader(key, value)` | **Kept.** The new value is added alongside it. |
+
+Set is the right default: most headers hold exactly one value, and a second `Content-Type` or
+`Cache-Control` is a bug, not a list.
 
 ```typescript
 @Get('/download')
@@ -6271,6 +6526,32 @@ async download(context: Context) {
   return context.send({ data: 'example' });
 }
 ```
+
+Append is for the headers that genuinely are lists — `Vary`, `Link`, `Accept-Encoding` — where
+clobbering what an upstream middleware wrote is a real bug. A CORS middleware that needs
+`Vary: Origin` must not drop an upstream `Vary: Accept-Encoding`:
+
+```typescript
+context.appendResponseHeader('Vary', 'Origin');
+// upstream had "Vary: Accept-Encoding"  ->  "Vary: Accept-Encoding, Origin"
+```
+
+::: warning Not for `Set-Cookie`
+Cookies go through [`setCookie()`](#cookie-management), never through either method.
+`Set-Cookie` is the one header that must repeat rather than comma-join, and on Ergenecore
+`appendResponseHeader` comma-joins.
+:::
+
+::: warning Upgrading from hono-adapter 3.x
+`setResponseHeader` on the Hono adapter used to **append**. Calling it twice with the same key
+left two values on the response; the same header set by both a global and a route middleware was
+emitted twice — which is what produced duplicated `X-RateLimit-*` headers when two rate limiters
+overlapped. It now replaces, matching Ergenecore and the core contract.
+
+Code that relied on the old behaviour to build a multi-valued header should call
+`appendResponseHeader` instead. Everything else keeps working, and a few double-header bugs
+disappear on their own.
+:::
 
 ## Adapter-Specific Features
 
@@ -6327,7 +6608,7 @@ async useNative(context: Context) {
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
 | `getParam(name)` | `string` | Get route parameter |
-| `getQuery(name)` | `Promise<string>` | Get single query parameter |
+| `getQuery(name)` | `Promise<string \| undefined>` | Get single query parameter — `undefined` when absent, `''` when present but empty |
 | `getQueryAll(name)` | `Promise<string[]>` | Get all values of a query parameter |
 | `getAllQueries()` | `Record<string, string \| string[]>` | Get all query parameters as object |
 | `getBody<T>()` | `Promise<T>` | Parse JSON body with type |
@@ -6344,7 +6625,8 @@ async useNative(context: Context) {
 | `send(data, statusOrOptions?)` | `Response` | Send JSON/text response |
 | `html(data, statusOrOptions?)` | `Response` | Send HTML response |
 | `redirect(url)` | `Response` | Redirect to URL |
-| `setResponseHeader(key, value)` | `void` | Set a response header for middleware merging |
+| `setResponseHeader(key, value)` | `void` | Set a response header, **replacing** any value already set for it |
+| `appendResponseHeader(key, value)` | `void` | Append to a response header, **keeping** existing values (`Vary`, `Link`, …) |
 
 ### Streaming Methods
 
@@ -6414,11 +6696,11 @@ return context.send({
 `await` does not raise a type error in every position - it silently yields the Promise
 object instead of the value:
 ```typescript
-// ❌ Wrong - `page` is a Promise, so `|| '1'` never applies and Number() gives NaN
-const page = context.getQuery('page') || '1';
+// ❌ Wrong - `page` is a Promise, so `?? '1'` never applies and Number() gives NaN
+const page = context.getQuery('page') ?? '1';
 
 // ✅ Correct
-const page = (await context.getQuery('page')) || '1';
+const page = (await context.getQuery('page')) ?? '1';
 ```
 `getParam()`, `getAllQueries()`, `getValue()`, `setValue()` and `send()` are synchronous.
 :::
@@ -7425,7 +7707,7 @@ public onFound(filePath: string, c: Context): void {
 ::: danger Setting response headers here does not work on Ergenecore
 `c.setResponseHeader()` writes into the context's response object, which Ergenecore only
 consults for `send()`/`html()`. Static responses are built directly from the file, so the
-header is dropped. (On Hono it does work, because the wrapper appends to the live response.)
+header is dropped. (On Hono it does work, because the wrapper writes into the live response.)
 
 Use the service's `extra` property instead - it is honoured by both adapters:
 
@@ -12022,6 +12304,13 @@ This guarantees that PostProcessors are ready before any user component is creat
 
 ::: warning PostProcessor dependencies are not post-processed
 Dependencies of PostProcessors (services injected via `@Inject`) are also created in Phase A and are **not** post-processed. Keep PostProcessor dependencies minimal.
+
+This is a real trap, not a technicality: a class that *should* be wrapped and lands in a
+processor's dependency closure is silently left unwrapped, and the wrapper's whole reason for
+existing quietly stops applying. `asena-drizzle` now
+[fails the boot when it detects it](/docs/packages/drizzle#the-boot-guard) rather than starting a
+server whose `@Transaction` methods run with autocommit — a useful pattern for any processor whose
+wrapping is load-bearing.
 :::
 
 ::: warning Phase A keeps the old start-hook timing
@@ -12547,6 +12836,21 @@ return context.send({ id, page, body }, 200);
 The differences are in what `context.req` gives you: a native `Request` on Ergenecore,
 a `HonoRequest` on Hono. See [Context API](/docs/concepts/context) for the full surface.
 
+Three parts of that surface used to differ between the adapters and no longer do:
+
+| | Both adapters |
+|:--|:--|
+| `getQuery(name)` | `Promise<string \| undefined>` — `undefined` when absent, `''` when present but empty. Ergenecore returned `''` for both until `4.0.0`. |
+| `setResponseHeader(key, value)` | Replaces any value already set. Hono appended until `4.0.0`. |
+| `appendResponseHeader(key, value)` | Appends, keeping existing values — for `Vary`, `Link` and other multi-valued headers. New in `4.0.0` on both. |
+
+::: warning Upgrading to adapter 4.0.0
+Both adapters release the change above as a **major**. Neither one moved on its own: the core
+`AsenaContext` contract in `@asenajs/asena` 0.11 is what both now implement, which is why
+handler code stays portable. The per-case migration notes live on
+[Context API](/docs/concepts/context#query-parameters).
+:::
+
 ## Migration Between Adapters
 
 ::: tip
@@ -12737,10 +13041,53 @@ bun add @asenajs/ergenecore zod
 library and its version.
 
 **Requirements:**
-- Bun v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- Bun v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
+
+## Context semantics
+
+Ergenecore implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
+is portable between adapters. Two points changed in `4.0.0`:
+
+```typescript
+// undefined when absent, '' when present but empty ("?page=")
+const page = (await context.getQuery('page')) ?? '1';
+
+// Replaces any value already set for that header
+context.setResponseHeader('X-Request-Id', crypto.randomUUID());
+
+// Appends, keeping existing values - for Vary, Link and other multi-valued headers
+context.appendResponseHeader('Vary', 'Origin');
+```
+
+`appendResponseHeader` comma-joins, and header names are matched case-insensitively.
+`Set-Cookie` cannot be comma-joined and is **not** supported here — cookies go through
+`setCookie`.
+
+An SSE message may carry a `comment` instead of — or alongside — `data`, emitted as `: <line>`
+lines before any `event:` / `data:` lines and invisible to `EventSource` clients:
+
+```typescript
+return context.streamSSE(async (stream) => {
+  await stream.writeSSE({ data: JSON.stringify({ tick: 1 }), event: 'tick', id: '1' });
+  await stream.writeSSE({ comment: 'ping' });   // keep-alive
+});
+```
+
+A message needs `data`, `comment`, or both — `writeSSE` throws when given neither.
+
+::: warning Upgrading from 3.x
+`getQuery` returned `''` for an absent parameter and now returns `undefined`. `|| default` still
+produces the same result for an absent parameter; it is only wrong where the empty string carries
+meaning (`?q=` as "clear the filter"), which now falls through to the default. Switch those to
+`?? default`.
+
+`CorsMiddleware` benefits directly: it appends `Vary: Origin` instead of rewriting the header, so
+an upstream `Vary: Accept-Encoding` survives, and `Origin` is not listed twice when the middleware
+runs more than once.
+:::
 
 ## Quick Start
 
@@ -13431,10 +13778,49 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
+
+## Context semantics
+
+The adapter implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
+is portable between adapters. Three points of that contract are worth stating here, because two of
+them changed in `4.0.0`:
+
+- **`setResponseHeader(key, value)` replaces** any value already set for that header. It used to
+  append.
+- **`appendResponseHeader(key, value)` appends**, keeping existing values — for multi-valued
+  headers such as `Vary` and `Link`. Cookies go through `setCookie`, not through either method.
+- **`getQuery(name)` is typed `string | undefined`**: `undefined` when the parameter is absent,
+  `''` when present but empty (`?name=`). The runtime already behaved this way; only the type
+  changed.
+
+An SSE message may carry a `comment` instead of — or alongside — `data`. Comments are emitted as
+`: <line>` lines, which `EventSource` clients ignore, which makes them the right shape for a
+keep-alive ping:
+
+```typescript
+await stream.writeSSE({ comment: 'ping' });   // writes ": ping\n\n"
+```
+
+At least one of `data` / `comment` must be set; `writeSSE` throws otherwise.
+
+::: warning Upgrading from 3.x
+`setResponseHeader` appending was the source of two visible bugs, both of which this release
+closes:
+
+- **`CorsMiddleware` clobbered `Vary`.** It now appends `Vary: Origin` with an "already listed"
+  guard, so an upstream `Vary: Accept-Encoding` survives and `Origin` is never listed twice when
+  the middleware runs more than once.
+- **`RateLimiterMiddleware` duplicated its headers.** A global and a route limiter on the same
+  request emitted two sets of `X-RateLimit-*`. With replace semantics the innermost limiter wins
+  and each header appears exactly once.
+
+If your own code called `setResponseHeader` twice on purpose to build a multi-valued header,
+switch those calls to `appendResponseHeader`.
+:::
 
 ## Quick Start
 
@@ -13725,6 +14111,9 @@ The middleware automatically sets these headers:
 - `X-RateLimit-Remaining`: Remaining tokens
 - `X-RateLimit-Reset`: Unix timestamp when bucket resets
 - `Retry-After`: Seconds to wait (on 429 response)
+
+Each appears exactly once, even when a global and a route limiter both run — the innermost one
+writes last and wins. Before `4.0.0` that pairing emitted both sets.
 
 #### Using Rate Limiter
 
@@ -14797,6 +15186,28 @@ import { Database, AsenaDatabaseService } from '@asenajs/asena-drizzle';
 })
 export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {}
 ```
+
+#### Lazy options
+
+`@Database` also accepts a **thunk**. It runs when the container constructs the component — after
+module-level environment reading — so the configuration can come from values that do not exist yet
+at decoration time. That is what lets a database service live in a shared package:
+
+```typescript
+@Database(() => ({ type: 'bun-sql', config: env.db, drizzleConfig: { schema: Schemas } }))
+export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {}
+```
+
+A thunk cannot carry a `name` — the options do not exist when the decorator registers the class —
+so the thunk form registers under the **decorated class's own name** (`MyDatabase` above). Use the
+object form when you need an explicit registration key. The object form is otherwise unchanged.
+
+::: tip Composes with `imports`
+A `@Database` in a package is registered by handing it to
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages); the thunk
+is what lets that package read the consumer's environment at the right moment.
+:::
+
 ::: tip 💡 Schema Export Pattern
 
 We export all schemas as a single object for better TypeScript support:
@@ -14881,9 +15292,9 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 ```
 :::
 
-### 4. Activate the Transaction Post-Processor (optional)
+### 4. Activate the Transaction Post-Processor (required for `@Transaction`)
 
-If you plan to use `@Transaction` (see [Transactions](#transactions) below), drop a `@Drizzle`-decorated class somewhere in your source folder — `src/config/` is the convention. AsenaJS only scans your source files, never `node_modules`, so the transaction post-processor must be subclassed inside your project to be discovered.
+If you use `@Transaction` (see [Transactions](#transactions) below), drop a `@Drizzle`-decorated class somewhere in your source folder — `src/config/` is the convention. AsenaJS only scans your source files, never `node_modules`, so the transaction post-processor must be subclassed inside your project to be discovered.
 
 ```typescript
 // src/config/AppDrizzle.ts
@@ -14897,6 +15308,12 @@ The body is intentionally empty — this class exists only so AsenaJS's componen
 
 ::: tip Skip this step if you don't need transactions
 The package works fine without `@Drizzle` — you'll still get repositories, the typed query builder, pagination, and `BaseRepository#transaction(cb)`. You only need this step to enable the `@Transaction` decorator.
+:::
+
+::: danger Skipping it while using `@Transaction` now fails the boot
+Missing this step used to be silent: `@Transaction` methods ran with autocommit, every write
+landed, every test passed, and nothing was transactional. The boot now refuses to start and names
+each unwrapped method — see [The boot guard](#the-boot-guard).
 :::
 
 ### 5. Use in Services
@@ -14959,6 +15376,9 @@ The `@Database` decorator configures a database connection:
 })
 ```
 
+It also accepts `() => DatabaseOptions` — the same object, resolved at construction time. See
+[Lazy options](#lazy-options).
+
 The `pool` shape is exported as `DatabasePoolConfig` if you want to build it separately.
 
 ::: tip The pool is released on shutdown
@@ -14985,7 +15405,7 @@ The `@Repository` decorator configures a repository:
 
 ## @Drizzle Decorator API
 
-`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
+`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-required-for-transaction)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
 
 ```typescript
 @Drizzle({
@@ -15476,7 +15896,7 @@ export class EventRepository extends BaseRepository<typeof events> {}
 asena-drizzle ships a Spring-style `@Transaction` decorator backed by Bun's native `AsyncLocalStorage`. Repository calls made inside a `@Transaction`-wrapped method automatically pick up the active transaction — you do not have to thread a `tx` parameter through your code.
 
 ::: warning Setup required
-`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional). Without it the decorator silently does nothing because AsenaJS never sees the post-processor.
+`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-required-for-transaction). Without it the boot fails rather than starting a server whose transactions are not transactional — see [The boot guard](#the-boot-guard).
 :::
 
 ### `@Transaction` Decorator
@@ -15602,6 +16022,97 @@ export class OrderService {
 
 ::: warning Self-invocation
 `@Transaction` only wraps actual class methods. Arrow-function class properties (`run = async () => …`) live on the instance, not the prototype, and are not intercepted. Use the standard `async method() { … }` syntax.
+:::
+
+### The boot guard
+
+An unwrapped `@Transaction` method is the worst kind of bug: the method still returns, every write
+still lands, and every test still passes — only nothing is atomic. There is no symptom until the
+day a half-finished operation should have rolled back and did not.
+
+So the boot checks it. If any `@Transaction` method reached the container without being wrapped,
+`server.start()` throws and names every one of them:
+
+```
+@Transaction methods are not wrapped: AccountService.register, OrderService.place - they would run
+with autocommit. Register a TransactionPostProcessor subclass in your source folder
+(@Drizzle({ defaultDb: '...' }) export class AppDrizzle extends TransactionPostProcessor {}) and
+keep transactional classes out of a post-processor's dependency closure.
+```
+
+Two situations produce it:
+
+1. **No `@Drizzle` subclass in the source folder.** The post-processor was never registered, so
+   nothing wraps anything. Add the class from
+   [Step 4](#_4-activate-the-transaction-post-processor-required-for-transaction).
+2. **A transactional class sits inside a post-processor's dependency closure.** A `@Drizzle`
+   subclass — or something it injects — `@Inject`s the transactional class. Post-processor
+   dependencies are constructed in bootstrap Phase A, *before* post-processing is active, so
+   those instances can never be wrapped. Keep transactional services out of that closure.
+
+::: info When the check runs
+Once per container, from the first database service's [`@OnStart`](/docs/concepts/lifecycle).
+
+There is one exception, and it is the Phase-A trap again: when the only database service is
+itself a dependency of a post-processor, it is constructed before registration finishes, so
+checking at that moment would report components that have not had their turn yet. In that case
+the check is deferred to the first `connection` / `rootConnection` read that lands after the
+service is registered.
+:::
+
+::: warning Upgrading from asena-drizzle 3.x
+This is a **breaking behaviour change**, even though the package version is a minor: an
+application that used `@Transaction` without a `@Drizzle` subclass booted before and will now
+fail to start.
+
+That application was never running transactions — the guard is reporting a bug that was already
+there, not creating one. The fix is the same either way: add the `@Drizzle` class, or drop
+`@Transaction` from methods that do not need it.
+
+Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
+skipped, so the guard does not fire on a mocked service.
+:::
+
+### `connection` vs `rootConnection`
+
+`AsenaDatabaseService` exposes two connection accessors, and the difference matters exactly once —
+inside a transaction:
+
+| Accessor | Inside a `@Transaction` scope for that database | Outside one |
+|:---------|:------------------------------------------------|:------------|
+| `connection` | The **active transaction** | The pooled connection |
+| `rootConnection` | The pooled connection — ignores the ambient transaction | The pooled connection |
+
+**Application code should use `connection`.** It is transaction-aware, so a hand-written query
+joins the transaction its caller opened instead of quietly committing outside it:
+
+```typescript
+@Service()
+export class ReportService {
+  @Inject('MainDatabase')
+  private db: MyDatabase;
+
+  @Transaction()
+  async rebuild() {
+    // joins the transaction @Transaction opened
+    await this.db.connection.insert(reports).values({ status: 'building' });
+  }
+}
+```
+
+`rootConnection` exists for *starting* a top-level transaction, which is what `REQUIRES_NEW` and
+[`BaseRepository#transaction`](#programmatic-transaction) do internally. Writing through it inside
+a transaction commits outside that transaction — which is occasionally what you want (an audit row
+that must survive a rollback) and is otherwise a bug.
+
+::: warning Upgrading from asena-drizzle 3.x
+`connection` used to always return the pooled connection. Hand-written queries written against it
+inside a `@Transaction` were silently non-transactional; they now join the transaction, which is
+almost certainly what the code intended. If a specific call deliberately wanted to escape the
+transaction, change it to `rootConnection`.
+
+Repositories are unaffected: `BaseRepository.db` performs its own transaction lookup and its
+fallback is pinned to `rootConnection`.
 :::
 
 ::: tip Roadmap — full auto-resolution
@@ -16039,6 +16550,23 @@ export class AppOtel extends OtelTracingPostProcessor {}
 Asena's IoC container automatically discovers your `@Otel` class and `OtelService`. No manual component registration needed — except for `OtelTracingMiddleware`, which requires a local wrapper class (see Step 2).
 :::
 
+#### Lazy options
+
+`@Otel` also accepts a **thunk** returning the options. It is not called at decoration time: it
+runs once when the post-processor initialises (`onInit`), after module-level configuration has been
+read, and the result is cached. Per-service values can therefore come from the environment, and the
+decorated class can live in a shared package:
+
+```typescript
+@Otel(() => ({
+  serviceName: process.env.SERVICE_NAME!,
+  traceExporter: new OTLPTraceExporter({ url: process.env.OTLP_URL }),
+}))
+export class AppOtel extends OtelTracingPostProcessor {}
+```
+
+The plain options-object form is unchanged.
+
 ### 2. Create a Local Middleware Class
 
 Create a class in your `src` folder that extends `OtelTracingMiddleware` and apply the `@Middleware()` decorator. This registers the middleware in Asena's IoC container.
@@ -16120,6 +16648,24 @@ Private methods (starting with `_`), constructors, and Symbol-keyed methods are 
 ## OtelService API
 
 `OtelService` is an injectable `@Service` that provides access to OpenTelemetry tracer and meter. Asena automatically discovers it — just inject where needed.
+
+::: tip When the scan cannot see it
+Discovery works because your `sourceFolder` is scanned and `OtelService` is registered along with
+the `@Otel` class. A project whose components come from packages rather than a scanned source
+folder can hand it in directly instead of writing a local subclass just to make it visible:
+
+```typescript
+import { OtelService } from '@asenajs/asena-otel';
+
+await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [OtelService],
+});
+```
+
+See [Registering components from packages](/docs/concepts/dependency-injection#registering-components-from-packages).
+:::
 
 ### withSpan(name, fn)
 
@@ -16588,6 +17134,22 @@ export class AppRedis extends AsenaRedisService {
 
 Asena automatically discovers it — that's it.
 
+#### Lazy options
+
+`@Redis` also accepts a **thunk**, resolved when the service is constructed rather than when the
+class is defined. That is what lets a Redis service live in a shared package and still read the
+consuming application's environment:
+
+```typescript
+@Redis(() => ({ config: { url: process.env.REDIS_URL } }))
+export class AppRedis extends AsenaRedisService {}
+```
+
+A thunk cannot carry a `name` — the options do not exist yet when the decorator registers the
+class — so the thunk form registers under the **decorated class's own name**. Use the object form
+with `name` to choose the registration key explicitly. Nothing outside the thunk's return value is
+mutated.
+
 ### 2. Inject and Use
 
 ```typescript
@@ -16683,10 +17245,55 @@ export class AppRedis extends AsenaRedisService {}
 | Method | Parameters | Returns | Description |
 |:-------|:-----------|:--------|:------------|
 | `send(command, args)` | `command: string, args: string[]` | `any` | Execute raw Redis command |
+| `ping(timeoutMs?)` | `timeoutMs: number` (default `1000`) | `'PONG'` | Send `PING`, or reject with `Redis PING timed out after <n>ms` |
 | `client` | — | `RedisClientAdapter` | Access underlying client |
 | `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub. Tracked by the service and closed on `server.stop()` |
-| `testConnection()` | — | `boolean` | Returns `true` if connected |
+| `testConnection()` | — | `boolean` | `true` when connected and a `PING` came back within `ping()`'s timeout; `false` otherwise |
 | `disconnect()` | — | `void` | Close the main connection. Called for you by `@OnStop`; calling it by hand leaves any subscriber you are still reading from open |
+
+::: warning `ping()` is bounded on purpose
+With the offline queue enabled — the default in most clients — a command issued against an
+unreachable Redis does not fail. It waits in the queue for a connection that may never come, so an
+unbounded readiness probe **hangs forever** instead of reporting "down", which is the opposite of
+what a probe is for.
+
+`ping()` races the command against a `1000` ms timer (configurable) and rejects when the timer
+wins. `testConnection()` now goes through it, so a probe against an unreachable Redis returns
+`false` after at most a second instead of never returning. It still returns `false` immediately
+when the client reports itself disconnected.
+:::
+
+### Redis Streams Helpers
+
+The package exports the same thin, client-agnostic wrappers over the Redis Streams commands that
+the [microservice transport](#microservice-transport-redis-streams) uses. They take any
+`RedisClientAdapter` and normalize the RESP2 (node-redis) and RESP3 (Bun) reply shapes, so
+consumer code never branches on the adapter:
+
+| Export | Purpose |
+|:-------|:--------|
+| `xadd`, `xrange`, `xack` | Append, read a range, acknowledge |
+| `xgroupCreate`, `xgroupDelConsumer`, `xreadgroup` | Consumer group lifecycle and reads |
+| `xpending`, `xpendingConsumer`, `xinfoConsumers`, `xclaim` | Pending-entry inspection and reclaim |
+| `entryTimestamp` | Creation time (epoch ms) extracted from an entry id |
+| `normalizeStreamsReply`, `normalizeEntries`, `normalizeFields` | The reply normalizers, for hand-rolled commands |
+| `StreamEntry`, `PendingEntry`, `ConsumerInfo` | The types they return |
+
+```typescript
+import { xrange } from '@asenajs/asena-redis';
+
+const recent = await xrange(redis.client, 'orders', '-', '+', 10);
+
+for (const entry of recent) {
+  console.log(entry.id, entry.fields);
+}
+```
+
+`xrange(client, key, start = '-', end = '+', count?)` reads entries by id range — `'-'` / `'+'`
+for the ends, `'<ms>-<seq>'` for a point, a `'('` prefix for exclusive — and returns
+`StreamEntry[]` (`{ id, fields }`) in id order. It is new; the rest were internal to the transport
+and are now public, so a DLQ inspector or a backfill script no longer has to re-implement the
+RESP2/RESP3 normalisation.
 
 ## Configuration
 
@@ -16733,6 +17340,9 @@ interface RedisConfig {
   name?: string,               // Service name for IoC registration
 })
 ```
+
+It also accepts `() => RedisOptions` — the same object, resolved at construction time. See
+[Lazy options](#lazy-options).
 
 ## Multi-Pod WebSocket Transport
 
@@ -16952,6 +17562,10 @@ async health(context: Context) {
   return context.send({ redis: redisOk ? 'up' : 'down' });
 }
 ```
+
+The probe is bounded: an unreachable Redis makes `testConnection()` return `false` within
+`ping()`'s timeout (1000 ms by default) instead of leaving the request hanging on a queued
+command.
 
 ::: warning `testConnection()` is not a microservice readiness check
 It `PING`s the cache client and says nothing about whether this instance's **reply channel** is being served, which is what decides whether a `send()` can complete. For an instance running `RedisMicroserviceTransport`, the readiness signal is the transport's `isConnected` (already wired into Asena's health endpoint) — see [Delivery Guarantees](#delivery-guarantees).
@@ -17615,6 +18229,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
 - **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
+- **Diagnostics** - `asena doctor` checks the project for the configuration mistakes that only surface in production
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
 ## Key Features
@@ -17622,7 +18237,8 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Quick Project Setup** - Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.
 - **Code Generation** - Generate controllers with route handlers, services with business logic, middleware, config classes and WebSocket namespaces.
 - **Fast Development** - One-shot build and run — the CLI discovers and registers all your components automatically. No manual imports needed.
-- **Production Builds** - Bundle with Bun's fast bundler, with full control over minification, source maps and output options.
+- **Production Builds** - Bundle with Bun's fast bundler, with full control over minification, source maps and output options. Your entry file is never rewritten.
+- **asena doctor** - A read-only check for missing decorator flags, duplicate package copies, unsatisfied peer ranges and build settings that mangle component names.
 
 ## Getting Started
 
@@ -18145,10 +18761,9 @@ Build the project for production deployment.
 ### Features
 
 - **Configuration Processing** - Reads and processes `asena-config.ts`
-- **Code Generation** - Creates a temporary build file combining all components
-- **Import Management** - Automatically organizes imports based on project structure
-- **Server Integration** - Integrates all components with AsenaServer
-- **No Manual Registration** - Controllers are automatically discovered and registered
+- **Wrapper Entry** - Bundles through a temporary wrapper created **outside** your source folder; your entry file is never rewritten and its module-level code is not executed at build time
+- **Import Management** - Detected components are handed to the server through the build component list. No manual imports needed
+- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list
 
 ### Usage
 
@@ -18159,10 +18774,12 @@ asena build
 ### Build Process
 
 1. Reads `asena-config.ts`
-2. Scans source folder for controllers, services, middlewares, configs, and websockets
-3. Generates a temporary build file with all imports
-4. Bundles the application using Bun's bundler
-5. Outputs compiled files to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
+2. Scans the source folder for controllers, services, middlewares, configs and websockets
+3. Writes a temporary wrapper entry in the OS temp directory: it imports every scanned component, publishes them on `globalThis[Symbol.for('asena.buildComponents')]`, then imports your entry file
+4. Bundles that wrapper with Bun's bundler and deletes the temporary files
+5. Outputs the bundle to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
+
+The output is always `<outdir>/index.asena.js`, whatever your entry file is called.
 
 ### Build Output
 
@@ -18176,6 +18793,57 @@ After building, you can run your application with:
 ```bash
 bun dist/index.asena.js
 ```
+:::
+
+::: warning Upgrading from asena-cli 0.x builds
+The build used to rewrite your entry file: it parsed the `AsenaServerFactory.create({...})` call
+and injected a `components: [...]` array into it. That imposed formatting rules nobody could see
+in the source — the call had to match an exact shape, the options object could not contain
+comments, the factory token could appear only once — and it executed the entry's module-level
+code at build time ([#25](https://github.com/AsenaJs/Asena-cli/issues/25)).
+
+The wrapper entry removes all of it. **What you need to know:**
+
+- **Your entry file is untouched.** Any formatting, any comments, arbitrary code around the
+  bootstrap call — all fine now.
+- **A `components: [...]` array you wrote is yours.** It is no longer overwritten, and a
+  non-empty one takes precedence over the build's list. Delete it to let the build supply the
+  components; keep it to pin them by hand. See
+  [Which source wins](/docs/concepts/dependency-injection#which-source-wins).
+- **This requires `@asenajs/asena` 0.11 or newer.** That is the first core version that reads
+  the build component list. On an older core the bundle falls back to the filesystem scan and
+  dies in production with `No components or configuration found`, so the CLI declares
+  `^0.11.0`.
+- **`minify.identifiers` is forced off.** See below.
+:::
+
+### Minification and component names
+
+Component registration is name-based: `@Inject('UserService')` and
+`@Repository({ databaseService: 'MainDb' })` look their target up by the class's runtime `.name`.
+Minifying identifiers renames the class, and the component registers under the mangled name — the
+lookup then fails in production and only in production.
+
+So when `buildOptions.minify` enables identifier minification, **the build turns it off** and says
+so:
+
+```
+[build] minify.identifiers disabled: component names are read at runtime
+```
+
+`minify: true` (which implies all three flags) is likewise narrowed to
+`{ whitespace: true, syntax: true, identifiers: false }`. Whitespace and syntax minification are
+untouched — they are where the size win is anyway.
+
+::: danger `keepNames` does not save you
+`keepNames: true` looks like the answer and is not: Bun's bundler (measured on 1.4.0) does **not**
+preserve class names under identifier minification, whether `keepNames` sits inside `minify` or
+beside it. The only rule that works is `identifiers: false`, which is what `asena init` writes and
+what the build now enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
+as a safeguard.
+
+[`asena doctor`](#asena-doctor) flags a config that enables identifier minification, so a project
+that hand-edits `asena-config.ts` finds out before the deploy rather than after it.
 :::
 
 ## asena init
@@ -18217,9 +18885,11 @@ export default defineConfig({
 });
 ```
 
-::: tip Why `identifiers: false` and `keepNames: true`
-Component registration is name-based. Minifying identifiers would rename your classes and
-break `@Inject('UserService')` lookups at runtime.
+::: tip Why `identifiers: false`
+Component registration is name-based. Minifying identifiers renames your classes and breaks
+`@Inject('UserService')` lookups at runtime. `keepNames: true` is written alongside it for
+readable stack traces, but it is **not** what protects the component names — see
+[Minification and component names](#minification-and-component-names).
 :::
 
 ::: info When to Use `asena init`
@@ -18227,6 +18897,51 @@ Use `asena init` when:
 - Adding Asena to an existing project
 - Manually setting up a project without `asena create`
 - Resetting configuration to defaults
+:::
+
+## asena doctor
+
+Check the current project for common static configuration mistakes that the other commands do not
+catch. It is **read-only** — it reports and never modifies anything.
+
+### Usage
+
+```bash
+asena doctor        # one line per check
+asena doctor --json # the result array as JSON
+```
+
+The exit code is `1` when any check failed and `0` otherwise, so it drops straight into CI.
+
+### Checks
+
+| Check | What it verifies |
+|:------|:-----------------|
+| `tsconfig-decorators` | `experimentalDecorators` and `emitDecoratorMetadata` are both `true` in `tsconfig.json` |
+| `asena-config` | An `asena-config.ts` is found and importable, its `rootFile` and `sourceFolder` exist on disk, and `minify.identifiers` is not enabled |
+| `direct-dependencies` | `@asenajs/asena` and `reflect-metadata` are direct dependencies, plus `hono` / `zod` when the matching adapter is installed — they are [peer dependencies](/docs/adapters/overview) your project owns |
+| `duplicate-packages` | `@asenajs/asena`, `hono` and `zod` each resolve to a single version under `node_modules` (including the `.bun` store) |
+| `peer-ranges` | Every installed `@asenajs/*` package's peer range for `@asenajs/asena` is satisfied by the installed core version |
+
+### Output
+
+```
+✓ tsconfig-decorators — experimentalDecorators and emitDecoratorMetadata are enabled
+✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
+  hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
+✓ direct-dependencies — all required packages are direct dependencies
+✓ duplicate-packages — @asenajs/asena@0.11.0, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.11.0
+```
+
+A failing check prints an indented `hint:` line with the fix. A check that cannot run at all — no
+`tsconfig.json`, unparsable JSON — reports as a failure explaining why rather than throwing.
+
+::: tip Why `duplicate-packages` is worth a check of its own
+Two installed copies of `@asenajs/asena`, `hono` or `zod` break every `instanceof`-shaped test in
+the framework — most visibly the [`HttpException` brand](/docs/guides/error-handling), which stops
+matching and turns a deliberate `404` into a `500`. The symptom never points at the cause. This
+check is the fastest way to rule it in or out.
 :::
 
 ## Command Reference
@@ -18245,6 +18960,7 @@ Use `asena init` when:
 | `asena dev start`    | -               | Start development server             |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
+| `asena doctor`       | -               | Check the project for configuration mistakes |
 | `asena --version`    | `asena -V`      | Show CLI version                     |
 | `asena --help`       | `asena -h`      | Show help                            |
 
@@ -18580,16 +19296,31 @@ export default defineConfig({
 ### minify
 
 **Type:** `boolean | MinifyOptions`
-**Default:** `{ whitespace: true, syntax: true, identifiers: false, keepNames: true }`
+**Written by `asena init`:** `{ whitespace: true, syntax: true, identifiers: false, keepNames: true }`
 
 Controls code minification for smaller bundle sizes.
+
+::: danger `identifiers` must stay `false`
+Component registration is name-based — `@Inject('UserService')` looks its target up by the
+class's runtime `.name` — so minifying identifiers registers the component under a mangled name
+and the lookup fails, in production only.
+
+`asena build` therefore **forces `identifiers: false`** whatever the config says, and narrows
+`minify: true` to `{ whitespace: true, syntax: true, identifiers: false }`. `keepNames: true` does
+**not** rescue it: Bun's bundler (measured on 1.4.0) does not preserve class names under
+identifier minification with `keepNames` set, inside `minify` or beside it. `keepNames` is
+harmless and buys readable stack traces; it is not a safeguard.
+
+[`asena doctor`](/docs/cli/commands#asena-doctor) reports a config that enables it. See
+[Minification and component names](/docs/cli/commands#minification-and-component-names).
+:::
 
 #### Boolean Mode
 
 ```typescript
 export default defineConfig({
   buildOptions: {
-    minify: true, // Enable all minification
+    minify: true, // whitespace + syntax; the build keeps identifiers: false
   },
 });
 ```
@@ -18616,15 +19347,16 @@ export default defineConfig({
 | `whitespace`  | `boolean` | Removes unnecessary whitespace and newlines    |
 | `syntax`      | `boolean` | Applies syntax-level optimizations             |
 | `identifiers` | `boolean` | Renames variables/functions to shorter names   |
-| `keepNames`   | `boolean` | Preserves function and class names for debugging |
+| `keepNames`   | `boolean` | Preserves function and class names in stack traces. Does **not** protect component names — see the warning below |
 
-::: warning identifiers and Debugging
-Setting `identifiers: true` makes debugging harder because:
-- Controller names become unreadable in logs
-- Stack traces show minified names
-- Hot reload becomes less predictable
+::: warning identifiers is not a size/debugging trade-off
+It used to be presented as one — readable in development, shorter in production. It is not:
+identifier minification breaks name-based component resolution at runtime, so `asena build`
+overrides it to `false` in every environment. Whitespace and syntax minification stay on and are
+where the size win is anyway.
 
-**Recommendation:** Keep `identifiers: false` in development, set to `true` only in production if bundle size is critical.
+Set it to `false` explicitly to keep the build quiet; leaving it `true` produces
+`[build] minify.identifiers disabled: component names are read at runtime` on every build.
 :::
 
 ## Environment-Specific Configuration
@@ -18668,7 +19400,7 @@ export default defineConfig({
     minify: {
       whitespace: true,   // Minimize size
       syntax: true,
-      identifiers: true,  // Shorten names
+      identifiers: false, // Required: component names are read at runtime
     },
     drop: ['console', 'debugger'], // Remove debugging code
   },
@@ -18808,14 +19540,14 @@ For a complete reference of Bun's bundler capabilities, see the [Bun Bundler Doc
 
 ## Best Practices
 
-### 1. Keep identifiers Unminified in Development
+### 1. Keep identifiers Unminified — Everywhere
 
 ```typescript
-// ✅ Good: Easy debugging
+// ✅ Good: real controller names in logs, and name-based injection that works
 export default defineConfig({
   buildOptions: {
     minify: {
-      identifiers: false, // See real controller names in logs
+      identifiers: false,
     },
   },
 });
@@ -20659,19 +21391,31 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 2. **Phase: IOC_ENGINE_INIT** - Component discovery begins
 3. **Phase: USER_COMPONENTS_SCAN** - Config class is discovered and registered
 4. **Phase: USER_COMPONENTS_INIT** - Config instance is created
-5. **Phase: APPLICATION_SETUP** - Config methods are applied:
+5. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
+6. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
    - `onError()` is registered as error handler
    - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
    - `transport()` is called and the WebSocket / microservice transports are wired
-6. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
 7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
 
-::: warning A `@Config` cannot use `@OnStart` to prepare configuration
-The config hooks above are read in step 5, *before* start hooks run in step 6. An `@OnStart` on a
-`@Config` class still fires, but anything it prepares arrives after the values were already taken —
-Asena logs a warning when it sees one.
+::: tip A `@Config` finds its dependencies already started
+Start hooks run in step 5, *before* the config hooks are read in step 6. So `serveOptions()`,
+`globalMiddlewares()` and `transport()` are called against components whose
+[`@OnStart`](/docs/concepts/lifecycle) has already run — a config that builds a transport out of
+an injected Redis or Kafka service reaches a connection that is open. The config's own
+`@OnStart` may prepare configuration the same way.
+
+The price of that ordering is on the other side: a start hook runs before the transports exist,
+so it [cannot publish through `ulak`](/docs/concepts/lifecycle#onstart).
+:::
+
+::: warning Upgrading from 0.9.x
+Up to `0.9.x` the order was the reverse — config hooks were applied first and start hooks ran
+after them, which is why a `@Config` could not use its injected components. The framework
+swapped the two in `0.10.0`; this page kept describing the old sequence until now. No source
+change is required, but a workaround written for the old order can go.
 :::
 
 ### Singleton Validation
@@ -20732,6 +21476,22 @@ widen the type at the call site.
    ```typescript
    port: parseInt(process.env.PORT || '3000', 10),
    hostname: process.env.HOSTNAME || 'localhost',
+   ```
+
+   A `@Config` is a component, so it can also take configuration through
+   [`@Value`](/docs/concepts/dependency-injection#value-configuration-injection) — parsed,
+   defaulted, and loud about a required variable that is unset:
+
+   ```typescript
+   @Config()
+   export class ServerConfig implements AsenaConfig {
+     @Value('PORT', { parse: Number, default: 3000 })
+     private port: number;
+
+     public serveOptions() {
+       return { port: this.port };
+     }
+   }
    ```
 
 2. **Separate Development and Production Configuration**
@@ -21797,7 +22557,14 @@ This guide is currently under development. Check back soon for comprehensive dep
 
 ## Quick Start
 
-For now, you can build your application with:
+Check the project first — the mistakes that only surface in production are exactly the ones
+`doctor` looks for, and it exits non-zero so it fits in a CI step:
+
+```bash
+asena doctor
+```
+
+Then build your application:
 
 ```bash
 asena build
@@ -21809,6 +22576,16 @@ Then run the production build:
 bun dist/index.asena.js
 ```
 
+::: warning Two things worth checking before a first production deploy
+- **`buildOptions.minify.identifiers` must be `false`.** Component names are read at runtime, and
+  a bundle built with identifiers minified fails to resolve them — in production only. The build
+  forces it off and `asena doctor` reports it. `keepNames: true` does not substitute for it. See
+  [Minification and component names](/docs/cli/commands#minification-and-component-names).
+- **One copy of `@asenajs/asena`, `hono` and `zod` each.** Two copies break `instanceof` and the
+  `HttpException` brand, turning a deliberate `404` into a `500` with no clue as to why.
+  `asena doctor` checks for this.
+:::
+
 ## Graceful Shutdown and Probes
 
 Two things a deployment needs are already available:
@@ -21818,7 +22595,8 @@ Two things a deployment needs are already available:
 
 ## Related
 
-- [CLI Build Command](/docs/cli/commands#build) - Building a production bundle
+- [CLI Build Command](/docs/cli/commands#asena-build) - Building a production bundle
+- [asena doctor](/docs/cli/commands#asena-doctor) - Pre-flight check for the project's configuration
 - [CLI Configuration](/docs/cli/configuration) - Build options and output
 - [Server Configuration](/docs/guides/configuration) - Runtime server settings
 - [Component Lifecycle](/docs/concepts/lifecycle) - Graceful shutdown, signals and health probes
@@ -21942,6 +22720,13 @@ await using app = await createTestApp({
   overrides: { UserService: myDouble },
 });
 ```
+
+::: tip `components` only needs the roots
+`createTestApp` follows every `@Inject(SomeClass)` edge and registers what it finds, so listing
+`[UserController]` alone is usually enough. Naming the whole closure by hand still works — a class
+the walk would have found anyway is a no-op. See
+[`components`](/docs/testing/test-app#components).
+:::
 
 ## Import Path
 
@@ -22344,7 +23129,33 @@ expect(mocks.userService).toBe(customMock);
 An override is the **final** value injected into the field:
 
 - For expression-based injections (e.g. `@Inject(ulak('/chat'))` or `@Inject(UserService, (s) => s.createUser)`), the expression is **skipped entirely** — your override is used as-is.
+- For [`@Value`](/docs/concepts/dependency-injection#value-configuration-injection) fields, the environment is **not read at all** — see below.
 - Presence is checked with `Object.hasOwn`, so falsy values (`0`, `''`, `null`, `undefined`) are injected as-is rather than ignored.
+
+##### Overriding `@Value` fields
+
+`mockComponent` resolves `@Value` fields with exactly the container's precedence —
+**override > field initializer > environment** — so a unit test can pin configuration without
+touching `process.env`:
+
+```typescript
+@Service()
+class RetryPolicy {
+  @Value('MAX_RETRIES', { parse: Number, default: 3 })
+  private maxRetries: number;
+
+  @Value('API_KEY')            // required: no default
+  private apiKey: string;
+}
+
+const { instance } = mockComponent(RetryPolicy, {
+  overrides: { maxRetries: 7, apiKey: 'test-key' },
+});
+```
+
+An overridden field is never read from the environment, so a **required** `@Value` with no
+default does not fail the test when the variable is unset. Resolved values are plain data, not
+doubles, so they do not appear in `mocks`.
 
 #### `postConstruct`
 
@@ -22633,6 +23444,7 @@ The mock a field gets depends on how it was injected:
 | `@Inject(UserService)` | An object shaped like the class — every method is a `bun:test` mock |
 | `@Inject(ulak('/chat'))` and other expression injections | The expression evaluated against a deep mock, so any call chain works and stays assertable |
 | `@Inject('UserService')` | A plain `{}` — a string carries no class reference, so no method shape can be derived |
+| [`@Value('KEY')`](/docs/concepts/dependency-injection#value-configuration-injection) | Not a mock at all — the real resolved value, with the container's `overrides > initializer > environment` precedence |
 
 ::: warning String injections need overrides
 Only class-based injections can be auto-shaped. For `@Inject('UserService')` pass the double yourself:
@@ -22722,6 +23534,7 @@ describe('UserController', () => {
 interface TestAppOptions {
   adapter: AsenaAdapter;             // required
   components: Class[];               // required - skips filesystem scanning entirely
+  imports?: (Class | readonly Class[])[]; // package components, in addition to `components`
   overrides?: Record<string, object>; // service name -> replacement instance
   logger?: ServerLogger;             // default: silentLogger
   port?: number;                     // default: 0 (Bun picks a free port)
@@ -22731,7 +23544,77 @@ interface TestAppOptions {
 
 ### `components`
 
-Passing an explicit component list skips config-based filesystem scanning, so a test boots only what it names. Every class the app needs at start-up must be present — controllers, services, middlewares, validators, configs.
+Passing an explicit component list skips config-based filesystem scanning, so a test boots only what it names.
+
+You name the **roots** — typically the controllers. Every class reachable from them through
+`@Inject(SomeClass)` is walked and registered for real, so the injection closure does not have to
+be spelled out by hand:
+
+```typescript
+@Controller('/api/users')
+class UserController {
+  @Inject(UserService)
+  private userService: UserService;   // UserService injects UserRepository, which injects Db
+}
+
+await using app = await createTestApp({
+  adapter,
+  components: [UserController],       // UserService, UserRepository and Db come along
+});
+```
+
+Three rules govern the walk:
+
+- **Only `@Inject(Class)` edges are followed.** A dependency injected by name — `@Inject('UserService')` — has no class reference to follow, so it must be listed in `components` or replaced through `overrides`.
+- **A name in `overrides` stops the walk.** The double replaces the real class, so nothing behind it is registered.
+- **`@Strategy` fields are not walked.** They live under a different metadata key, and an empty strategy key is a legitimate plugin point injected as `[]`, not a missing dependency.
+
+A class registered under an [`@Implements`](/docs/concepts/dependency-injection) interface key
+counts as providing that key too, so listing the implementation satisfies a dependency injected
+by the interface name.
+
+### Missing dependencies fail before the boot
+
+Anything the walk cannot satisfy is collected and reported **before anything starts**, with one
+line per problem naming the component and the field:
+
+```
+createTestApp: missing dependencies:
+UserController.userService injects 'UserService', which is not in components or overrides
+OrderService.mailer injects Mailer, which is not a decorated component
+```
+
+::: warning Upgrading from 0.10
+The same mistakes used to surface much later and much less clearly: a name-injected dependency
+nobody provided reached the container as a bare `<key> is not registered` mid-boot — or, under
+[`createWebTest`](/docs/testing/web-test), as a 500 on the first request. `@Inject(SomeClass)`
+where `SomeClass` carried no component decorator failed with `undefined is not registered`.
+
+If a test asserts on either message, update the matcher to the
+`createTestApp: missing dependencies:` prefix. Tests that listed the whole closure by hand keep
+working unchanged — listing a class the walk would have found anyway is a no-op.
+:::
+
+Inside the container the corresponding failure now names the dependent as well:
+`'MailService' is not registered (injected into OrderService.mail)`, with the original error
+attached as `cause`.
+
+### `imports`
+
+Components that ship inside a package cannot be reached by a filesystem scan and are awkward to
+enumerate by hand. Pass them as `imports` instead — they are registered **in addition to**
+`components`, and each entry must carry its own component decorator:
+
+```typescript
+await using app = await createTestApp({
+  adapter,
+  components: [OrderController],
+  imports: [OtelService],
+});
+```
+
+See [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) for the
+full contract.
 
 ### `port`
 
@@ -23056,6 +23939,7 @@ expect(mocks.UserService).toBe(double);
 
 - **`@OnStart` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its [start hook](/docs/concepts/lifecycle). This matches `@WebMvcTest` semantics.
 - **Only `@Controller` classes are accepted** in `controllers`. Pass services and middlewares through `components`.
+- **The auto-mock is where the graph stops.** [`createTestApp` expands its component list with the `@Inject(Class)` closure](/docs/testing/test-app#components), but every auto-mocked name is handed to it as an override, and an override stops the walk. So an auto-mocked service's own dependencies are never registered — the database the mock exists to avoid stays out of the test. A component promoted back to real through `components` is walked normally, and anything *it* injects is auto-mocked in turn.
 
 ## Related
 
