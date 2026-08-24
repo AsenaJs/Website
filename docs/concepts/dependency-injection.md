@@ -24,18 +24,23 @@ Asena provides a powerful IoC (Inversion of Control) container with field-based 
     <div class="ic-title">Expressions</div>
     <p class="ic-desc">Resolving a dependency through an expression.</p>
   </a>
-  <a class="info-card" href="#strategy-pattern-with-strategy">
+  <a class="info-card" href="#value-configuration-injection">
     <span class="ic-kicker">04</span>
+    <div class="ic-title">@Value</div>
+    <p class="ic-desc">Reading configuration straight from the environment.</p>
+  </a>
+  <a class="info-card" href="#strategy-pattern-with-strategy">
+    <span class="ic-kicker">05</span>
     <div class="ic-title">@Strategy</div>
     <p class="ic-desc">Injecting every implementation of an interface.</p>
   </a>
   <a class="info-card" href="#lifecycle-hooks">
-    <span class="ic-kicker">05</span>
+    <span class="ic-kicker">06</span>
     <div class="ic-title">Lifecycle Hooks</div>
     <p class="ic-desc">When injected fields become safe to use.</p>
   </a>
   <a class="info-card" href="#service-scopes">
-    <span class="ic-kicker">06</span>
+    <span class="ic-kicker">07</span>
     <div class="ic-title">Service Scopes</div>
     <p class="ic-desc">How scope changes what the container hands you.</p>
   </a>
@@ -123,6 +128,19 @@ export class UserController {
 - **String-based** - Loose coupling, dynamic resolution
 :::
 
+::: tip A missing name names its caller
+When nothing is registered under the key, the container reports which component asked for it:
+
+```
+'UserService' is not registered (injected into UserController.userService)
+```
+
+The original `'UserService' is not registered` is attached as `cause`. In a test,
+[`createTestApp`](/docs/testing/test-app#missing-dependencies-fail-before-the-boot) catches the
+same mistake earlier still — before the boot rather than during it — because a name-injected
+dependency is the one edge its component walk cannot follow.
+:::
+
 ## Injection with Expressions
 
 Expressions allow you to transform the injected dependency or extract specific properties.
@@ -199,6 +217,78 @@ export class ApiService {
 |:----------|:-----|:------------|
 | `ServiceClass` | `Class` or `string` | Service to inject |
 | `expression` | `(service) => any` | Optional transformation function |
+
+## @Value: configuration injection
+
+`@Inject` wires collaborators. `@Value` wires **configuration**: it reads a field's value from
+`process.env` when the container builds the component, so a service does not have to reach for
+`process.env` itself — which is what makes the value hard to see and hard to replace in a test.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject, Value } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class PoolService {
+  @Inject(DataSource)
+  private dataSource: DataSource;
+
+  @Value('DB_POOL_MAX', { parse: Number, default: 10 })
+  private poolMax: number;
+
+  @Value('JWT_SECRET')          // required: no default
+  private jwtSecret: string;
+}
+```
+
+### Options
+
+```typescript
+@Value(key: string, options?: {
+  default?: unknown;               // used when the variable is not set
+  parse?: (raw: string) => unknown; // converts the raw string
+})
+```
+
+| Option | Behaviour |
+|:-------|:----------|
+| `parse` | Runs on the raw environment string only. `parse: Number`, `parse: (v) => v === 'true'`, `parse: JSON.parse` — anything that takes a string. A `default` is used **as given** and never goes through `parse`. |
+| `default` | Its **presence** is what counts, not its truthiness — `0`, `''` and `null` are honoured as defaults. |
+
+### Required values fail loudly
+
+A field with no `default` whose variable is unset fails the component's construction with an
+error naming the class, the field and the key:
+
+```
+@Value('JWT_SECRET') on PoolService.jwtSecret: environment variable is not set and no default was given
+```
+
+For a singleton that happens at registration, so a misconfigured deployment cannot boot; for a
+[transient](#prototype-scope) it happens on the first resolve. Either way the application never
+runs with the value quietly `undefined`.
+
+### Precedence
+
+**Field initializer > environment.** An initializer that produced a value is left alone, exactly
+as it is for `@Inject`:
+
+```typescript
+@Value('REGION', { default: 'eu-central-1' })
+private region: string = 'local';   // stays 'local' - the environment is not consulted
+```
+
+In a test, [`mockComponent`](/docs/testing/mock-component#overriding-value-fields) adds one more
+level in front: **override > initializer > environment**.
+
+::: tip `@Value` fields are writable
+Unlike `@Inject` and `@Strategy`, which install accessors with no setter, `@Value` lands as a
+plain writable property. There is no resolved service behind it to protect, so a test can assign
+to it directly.
+:::
+
+Inheritance follows the same rule as `@Inject`: a field redeclared in a subclass wins over the
+base class's declaration. See [Inheritance](/docs/concepts/inheritance).
 
 ## Strategy Pattern with @Strategy
 
@@ -528,17 +618,21 @@ export class CountryService {
 Construction, per component:
 
 1. Class constructor runs
-2. All `@Inject` dependencies are resolved
-3. All `@Strategy` arrays are resolved (a separate pass)
-4. Registered `@PostProcessor`s run
+2. All [`@Value`](#value-configuration-injection) fields are read from the environment
+3. All `@Inject` dependencies are resolved
+4. All `@Strategy` arrays are resolved (a separate pass)
+5. Registered `@PostProcessor`s run
 
 Then, once every component exists, from `server.start()`:
 
-5. All `@OnStart` methods are called, in registration order — dependencies before dependents
+6. All `@OnStart` methods are called, in registration order — dependencies before dependents
 
 And from `server.stop()`, in the reverse of that order:
 
-6. All `@OnStop` methods are called
+7. All `@OnStop` methods are called
+
+Configuration lands before collaborators on purpose: a component missing a required `@Value`
+fails before the container starts resolving the graph underneath it.
 
 ::: danger A throwing `@OnStart` aborts the boot
 The error is **not** swallowed. The components that already started are rolled back and
@@ -728,6 +822,64 @@ export class ChatSocket extends AsenaWebSocketService<void> {
   }
 }
 ```
+
+## Registering components from packages
+
+The component scan walks your `sourceFolder`. It never walks `node_modules`, so a component that
+ships **inside a package** — a shared platform library, `OtelService`, a database service your
+team publishes — is invisible to it. The `imports` option is how a package hands its components
+in:
+
+```typescript
+import { AsenaServerFactory } from '@asenajs/asena';
+import { platformComponents } from '@acme/asena-platform';
+import { OtelService } from '@asenajs/asena-otel';
+
+await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...platformComponents, OtelService],
+});
+```
+
+Four rules define it:
+
+- **`imports` adds, it never replaces.** Whatever the scan, an explicit `components` list or the
+  build found is registered as well. There is no configuration in which `imports` is the reason a
+  component went missing.
+- **Every entry must carry its own component decorator** — `@Service`, `@Controller`,
+  `@Middleware`, … An undecorated class throws
+  `imports entry <Name> carries no component decorator`, because a silently dropped import is
+  exactly the failure this option exists to prevent.
+- **The list is flattened one level**, so a package can export an array of its components and you
+  can spread or nest it.
+- **Name collisions still fail.** An import whose registered name clashes with a scanned class
+  raises the usual `Duplicate component name detected`. Give the package component an explicit
+  `@Service('name')` if that happens.
+
+`imports` on its own is a valid component source: an application made only of packages — no
+`sourceFolder` to scan, no `components` list — boots instead of failing with
+`No components or configuration found`.
+
+The same option exists on [`createTestApp`](/docs/testing/test-app#imports).
+
+### Which source wins
+
+`imports` sits beside the *primary* component source, which is picked in this order:
+
+| Order | Source | When it applies |
+|:------|:-------|:----------------|
+| 1 | `components: [...]` | You passed a non-empty list to `AsenaServerFactory.create` |
+| 2 | The build component list | The bundle was produced by [`asena build`](/docs/cli/commands#asena-build), which publishes its scanned classes on `globalThis[Symbol.for('asena.buildComponents')]` before your entry module evaluates |
+| 3 | The `sourceFolder` scan | Neither of the above — the classic development path driven by `asena-config.ts` |
+
+Whichever wins, `imports` is registered on top of it.
+
+::: tip A hand-written `components:` list is yours
+Because an explicit list outranks the build list, a `components: [...]` array you wrote by hand
+survives `asena build` and wins. Earlier CLI versions rewrote that array during the build; they
+no longer touch your entry file at all. See [`asena build`](/docs/cli/commands#asena-build).
+:::
 
 ## Reaching the container from outside
 
