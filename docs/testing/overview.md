@@ -134,6 +134,13 @@ await using app = await createTestApp({
 });
 ```
 
+::: tip `components` only needs the roots
+`createTestApp` follows every `@Inject(SomeClass)` edge and registers what it finds, so listing
+`[UserController]` alone is usually enough. Naming the whole closure by hand still works — a class
+the walk would have found anyway is a no-op. See
+[`components`](/docs/testing/test-app#components).
+:::
+
 ## Import Path
 
 ```typescript

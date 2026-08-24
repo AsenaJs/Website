@@ -35,6 +35,7 @@ describe('UserController', () => {
 interface TestAppOptions {
   adapter: AsenaAdapter;             // required
   components: Class[];               // required - skips filesystem scanning entirely
+  imports?: (Class | readonly Class[])[]; // package components, in addition to `components`
   overrides?: Record<string, object>; // service name -> replacement instance
   logger?: ServerLogger;             // default: silentLogger
   port?: number;                     // default: 0 (Bun picks a free port)
@@ -44,7 +45,77 @@ interface TestAppOptions {
 
 ### `components`
 
-Passing an explicit component list skips config-based filesystem scanning, so a test boots only what it names. Every class the app needs at start-up must be present — controllers, services, middlewares, validators, configs.
+Passing an explicit component list skips config-based filesystem scanning, so a test boots only what it names.
+
+You name the **roots** — typically the controllers. Every class reachable from them through
+`@Inject(SomeClass)` is walked and registered for real, so the injection closure does not have to
+be spelled out by hand:
+
+```typescript
+@Controller('/api/users')
+class UserController {
+  @Inject(UserService)
+  private userService: UserService;   // UserService injects UserRepository, which injects Db
+}
+
+await using app = await createTestApp({
+  adapter,
+  components: [UserController],       // UserService, UserRepository and Db come along
+});
+```
+
+Three rules govern the walk:
+
+- **Only `@Inject(Class)` edges are followed.** A dependency injected by name — `@Inject('UserService')` — has no class reference to follow, so it must be listed in `components` or replaced through `overrides`.
+- **A name in `overrides` stops the walk.** The double replaces the real class, so nothing behind it is registered.
+- **`@Strategy` fields are not walked.** They live under a different metadata key, and an empty strategy key is a legitimate plugin point injected as `[]`, not a missing dependency.
+
+A class registered under an [`@Implements`](/docs/concepts/dependency-injection) interface key
+counts as providing that key too, so listing the implementation satisfies a dependency injected
+by the interface name.
+
+### Missing dependencies fail before the boot
+
+Anything the walk cannot satisfy is collected and reported **before anything starts**, with one
+line per problem naming the component and the field:
+
+```
+createTestApp: missing dependencies:
+UserController.userService injects 'UserService', which is not in components or overrides
+OrderService.mailer injects Mailer, which is not a decorated component
+```
+
+::: warning Upgrading from 0.10
+The same mistakes used to surface much later and much less clearly: a name-injected dependency
+nobody provided reached the container as a bare `<key> is not registered` mid-boot — or, under
+[`createWebTest`](/docs/testing/web-test), as a 500 on the first request. `@Inject(SomeClass)`
+where `SomeClass` carried no component decorator failed with `undefined is not registered`.
+
+If a test asserts on either message, update the matcher to the
+`createTestApp: missing dependencies:` prefix. Tests that listed the whole closure by hand keep
+working unchanged — listing a class the walk would have found anyway is a no-op.
+:::
+
+Inside the container the corresponding failure now names the dependent as well:
+`'MailService' is not registered (injected into OrderService.mail)`, with the original error
+attached as `cause`.
+
+### `imports`
+
+Components that ship inside a package cannot be reached by a filesystem scan and are awkward to
+enumerate by hand. Pass them as `imports` instead — they are registered **in addition to**
+`components`, and each entry must carry its own component decorator:
+
+```typescript
+await using app = await createTestApp({
+  adapter,
+  components: [OrderController],
+  imports: [OtelService],
+});
+```
+
+See [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) for the
+full contract.
 
 ### `port`
 

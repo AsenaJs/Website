@@ -178,7 +178,33 @@ expect(mocks.userService).toBe(customMock);
 An override is the **final** value injected into the field:
 
 - For expression-based injections (e.g. `@Inject(ulak('/chat'))` or `@Inject(UserService, (s) => s.createUser)`), the expression is **skipped entirely** — your override is used as-is.
+- For [`@Value`](/docs/concepts/dependency-injection#value-configuration-injection) fields, the environment is **not read at all** — see below.
 - Presence is checked with `Object.hasOwn`, so falsy values (`0`, `''`, `null`, `undefined`) are injected as-is rather than ignored.
+
+##### Overriding `@Value` fields
+
+`mockComponent` resolves `@Value` fields with exactly the container's precedence —
+**override > field initializer > environment** — so a unit test can pin configuration without
+touching `process.env`:
+
+```typescript
+@Service()
+class RetryPolicy {
+  @Value('MAX_RETRIES', { parse: Number, default: 3 })
+  private maxRetries: number;
+
+  @Value('API_KEY')            // required: no default
+  private apiKey: string;
+}
+
+const { instance } = mockComponent(RetryPolicy, {
+  overrides: { maxRetries: 7, apiKey: 'test-key' },
+});
+```
+
+An overridden field is never read from the environment, so a **required** `@Value` with no
+default does not fail the test when the variable is unset. Resolved values are plain data, not
+doubles, so they do not appear in `mocks`.
 
 #### `postConstruct`
 
@@ -467,6 +493,7 @@ The mock a field gets depends on how it was injected:
 | `@Inject(UserService)` | An object shaped like the class — every method is a `bun:test` mock |
 | `@Inject(ulak('/chat'))` and other expression injections | The expression evaluated against a deep mock, so any call chain works and stays assertable |
 | `@Inject('UserService')` | A plain `{}` — a string carries no class reference, so no method shape can be derived |
+| [`@Value('KEY')`](/docs/concepts/dependency-injection#value-configuration-injection) | Not a mock at all — the real resolved value, with the container's `overrides > initializer > environment` precedence |
 
 ::: warning String injections need overrides
 Only class-based injections can be auto-shaped. For `@Inject('UserService')` pass the double yourself:
