@@ -236,6 +236,13 @@ This guarantees that PostProcessors are ready before any user component is creat
 
 ::: warning PostProcessor dependencies are not post-processed
 Dependencies of PostProcessors (services injected via `@Inject`) are also created in Phase A and are **not** post-processed. Keep PostProcessor dependencies minimal.
+
+This is a real trap, not a technicality: a class that *should* be wrapped and lands in a
+processor's dependency closure is silently left unwrapped, and the wrapper's whole reason for
+existing quietly stops applying. `asena-drizzle` now
+[fails the boot when it detects it](/docs/packages/drizzle#the-boot-guard) rather than starting a
+server whose `@Transaction` methods run with autocommit — a useful pattern for any processor whose
+wrapping is load-bearing.
 :::
 
 ::: warning Phase A keeps the old start-hook timing

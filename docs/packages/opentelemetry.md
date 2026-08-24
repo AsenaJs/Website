@@ -113,6 +113,23 @@ export class AppOtel extends OtelTracingPostProcessor {}
 Asena's IoC container automatically discovers your `@Otel` class and `OtelService`. No manual component registration needed — except for `OtelTracingMiddleware`, which requires a local wrapper class (see Step 2).
 :::
 
+#### Lazy options
+
+`@Otel` also accepts a **thunk** returning the options. It is not called at decoration time: it
+runs once when the post-processor initialises (`onInit`), after module-level configuration has been
+read, and the result is cached. Per-service values can therefore come from the environment, and the
+decorated class can live in a shared package:
+
+```typescript
+@Otel(() => ({
+  serviceName: process.env.SERVICE_NAME!,
+  traceExporter: new OTLPTraceExporter({ url: process.env.OTLP_URL }),
+}))
+export class AppOtel extends OtelTracingPostProcessor {}
+```
+
+The plain options-object form is unchanged.
+
 ### 2. Create a Local Middleware Class
 
 Create a class in your `src` folder that extends `OtelTracingMiddleware` and apply the `@Middleware()` decorator. This registers the middleware in Asena's IoC container.
@@ -194,6 +211,24 @@ Private methods (starting with `_`), constructors, and Symbol-keyed methods are 
 ## OtelService API
 
 `OtelService` is an injectable `@Service` that provides access to OpenTelemetry tracer and meter. Asena automatically discovers it — just inject where needed.
+
+::: tip When the scan cannot see it
+Discovery works because your `sourceFolder` is scanned and `OtelService` is registered along with
+the `@Otel` class. A project whose components come from packages rather than a scanned source
+folder can hand it in directly instead of writing a local subclass just to make it visible:
+
+```typescript
+import { OtelService } from '@asenajs/asena-otel';
+
+await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [OtelService],
+});
+```
+
+See [Registering components from packages](/docs/concepts/dependency-injection#registering-components-from-packages).
+:::
 
 ### withSpan(name, fn)
 
