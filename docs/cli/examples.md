@@ -43,7 +43,7 @@ This guide walks you through creating your first Asena project from scratch, inc
 
 ## Prerequisites
 
-- [Bun runtime](https://bun.sh) v1.3.12 or higher
+- [Bun runtime](https://bun.sh) v1.4 or higher
 - Asena CLI installed globally
 
 **Verify installations:**

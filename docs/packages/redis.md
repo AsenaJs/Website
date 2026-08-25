@@ -62,8 +62,8 @@ bun add @asenajs/asena-redis redis
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 
 ## Quick Start
 
@@ -152,7 +152,7 @@ alive past the server, do not hand it to `@Redis`.
 ::: warning This was not true before
 This page previously claimed disconnection on shutdown was automatic. It was not — the framework
 had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
-that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.10.0
+that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.11.0
 or higher.
 :::
 

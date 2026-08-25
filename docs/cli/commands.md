@@ -10,7 +10,7 @@ Asena CLI provides command-line utilities to help you manage your Asena applicat
 
 ## Installation
 
-**Prerequisite:** [Bun runtime](https://bun.sh) (v1.3.12 or higher)
+**Prerequisite:** [Bun runtime](https://bun.sh) (v1.4 or higher)
 
 ```bash
 bun install -g @asenajs/asena-cli

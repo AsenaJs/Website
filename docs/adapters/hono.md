@@ -66,7 +66,7 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
 **Requirements:**
-- [Bun](https://bun.sh) runtime v1.3.12 or higher
+- [Bun](https://bun.sh) runtime v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)

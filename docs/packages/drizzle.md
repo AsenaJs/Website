@@ -64,8 +64,8 @@ bun add mysql2          # For MySQL
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases

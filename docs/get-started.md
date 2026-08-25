@@ -10,7 +10,7 @@ Get up and running with Asena in minutes. This guide shows you how to create you
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.3.12 or higher
+- [Bun](https://bun.sh) v1.4 or higher
 
 **Verify Bun installation:**
 

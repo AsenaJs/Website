@@ -109,7 +109,7 @@ Get up and running with Asena in minutes. This guide shows you how to create you
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.3.12 or higher
+- [Bun](https://bun.sh) v1.4 or higher
 
 **Verify Bun installation:**
 
@@ -13688,7 +13688,7 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
 **Requirements:**
-- [Bun](https://bun.sh) runtime v1.3.12 or higher
+- [Bun](https://bun.sh) runtime v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
@@ -14543,7 +14543,7 @@ bun add @asenajs/asena-logger
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
+- [Bun](https://bun.sh) v1.4 or higher
 - TypeScript v5.8.3 or higher
 
 The package has no peer dependency on `@asenajs/asena` - it only implements the
@@ -15003,8 +15003,8 @@ bun add mysql2          # For MySQL
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
@@ -16098,8 +16098,8 @@ bun add @asenajs/asena-openapi
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [Zod](https://zod.dev) v4.3 or higher
 
 ## Quick Start
@@ -16366,8 +16366,8 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 ```
 
 ::: info Requirements
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 :::
 
 ## Quick Start
@@ -16964,8 +16964,8 @@ bun add @asenajs/asena-redis redis
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 
 ## Quick Start
 
@@ -17054,7 +17054,7 @@ alive past the server, do not hand it to `@Redis`.
 ::: warning This was not true before
 This page previously claimed disconnection on shutdown was automatic. It was not — the framework
 had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
-that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.10.0
+that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.11.0
 or higher.
 :::
 
@@ -17487,8 +17487,8 @@ bun add @asenajs/asena-kafka kafkajs
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [kafkajs](https://kafka.js.org) v2.2 or higher
 
 ::: warning Broker compatibility
@@ -18138,7 +18138,7 @@ asena dev start
 
 ## Requirements
 
-- **Bun Runtime** - v1.3.12 or higher
+- **Bun Runtime** - v1.4 or higher
 - **TypeScript** - v5.8.2 or higher (installed automatically)
 
 ## Related
@@ -18162,7 +18162,7 @@ Install the Asena CLI globally to access the `asena` command from anywhere on yo
 ## Prerequisites
 
 **Required:**
-- [Bun runtime](https://bun.sh) v1.3.12 or higher
+- [Bun runtime](https://bun.sh) v1.4 or higher
 
 **Verify Bun installation:**
 
@@ -18283,7 +18283,7 @@ Asena CLI provides command-line utilities to help you manage your Asena applicat
 
 ## Installation
 
-**Prerequisite:** [Bun runtime](https://bun.sh) (v1.3.12 or higher)
+**Prerequisite:** [Bun runtime](https://bun.sh) (v1.4 or higher)
 
 ```bash
 bun install -g @asenajs/asena-cli
@@ -19766,7 +19766,7 @@ This guide walks you through creating your first Asena project from scratch, inc
 
 ## Prerequisites
 
-- [Bun runtime](https://bun.sh) v1.3.12 or higher
+- [Bun runtime](https://bun.sh) v1.4 or higher
 - Asena CLI installed globally
 
 **Verify installations:**

@@ -15,7 +15,7 @@ bun add @asenajs/asena-logger
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
+- [Bun](https://bun.sh) v1.4 or higher
 - TypeScript v5.8.3 or higher
 
 The package has no peer dependency on `@asenajs/asena` - it only implements the

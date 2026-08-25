@@ -11,7 +11,7 @@ Install the Asena CLI globally to access the `asena` command from anywhere on yo
 ## Prerequisites
 
 **Required:**
-- [Bun runtime](https://bun.sh) v1.3.12 or higher
+- [Bun runtime](https://bun.sh) v1.4 or higher
 
 **Verify Bun installation:**
 
