@@ -255,7 +255,7 @@ public onFound(filePath: string, c: Context): void {
 ::: danger Setting response headers here does not work on Ergenecore
 `c.setResponseHeader()` writes into the context's response object, which Ergenecore only
 consults for `send()`/`html()`. Static responses are built directly from the file, so the
-header is dropped. (On Hono it does work, because the wrapper appends to the live response.)
+header is dropped. (On Hono it does work, because the wrapper writes into the live response.)
 
 Use the service's `extra` property instead - it is honoured by both adapters:
 

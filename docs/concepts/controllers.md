@@ -56,7 +56,7 @@ import type { Context } from '@asenajs/ergenecore';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = await context.getQuery('page') || '1';
+    const page = (await context.getQuery('page')) ?? '1';
     return context.send({ users: [], page });
   }
 
@@ -83,7 +83,7 @@ import type { Context } from '@asenajs/hono-adapter';
 export class UserController {
   @Get('/')
   async list(context: Context) {
-    const page = await context.getQuery('page') || '1';
+    const page = (await context.getQuery('page')) ?? '1';
     return context.send({ users: [], page });
   }
 
@@ -240,8 +240,8 @@ Access URL query strings:
 @Get('/search')
 async search(context: Context) {
   const query = await context.getQuery('q');
-  const page = await context.getQuery('page') || '1';
-  const limit = await context.getQuery('limit') || '10';
+  const page = (await context.getQuery('page')) ?? '1';
+  const limit = (await context.getQuery('limit')) ?? '10';
 
   return context.send({ query, page, limit });
 }
@@ -338,7 +338,7 @@ import type { Context } from '@asenajs/hono-adapter'
 | Method | Description | Example |
 |:-------|:------------|:--------|
 | `getParam(key)` | Get route parameter | `context.getParam('id')` |
-| `getQuery(key)` | Get single query parameter | `await context.getQuery('page')` |
+| `getQuery(key)` | Get single query parameter (`undefined` when absent) | `await context.getQuery('page')` |
 | `getQueryAll(key)` | Get all values for query parameter | `await context.getQueryAll('colors')` |
 | `getBody<T>()` | Get typed request body | `await context.getBody<User>()` |
 | `getParseBody()` | Get parsed multipart/form-data body | `await context.getParseBody()` |
@@ -366,9 +366,6 @@ import type { Context } from '@asenajs/hono-adapter'
 ::: tip What differs between adapters
 The whole table above is unified - `setResponseHeader()` included. What actually differs is
 the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
-
-One behavioural difference worth knowing: calling `setResponseHeader()` twice with the same
-key **replaces** the value on Ergenecore but **appends** a second header on Hono.
 
 See adapter documentation for the complete API reference.
 :::

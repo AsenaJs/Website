@@ -64,8 +64,8 @@ bun add mysql2          # For MySQL
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [drizzle-orm](https://orm.drizzle.team) v0.45.2 or higher
 
 ## Supported Databases
@@ -119,6 +119,28 @@ import { Database, AsenaDatabaseService } from '@asenajs/asena-drizzle';
 })
 export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {}
 ```
+
+#### Lazy options
+
+`@Database` also accepts a **thunk**. It runs when the container constructs the component — after
+module-level environment reading — so the configuration can come from values that do not exist yet
+at decoration time. That is what lets a database service live in a shared package:
+
+```typescript
+@Database(() => ({ type: 'bun-sql', config: env.db, drizzleConfig: { schema: Schemas } }))
+export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schemas>> {}
+```
+
+A thunk cannot carry a `name` — the options do not exist when the decorator registers the class —
+so the thunk form registers under the **decorated class's own name** (`MyDatabase` above). Use the
+object form when you need an explicit registration key.
+
+::: tip Composes with `imports`
+A `@Database` in a package is registered by handing it to
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages); the thunk
+is what lets that package read the consumer's environment at the right moment.
+:::
+
 ::: tip 💡 Schema Export Pattern
 
 We export all schemas as a single object for better TypeScript support:
@@ -203,9 +225,9 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 ```
 :::
 
-### 4. Activate the Transaction Post-Processor (optional)
+### 4. Activate the Transaction Post-Processor (required for `@Transaction`)
 
-If you plan to use `@Transaction` (see [Transactions](#transactions) below), drop a `@Drizzle`-decorated class somewhere in your source folder — `src/config/` is the convention. AsenaJS only scans your source files, never `node_modules`, so the transaction post-processor must be subclassed inside your project to be discovered.
+If you use `@Transaction` (see [Transactions](#transactions) below), drop a `@Drizzle`-decorated class somewhere in your source folder — `src/config/` is the convention. AsenaJS only scans your source files, never `node_modules`, so the transaction post-processor must be subclassed inside your project to be discovered.
 
 ```typescript
 // src/config/AppDrizzle.ts
@@ -219,6 +241,12 @@ The body is intentionally empty — this class exists only so AsenaJS's componen
 
 ::: tip Skip this step if you don't need transactions
 The package works fine without `@Drizzle` — you'll still get repositories, the typed query builder, pagination, and `BaseRepository#transaction(cb)`. You only need this step to enable the `@Transaction` decorator.
+:::
+
+::: danger `@Transaction` without this step fails the boot
+An unwrapped `@Transaction` method would run with autocommit — every write landing, nothing
+transactional — so the boot refuses to start and names each one, rather than letting the
+application serve traffic in that state. See [The boot guard](#the-boot-guard).
 :::
 
 ### 5. Use in Services
@@ -281,6 +309,9 @@ The `@Database` decorator configures a database connection:
 })
 ```
 
+It also accepts `() => DatabaseOptions` — the same object, resolved at construction time. See
+[Lazy options](#lazy-options).
+
 The `pool` shape is exported as `DatabasePoolConfig` if you want to build it separately.
 
 ::: tip The pool is released on shutdown
@@ -307,7 +338,7 @@ The `@Repository` decorator configures a repository:
 
 ## @Drizzle Decorator API
 
-`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
+`@Drizzle` activates the transaction post-processor (see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-required-for-transaction)). Apply it to a class extending `TransactionPostProcessor` placed in your source folder:
 
 ```typescript
 @Drizzle({
@@ -798,7 +829,7 @@ export class EventRepository extends BaseRepository<typeof events> {}
 asena-drizzle ships a Spring-style `@Transaction` decorator backed by Bun's native `AsyncLocalStorage`. Repository calls made inside a `@Transaction`-wrapped method automatically pick up the active transaction — you do not have to thread a `tx` parameter through your code.
 
 ::: warning Setup required
-`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-optional). Without it the decorator silently does nothing because AsenaJS never sees the post-processor.
+`@Transaction` only works once you have activated the post-processor with a `@Drizzle`-decorated class in your source folder — see [Step 4 of Quick Start](#_4-activate-the-transaction-post-processor-required-for-transaction). Without it the boot fails rather than starting a server whose transactions are not transactional — see [The boot guard](#the-boot-guard).
 :::
 
 ### `@Transaction` Decorator
@@ -925,6 +956,80 @@ export class OrderService {
 ::: warning Self-invocation
 `@Transaction` only wraps actual class methods. Arrow-function class properties (`run = async () => …`) live on the instance, not the prototype, and are not intercepted. Use the standard `async method() { … }` syntax.
 :::
+
+### The boot guard
+
+An unwrapped `@Transaction` method is the worst kind of bug: the method still returns, every write
+still lands, and every test still passes — only nothing is atomic. There is no symptom until the
+day a half-finished operation should have rolled back and did not.
+
+So the boot checks it. If any `@Transaction` method reached the container without being wrapped,
+`server.start()` throws and names every one of them:
+
+```
+@Transaction methods are not wrapped: AccountService.register, OrderService.place - they would run
+with autocommit. Register a TransactionPostProcessor subclass in your source folder
+(@Drizzle({ defaultDb: '...' }) export class AppDrizzle extends TransactionPostProcessor {}) and
+keep transactional classes out of a post-processor's dependency closure.
+```
+
+Two situations produce it:
+
+1. **No `@Drizzle` subclass in the source folder.** The post-processor was never registered, so
+   nothing wraps anything. Add the class from
+   [Step 4](#_4-activate-the-transaction-post-processor-required-for-transaction).
+2. **A transactional class sits inside a post-processor's dependency closure.** A `@Drizzle`
+   subclass — or something it injects — `@Inject`s the transactional class. Post-processor
+   dependencies are constructed in bootstrap Phase A, *before* post-processing is active, so
+   those instances can never be wrapped. Keep transactional services out of that closure.
+
+Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
+skipped, so the guard does not fire on a mocked service.
+
+::: info When the check runs
+Once per container, from the first database service's [`@OnStart`](/docs/concepts/lifecycle).
+
+There is one exception, and it is the Phase-A trap again: when the only database service is
+itself a dependency of a post-processor, it is constructed before registration finishes, so
+checking at that moment would report components that have not had their turn yet. In that case
+the check is deferred to the first `connection` / `rootConnection` read that lands after the
+service is registered.
+:::
+
+### `connection` vs `rootConnection`
+
+`AsenaDatabaseService` exposes two connection accessors, and the difference matters exactly once —
+inside a transaction:
+
+| Accessor | Inside a `@Transaction` scope for that database | Outside one |
+|:---------|:------------------------------------------------|:------------|
+| `connection` | The **active transaction** | The pooled connection |
+| `rootConnection` | The pooled connection — ignores the ambient transaction | The pooled connection |
+
+**Application code should use `connection`.** It is transaction-aware, so a hand-written query
+joins the transaction its caller opened instead of quietly committing outside it:
+
+```typescript
+@Service()
+export class ReportService {
+  @Inject('MainDatabase')
+  private db: MyDatabase;
+
+  @Transaction()
+  async rebuild() {
+    // joins the transaction @Transaction opened
+    await this.db.connection.insert(reports).values({ status: 'building' });
+  }
+}
+```
+
+`rootConnection` exists for *starting* a top-level transaction, which is what `REQUIRES_NEW` and
+[`BaseRepository#transaction`](#programmatic-transaction) do internally. Writing through it inside
+a transaction commits outside that transaction — which is occasionally what you want (an audit row
+that must survive a rollback) and is otherwise a bug.
+
+Repositories do not go through either accessor: `BaseRepository.db` performs its own transaction
+lookup and its fallback is pinned to `rootConnection`.
 
 ::: tip Roadmap — full auto-resolution
 Today, single-database projects can use `@Drizzle({ defaultDb })` once and call `@Transaction()` with no arguments thereafter. Multi-database projects still need to name the target explicitly. Once AsenaJS core ships an `afterAllComponentsRegistered` post-processor hook (see [`docs/asena-core-feature-request-afterAllComponentsRegistered.md`](https://github.com/AsenaJs/asena-drizzle/blob/master/docs/asena-core-feature-request-afterAllComponentsRegistered.md) in the asena-drizzle repository), v1.3.0 will skip even the `defaultDb` step when exactly one `@Database` service is registered, mirroring Spring Boot's auto-wired repositories.

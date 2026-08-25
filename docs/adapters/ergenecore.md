@@ -63,8 +63,8 @@ bun add @asenajs/ergenecore zod
 library and its version.
 
 **Requirements:**
-- Bun v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- Bun v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
 

@@ -66,8 +66,8 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
 **Requirements:**
-- [Bun](https://bun.sh) runtime v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) runtime v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
@@ -361,6 +361,9 @@ The middleware automatically sets these headers:
 - `X-RateLimit-Remaining`: Remaining tokens
 - `X-RateLimit-Reset`: Unix timestamp when bucket resets
 - `Retry-After`: Seconds to wait (on 429 response)
+
+Each appears exactly once, even when a global and a route limiter both run — the innermost one
+writes last and wins.
 
 #### Using Rate Limiter
 

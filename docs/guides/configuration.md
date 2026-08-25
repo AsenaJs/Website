@@ -661,7 +661,7 @@ class AppConfig implements AsenaConfig {
   public globalMiddlewares() {
     return [
       LoggerMiddleware,
-      CorsMiddleware,
+      GlobalCors,
       CompressionMiddleware,
     ];
   }
@@ -1073,19 +1073,31 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 2. **Phase: IOC_ENGINE_INIT** - Component discovery begins
 3. **Phase: USER_COMPONENTS_SCAN** - Config class is discovered and registered
 4. **Phase: USER_COMPONENTS_INIT** - Config instance is created
-5. **Phase: APPLICATION_SETUP** - Config methods are applied:
+5. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
+6. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
    - `onError()` is registered as error handler
    - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
    - `transport()` is called and the WebSocket / microservice transports are wired
-6. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
 7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
 
-::: warning A `@Config` cannot use `@OnStart` to prepare configuration
-The config hooks above are read in step 5, *before* start hooks run in step 6. An `@OnStart` on a
-`@Config` class still fires, but anything it prepares arrives after the values were already taken —
-Asena logs a warning when it sees one.
+::: tip A `@Config` finds its dependencies already started
+Start hooks run in step 5, *before* the config hooks are read in step 6. So `serveOptions()`,
+`globalMiddlewares()` and `transport()` are called against components whose
+[`@OnStart`](/docs/concepts/lifecycle) has already run — a config that builds a transport out of
+an injected Redis or Kafka service reaches a connection that is open. The config's own
+`@OnStart` may prepare configuration the same way.
+
+The price of that ordering is on the other side: a start hook runs before the transports exist,
+so it [cannot publish through `ulak`](/docs/concepts/lifecycle#onstart).
+:::
+
+::: warning Upgrading from 0.9.x
+Up to `0.9.x` the order was the reverse — config hooks were applied first and start hooks ran
+after them, which is why a `@Config` could not use its injected components. The framework
+swapped the two in `0.10.0`; this page kept describing the old sequence until now. No source
+change is required, but a workaround written for the old order can go.
 :::
 
 ### Singleton Validation
@@ -1146,6 +1158,22 @@ widen the type at the call site.
    ```typescript
    port: parseInt(process.env.PORT || '3000', 10),
    hostname: process.env.HOSTNAME || 'localhost',
+   ```
+
+   A `@Config` is a component, so it can also take configuration through
+   [`@Value`](/docs/concepts/dependency-injection#value-configuration-injection) — parsed,
+   defaulted, and loud about a required variable that is unset:
+
+   ```typescript
+   @Config()
+   export class ServerConfig implements AsenaConfig {
+     @Value('PORT', { parse: Number, default: 3000 })
+     private port: number;
+
+     public serveOptions() {
+       return { port: this.port };
+     }
+   }
    ```
 
 2. **Separate Development and Production Configuration**

@@ -16,6 +16,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
 - **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
+- **Diagnostics** - `asena doctor` checks the project for the configuration mistakes that only surface in production
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
 ## Key Features
@@ -39,7 +40,12 @@ Asena CLI provides essential tools for building and managing Asena applications:
   <div class="info-card">
     <span class="ic-kicker">📦 Production</span>
     <div class="ic-title">Production Builds</div>
-    <p class="ic-desc">Bundle with Bun's fast bundler, with full control over minification, source maps and output options.</p>
+    <p class="ic-desc">Bundle with Bun's fast bundler, with full control over minification, source maps and output options. Your entry file is never rewritten.</p>
+  </div>
+  <div class="info-card">
+    <span class="ic-kicker">🩺 Diagnostics</span>
+    <div class="ic-title">asena doctor</div>
+    <p class="ic-desc">A read-only check for missing decorator flags, duplicate package copies, unsatisfied peer ranges and build settings that mangle component names.</p>
   </div>
 </div>
 
@@ -73,7 +79,7 @@ asena dev start
 
 ## Requirements
 
-- **Bun Runtime** - v1.3.12 or higher
+- **Bun Runtime** - v1.4 or higher
 - **TypeScript** - v5.8.2 or higher (installed automatically)
 
 ## Related

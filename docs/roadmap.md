@@ -14,13 +14,28 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
+## Next Release <span class="pill pill-teal">v0.11 · In progress</span>
+
+Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics change.
+
+- **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
+- **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
+- **[`createTestApp` walks the injection closure](/docs/testing/test-app#components)** - a test names its roots; classes reached through `@Inject(Class)` come along, and a dependency nobody provides fails before the boot instead of mid-boot
+- **[`asena doctor`](/docs/cli/commands#asena-doctor)** - a read-only check for decorator flags, duplicate package copies, unsatisfied peer ranges and build settings that mangle component names
+- **[`asena build` no longer rewrites your entry file](/docs/cli/commands#asena-build)** - it bundles through a temporary wrapper instead, so the entry's formatting rules are gone and its module-level code no longer runs at build time
+- **Unified context semantics** *(adapter majors)* - [`getQuery` returns `undefined` when absent](/docs/concepts/context#query-parameters) on both adapters, [`setResponseHeader` replaces and `appendResponseHeader` appends](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader) on both, and [SSE messages can carry a `comment`](/docs/concepts/context#keep-alive-comments) for keep-alive pings
+- **[Lazy decorator options](/docs/packages/drizzle#lazy-options)** - `@Database`, `@Redis` and `@Otel` accept a thunk, so a service configured from the environment can ship inside a package
+- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method now fails the boot instead of silently running with autocommit
+
+---
+
 ## Current Release <span class="pill pill-live">v0.10.x · Stable</span>
 
 These features are **stable and production-ready** in the current release:
 
 ### New in v0.10
 
-- **[Component Lifecycle](/docs/concepts/lifecycle)** - `@OnStart` and `@OnStop`, a symmetric pair around `server.start()` and `server.stop()`. `@PostConstruct` is now a deprecated alias of `@OnStart`, and start hooks moved out of the component scan into `start()` - so a hook sees the finished graph, can publish through `ulak`, and no request can reach a component whose hook has not run
+- **[Component Lifecycle](/docs/concepts/lifecycle)** - `@OnStart` and `@OnStop`, a symmetric pair around `server.start()` and `server.stop()`. `@PostConstruct` is now a deprecated alias of `@OnStart`, and start hooks moved out of the component scan into `start()` - so a hook sees the finished graph, a `@Config` finds its injected components already started, and no request can reach a component whose hook has not run. A hook still cannot publish through `ulak`: it runs before the transports are wired
 - **Graceful shutdown, completed** - `stop()` reordered around the new hooks, `ulak.dispose()` called automatically, the WebSocket transport's `destroy()` actually invoked, and every teardown step contained so one failure cannot strand the rest
 - **[Signal handling](/docs/concepts/lifecycle#signal-handling)** - `SIGTERM` / `SIGINT` / `SIGHUP` call `stop()` by default; handlers are installed in `start()` and removed in `stop()`, with `forceExitAfter` and `onUnhandledError` as opt-ins
 - **[`keepAlive`](/docs/concepts/lifecycle#keepalive-and-headless-workers)** - a headless worker starts its loop in `@OnStart`, returns, and the process stays alive. The run loop no longer has to live in the entry file
@@ -102,7 +117,31 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**Features:**
+**The first step lands in v0.11:**
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
+gap that made a plugin impossible to write at all — the component scan never walks
+`node_modules`, so a package's components had no way into the container short of the consumer
+re-declaring them. A package can now export its components and the application hands them in:
+
+```typescript
+imports: [...platformComponents, OtelService]
+```
+
+Combined with the [lazy decorator options](/docs/packages/drizzle#lazy-options) that landed
+alongside it, a package can also ship a *configured* `@Database`, `@Redis` or `@Otel` service and
+still read the consuming application's environment at the right moment.
+
+**What `imports` does not do**, and what the plugin system is for:
+
+| Missing | Why it matters |
+|:--------|:---------------|
+| A plugin *unit* | `imports` takes a flat list of classes. There is no object a package can export that carries its components, its configuration schema and its identity together |
+| Lifecycle hooks of its own | A plugin cannot run anything at load time. Only its components have [`@OnStart` / `@OnStop`](/docs/concepts/lifecycle) |
+| Dependency resolution between plugins | Nothing declares "this plugin needs that one", so ordering is the application's problem |
+| Configuration management | A plugin's options are whatever its own decorators read. There is no per-plugin config surface and no validation |
+| A registry | Discovery is npm search |
+
+**Features still planned:**
 - Plugin lifecycle hooks (`onLoad`, plus the plugin-level equivalents of the component `@OnStart` / `@OnStop` [shipped in v0.10](/docs/concepts/lifecycle))
 - Plugin dependency resolution
 - Plugin configuration management

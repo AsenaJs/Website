@@ -26,13 +26,14 @@ bun add @asenajs/asena-openapi
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 - [Zod](https://zod.dev) v4.3 or higher
 
 ## Quick Start
 
 ```typescript
+// src/openapi/AppOpenApi.ts
 import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 
 @OpenApi({
@@ -51,7 +52,7 @@ Now:
 - `GET /api/openapi/ui` → Swagger UI page
 
 ::: tip Zero Setup
-You don't need to register `AppOpenApi` anywhere. Asena's IoC container automatically discovers and initializes it during bootstrap, just like any other component.
+You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder`, so the component scan discovers and initializes it during bootstrap, just like any other component.
 :::
 
 ## How It Works

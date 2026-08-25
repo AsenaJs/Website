@@ -73,8 +73,8 @@ bun add @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-
 ```
 
 ::: info Requirements
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 :::
 
 ## Quick Start
@@ -109,9 +109,26 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 export class AppOtel extends OtelTracingPostProcessor {}
 ```
 
-::: tip Zero Config Discovery
-Asena's IoC container automatically discovers your `@Otel` class and `OtelService`. No manual component registration needed — except for `OtelTracingMiddleware`, which requires a local wrapper class (see Step 2).
+::: tip What the scan finds
+The scan picks up this class because it lives in your `sourceFolder`. The two components that ship
+inside the package do not: `OtelTracingMiddleware` needs a local wrapper (Step 2) and `OtelService`
+is handed in through `imports` (Step 4).
 :::
+
+#### Lazy options
+
+`@Otel` also accepts a **thunk** returning the options. It is not called at decoration time: it
+runs once when the post-processor initialises (`onInit`), after module-level configuration has been
+read, and the result is cached. Per-service values can therefore come from the environment, and the
+decorated class can live in a shared package:
+
+```typescript
+@Otel(() => ({
+  serviceName: process.env.SERVICE_NAME!,
+  traceExporter: new OTLPTraceExporter({ url: process.env.OTLP_URL }),
+}))
+export class AppOtel extends OtelTracingPostProcessor {}
+```
 
 ### 2. Create a Local Middleware Class
 
@@ -163,6 +180,28 @@ export class AppConfig extends ConfigService {
 }
 ```
 
+### 4. Hand OtelService to the Container
+
+`OtelService` — the injectable tracer/meter facade — ships inside the package, and the scan never
+walks `node_modules`. Hand it in through
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages):
+
+```typescript
+// src/index.ts
+import { AsenaServerFactory } from '@asenajs/asena';
+import { OtelService } from '@asenajs/asena-otel';
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [OtelService],
+});
+```
+
+Skip this step if nothing in your code injects `OtelService`: auto-tracing and the middleware do not
+depend on it. With the step missing, the first `@Inject('OtelService')` fails the boot with
+`OtelService is not registered`.
+
 That's it. All HTTP requests are traced, service methods are auto-traced, and metrics are collected — without changing any business logic.
 
 ## How Auto-Tracing Works
@@ -193,7 +232,9 @@ Private methods (starting with `_`), constructors, and Symbol-keyed methods are 
 
 ## OtelService API
 
-`OtelService` is an injectable `@Service` that provides access to OpenTelemetry tracer and meter. Asena automatically discovers it — just inject where needed.
+`OtelService` is an injectable `@Service` that provides access to OpenTelemetry tracer and meter. It
+ships inside the package, so it reaches the container through `imports`
+([Step 4](#_4-hand-otelservice-to-the-container)); inject it wherever you need a custom span.
 
 ### withSpan(name, fn)
 

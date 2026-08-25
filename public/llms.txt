@@ -52,7 +52,7 @@
 
 - [CLI Overview](https://asena.sh/raw/cli/overview.md): Asena CLI for project scaffolding, code generation, dev server, and production bundling
 - [CLI Installation](https://asena.sh/raw/cli/installation.md): Install @asenajs/asena-cli globally with Bun, verify the installation, and troubleshoot common issues
-- [CLI Commands](https://asena.sh/raw/cli/commands.md): Reference for every CLI command - create, generate, dev start, build and init, including shortcuts
+- [CLI Commands](https://asena.sh/raw/cli/commands.md): Reference for every CLI command - create, generate, dev start, build, init and doctor, including shortcuts
 - [CLI Configuration](https://asena.sh/raw/cli/configuration.md): Complete reference for asena-config.ts configuration file
 - [Suffix Configuration](https://asena.sh/raw/cli/suffix-configuration.md): Customize component naming conventions with flexible suffix configuration
 - [CLI Examples](https://asena.sh/raw/cli/examples.md): Step-by-step tutorial for creating and running an Asena project

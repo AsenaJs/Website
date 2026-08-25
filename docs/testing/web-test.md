@@ -165,6 +165,7 @@ expect(mocks.UserService).toBe(double);
 
 - **`@OnStart` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its [start hook](/docs/concepts/lifecycle). This matches `@WebMvcTest` semantics.
 - **Only `@Controller` classes are accepted** in `controllers`. Pass services and middlewares through `components`.
+- **The auto-mock is where the graph stops.** [`createTestApp` expands its component list with the `@Inject(Class)` closure](/docs/testing/test-app#components), but every auto-mocked name is handed to it as an override, and an override stops the walk. So an auto-mocked service's own dependencies are never registered — the database the mock exists to avoid stays out of the test. A component promoted back to real through `components` is walked normally, and anything *it* injects is auto-mocked in turn.
 
 ## Related
 

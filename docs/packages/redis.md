@@ -62,8 +62,8 @@ bun add @asenajs/asena-redis redis
 ```
 
 **Requirements:**
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 
 ## Quick Start
 
@@ -93,6 +93,28 @@ export class AppRedis extends AsenaRedisService {
 ```
 
 Asena automatically discovers it — that's it.
+
+#### Lazy options
+
+`@Redis` also accepts a **thunk**, resolved when the service is constructed rather than when the
+class is defined. That is what lets a Redis service live in a shared package and still read the
+consuming application's environment:
+
+```typescript
+@Redis(() => ({ config: { url: process.env.REDIS_URL } }))
+export class AppRedis extends AsenaRedisService {}
+```
+
+A thunk cannot carry a `name` — the options do not exist yet when the decorator registers the
+class — so the thunk form registers under the **decorated class's own name**. Use the object form
+with `name` to choose the registration key explicitly. Nothing outside the thunk's return value is
+mutated.
+
+::: tip Composes with `imports`
+A `@Redis` service in a package is registered by handing it to
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages); the thunk
+is what lets that package read the consumer's environment at the right moment.
+:::
 
 ### 2. Inject and Use
 
@@ -125,13 +147,6 @@ and stepped over so one dead socket cannot strand the others or the main client.
 A **user-supplied `client`** (the `client` option) is closed too: `@OnStart` adopts it as the
 connection the service runs on, and `@OnStop` treats it the same way. If you need to keep it
 alive past the server, do not hand it to `@Redis`.
-:::
-
-::: warning This was not true before
-This page previously claimed disconnection on shutdown was automatic. It was not — the framework
-had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
-that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.10.0
-or higher.
 :::
 
 ## Adapter Selection
@@ -189,10 +204,55 @@ export class AppRedis extends AsenaRedisService {}
 | Method | Parameters | Returns | Description |
 |:-------|:-----------|:--------|:------------|
 | `send(command, args)` | `command: string, args: string[]` | `any` | Execute raw Redis command |
+| `ping(timeoutMs?)` | `timeoutMs: number` (default `1000`) | `'PONG'` | Send `PING`, or reject with `Redis PING timed out after <n>ms` |
 | `client` | — | `RedisClientAdapter` | Access underlying client |
 | `createSubscriber()` | — | `RedisClientAdapter` | Create duplicate connection for pub/sub. Tracked by the service and closed on `server.stop()` |
-| `testConnection()` | — | `boolean` | Returns `true` if connected |
+| `testConnection()` | — | `boolean` | `true` when connected and a `PING` came back within `ping()`'s timeout; `false` otherwise |
 | `disconnect()` | — | `void` | Close the main connection. Called for you by `@OnStop`; calling it by hand leaves any subscriber you are still reading from open |
+
+::: warning `ping()` is bounded on purpose
+With the offline queue enabled — the default in most clients — a command issued against an
+unreachable Redis does not fail. It waits in the queue for a connection that may never come, so an
+unbounded readiness probe **hangs forever** instead of reporting "down", which is the opposite of
+what a probe is for.
+
+`ping()` races the command against a `1000` ms timer (configurable) and rejects when the timer
+wins. `testConnection()` now goes through it, so a probe against an unreachable Redis returns
+`false` after at most a second instead of never returning. It still returns `false` immediately
+when the client reports itself disconnected.
+:::
+
+### Redis Streams Helpers
+
+The package exports the same thin, client-agnostic wrappers over the Redis Streams commands that
+the [microservice transport](#microservice-transport-redis-streams) uses. They take any
+`RedisClientAdapter` and normalize the RESP2 (node-redis) and RESP3 (Bun) reply shapes, so
+consumer code never branches on the adapter:
+
+| Export | Purpose |
+|:-------|:--------|
+| `xadd`, `xrange`, `xack` | Append, read a range, acknowledge |
+| `xgroupCreate`, `xgroupDelConsumer`, `xreadgroup` | Consumer group lifecycle and reads |
+| `xpending`, `xpendingConsumer`, `xinfoConsumers`, `xclaim` | Pending-entry inspection and reclaim |
+| `entryTimestamp` | Creation time (epoch ms) extracted from an entry id |
+| `normalizeStreamsReply`, `normalizeEntries`, `normalizeFields` | The reply normalizers, for hand-rolled commands |
+| `StreamEntry`, `PendingEntry`, `ConsumerInfo` | The types they return |
+
+```typescript
+import { xrange } from '@asenajs/asena-redis';
+
+const recent = await xrange(redis.client, 'orders', '-', '+', 10);
+
+for (const entry of recent) {
+  console.log(entry.id, entry.fields);
+}
+```
+
+`xrange(client, key, start = '-', end = '+', count?)` reads entries by id range — `'-'` / `'+'`
+for the ends, `'<ms>-<seq>'` for a point, a `'('` prefix for exclusive — and returns
+`StreamEntry[]` (`{ id, fields }`) in id order. It is new; the rest were internal to the transport
+and are now public, so a DLQ inspector or a backfill script no longer has to re-implement the
+RESP2/RESP3 normalisation.
 
 ## Configuration
 
@@ -239,6 +299,9 @@ interface RedisConfig {
   name?: string,               // Service name for IoC registration
 })
 ```
+
+It also accepts `() => RedisOptions` — the same object, resolved at construction time. See
+[Lazy options](#lazy-options).
 
 ## Multi-Pod WebSocket Transport
 
@@ -458,6 +521,10 @@ async health(context: Context) {
   return context.send({ redis: redisOk ? 'up' : 'down' });
 }
 ```
+
+The probe is bounded: an unreachable Redis makes `testConnection()` return `false` within
+`ping()`'s timeout (1000 ms by default) instead of leaving the request hanging on a queued
+command.
 
 ::: warning `testConnection()` is not a microservice readiness check
 It `PING`s the cache client and says nothing about whether this instance's **reply channel** is being served, which is what decides whether a `send()` can complete. For an instance running `RedisMicroserviceTransport`, the readiness signal is the transport's `isConnected` (already wired into Asena's health endpoint) — see [Delivery Guarantees](#delivery-guarantees).

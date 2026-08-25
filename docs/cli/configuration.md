@@ -319,16 +319,31 @@ export default defineConfig({
 ### minify
 
 **Type:** `boolean | MinifyOptions`
-**Default:** `{ whitespace: true, syntax: true, identifiers: false, keepNames: true }`
+**Written by `asena init`:** `{ whitespace: true, syntax: true, identifiers: false, keepNames: true }`
 
 Controls code minification for smaller bundle sizes.
+
+::: danger `identifiers` must stay `false`
+Component registration is name-based — `@Inject('UserService')` looks its target up by the
+class's runtime `.name` — so minifying identifiers registers the component under a mangled name
+and the lookup fails, in production only.
+
+`asena build` therefore **forces `identifiers: false`** whatever the config says, and narrows
+`minify: true` to `{ whitespace: true, syntax: true, identifiers: false }`. `keepNames: true` does
+**not** rescue it: Bun's bundler (measured on 1.4.0) does not preserve class names under
+identifier minification with `keepNames` set, inside `minify` or beside it. `keepNames` is
+harmless and buys readable stack traces; it is not a safeguard.
+
+[`asena doctor`](/docs/cli/commands#asena-doctor) reports a config that enables it. See
+[Minification and component names](/docs/cli/commands#minification-and-component-names).
+:::
 
 #### Boolean Mode
 
 ```typescript
 export default defineConfig({
   buildOptions: {
-    minify: true, // Enable all minification
+    minify: true, // whitespace + syntax; the build keeps identifiers: false
   },
 });
 ```
@@ -355,15 +370,15 @@ export default defineConfig({
 | `whitespace`  | `boolean` | Removes unnecessary whitespace and newlines    |
 | `syntax`      | `boolean` | Applies syntax-level optimizations             |
 | `identifiers` | `boolean` | Renames variables/functions to shorter names   |
-| `keepNames`   | `boolean` | Preserves function and class names for debugging |
+| `keepNames`   | `boolean` | Preserves function and class names in stack traces. Does **not** protect component names — see the warning below |
 
-::: warning identifiers and Debugging
-Setting `identifiers: true` makes debugging harder because:
-- Controller names become unreadable in logs
-- Stack traces show minified names
-- Hot reload becomes less predictable
+::: warning identifiers is not a size/debugging trade-off
+Identifier minification breaks name-based component resolution at runtime, so `asena build`
+overrides it to `false` in every environment. Whitespace and syntax minification stay on and are
+where the size win is anyway.
 
-**Recommendation:** Keep `identifiers: false` in development, set to `true` only in production if bundle size is critical.
+Set it to `false` explicitly to keep the build quiet; leaving it `true` produces
+`[build] minify.identifiers disabled: component names are read at runtime` on every build.
 :::
 
 ## Environment-Specific Configuration
@@ -407,7 +422,7 @@ export default defineConfig({
     minify: {
       whitespace: true,   // Minimize size
       syntax: true,
-      identifiers: true,  // Shorten names
+      identifiers: false, // Required: component names are read at runtime
     },
     drop: ['console', 'debugger'], // Remove debugging code
   },
@@ -547,14 +562,14 @@ For a complete reference of Bun's bundler capabilities, see the [Bun Bundler Doc
 
 ## Best Practices
 
-### 1. Keep identifiers Unminified in Development
+### 1. Keep identifiers Unminified — Everywhere
 
 ```typescript
-// ✅ Good: Easy debugging
+// ✅ Good: real controller names in logs, and name-based injection that works
 export default defineConfig({
   buildOptions: {
     minify: {
-      identifiers: false, // See real controller names in logs
+      identifiers: false,
     },
   },
 });

@@ -199,6 +199,15 @@ const id = Number(context.getParam('id'));
 
 Extract query string values using `getQuery()` and `getQueryAll()`.
 
+`getQuery()` returns `Promise<string | undefined>`. It distinguishes the two cases a query string
+can express:
+
+| URL | `await getQuery('page')` |
+|:----|:-------------------------|
+| `/search` | `undefined` — the parameter is absent |
+| `/search?page=` | `''` — present but empty |
+| `/search?page=2` | `'2'` |
+
 ```typescript
 @Get('/search')
 async search(context: Context) {
@@ -208,9 +217,9 @@ async search(context: Context) {
   // Multiple values: ?tags=node&tags=bun
   const tags = await context.getQueryAll('tags');
 
-  // Optional with default
-  const page = await context.getQuery('page') || '1';
-  const limit = await context.getQuery('limit') || '10';
+  // Optional with default - ?? keeps a deliberate empty value intact
+  const page = (await context.getQuery('page')) ?? '1';
+  const limit = (await context.getQuery('limit')) ?? '10';
 
   return context.send({
     query,
@@ -670,12 +679,42 @@ async events(context: Context) {
 
 ```typescript
 interface SSEMessage {
-  data: string;    // Event data (multi-line strings auto-split into separate data: lines)
-  event?: string;  // Event type name
-  id?: string;     // Event ID for reconnection
-  retry?: number;  // Reconnection time in milliseconds
+  data?: string;    // Event data (multi-line strings auto-split into separate data: lines)
+  comment?: string; // Comment lines, emitted as ": <line>" and invisible to EventSource
+  event?: string;   // Event type name
+  id?: string;      // Event ID for reconnection
+  retry?: number;   // Reconnection time in milliseconds
 }
 ```
+
+At least one of `data` and `comment` must be set — a frame carrying neither would say nothing at
+all, so `writeSSE` throws `writeSSE: message needs data or comment`.
+
+#### Keep-alive comments
+
+A comment is emitted as `: <line>` (one line per newline in the string), which the SSE
+specification defines as a no-op. `EventSource` clients never see it, so it does not fire an
+`onmessage` handler or advance the last-event-id — but it *is* traffic, which is exactly what
+keeps an idle connection from being closed by a proxy:
+
+```typescript
+@Get('/live')
+async live(context: Context) {
+  return context.streamSSE(async (stream) => {
+    while (!stream.aborted) {
+      await stream.writeSSE({ comment: 'ping' });   // writes ": ping\n\n"
+      await Bun.sleep(15_000);
+    }
+  });
+}
+```
+
+A message may carry both: the comment lines are written first, then the event.
+
+::: tip A data heartbeat also works
+`writeSSE({ data: 'heartbeat', event: 'ping' })` holds the connection open just as well, but every
+client has to know about that event and filter it out. A `comment` asks nothing of the client.
+:::
 
 #### Error Handling
 
@@ -787,7 +826,7 @@ The SSE stream writer (`streamSSE`) additionally provides:
 
 | Method | Parameters | Description |
 |:-------|:-----------|:------------|
-| `writeSSE(message)` | `SSEMessage` | Write a formatted SSE message |
+| `writeSSE(message)` | `SSEMessage` | Write a formatted SSE message. Needs `data`, `comment`, or both — throws when given neither |
 
 ::: tip Auto-Close
 Streams are automatically closed after the callback completes. You don't need to call `stream.close()` manually unless you want to close early.
@@ -929,9 +968,19 @@ async search(context: Context) {
 }
 ```
 
-### Set Response Header - `setResponseHeader()`
+### Response Headers - `setResponseHeader()` and `appendResponseHeader()`
 
-Set a response header that will be merged into the final response. Useful in middleware for adding headers that carry through to streaming responses.
+Both write a header that is merged into the final response — useful in middleware for headers that
+must carry through to streaming responses. They differ in what happens to a value that is already
+there:
+
+| Method | Existing value |
+|:-------|:---------------|
+| `setResponseHeader(key, value)` | **Replaced.** The last write wins. |
+| `appendResponseHeader(key, value)` | **Kept.** The new value is added alongside it. |
+
+Set is the right default: most headers hold exactly one value, and a second `Content-Type` or
+`Cache-Control` is a bug, not a list.
 
 ```typescript
 @Get('/download')
@@ -942,6 +991,21 @@ async download(context: Context) {
   return context.send({ data: 'example' });
 }
 ```
+
+Append is for the headers that genuinely are lists — `Vary`, `Link`, `Accept-Encoding` — where
+clobbering what an upstream middleware wrote is a real bug. A CORS middleware that needs
+`Vary: Origin` must not drop an upstream `Vary: Accept-Encoding`:
+
+```typescript
+context.appendResponseHeader('Vary', 'Origin');
+// upstream had "Vary: Accept-Encoding"  ->  "Vary: Accept-Encoding, Origin"
+```
+
+::: warning Not for `Set-Cookie`
+Cookies go through [`setCookie()`](#cookie-management), never through either method.
+`Set-Cookie` is the one header that must repeat rather than comma-join, and on Ergenecore
+`appendResponseHeader` comma-joins.
+:::
 
 ## Adapter-Specific Features
 
@@ -998,7 +1062,7 @@ async useNative(context: Context) {
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
 | `getParam(name)` | `string` | Get route parameter |
-| `getQuery(name)` | `Promise<string>` | Get single query parameter |
+| `getQuery(name)` | `Promise<string \| undefined>` | Get single query parameter — `undefined` when absent, `''` when present but empty |
 | `getQueryAll(name)` | `Promise<string[]>` | Get all values of a query parameter |
 | `getAllQueries()` | `Record<string, string \| string[]>` | Get all query parameters as object |
 | `getBody<T>()` | `Promise<T>` | Parse JSON body with type |
@@ -1015,7 +1079,8 @@ async useNative(context: Context) {
 | `send(data, statusOrOptions?)` | `Response` | Send JSON/text response |
 | `html(data, statusOrOptions?)` | `Response` | Send HTML response |
 | `redirect(url)` | `Response` | Redirect to URL |
-| `setResponseHeader(key, value)` | `void` | Set a response header for middleware merging |
+| `setResponseHeader(key, value)` | `void` | Set a response header, **replacing** any value already set for it |
+| `appendResponseHeader(key, value)` | `void` | Append to a response header, **keeping** existing values (`Vary`, `Link`, …) |
 
 ### Streaming Methods
 
@@ -1085,11 +1150,11 @@ return context.send({
 `await` does not raise a type error in every position - it silently yields the Promise
 object instead of the value:
 ```typescript
-// ❌ Wrong - `page` is a Promise, so `|| '1'` never applies and Number() gives NaN
-const page = context.getQuery('page') || '1';
+// ❌ Wrong - `page` is a Promise, so `?? '1'` never applies and Number() gives NaN
+const page = context.getQuery('page') ?? '1';
 
 // ✅ Correct
-const page = (await context.getQuery('page')) || '1';
+const page = (await context.getQuery('page')) ?? '1';
 ```
 `getParam()`, `getAllQueries()`, `getValue()`, `setValue()` and `send()` are synchronous.
 :::
