@@ -200,7 +200,7 @@ const id = Number(context.getParam('id'));
 Extract query string values using `getQuery()` and `getQueryAll()`.
 
 `getQuery()` returns `Promise<string | undefined>`. It distinguishes the two cases a query string
-can express, and both adapters answer identically:
+can express:
 
 | URL | `await getQuery('page')` |
 |:----|:-------------------------|
@@ -229,15 +229,6 @@ async search(context: Context) {
   });
 }
 ```
-
-::: warning Upgrading from ergenecore 3.x
-Ergenecore used to return `''` for an absent parameter, which made "not given" and "given as
-empty" indistinguishable. It now returns `undefined`, matching Hono and the core contract.
-
-`|| default` behaves the same as before for an absent parameter and is safe to keep. It is only
-wrong where the empty string is meaningful — `?q=` used to mean "clear the filter" and now falls
-through to the default with `||`. Switch those to `?? default`, which only fires on `undefined`.
-:::
 
 ### Request Body
 
@@ -720,10 +711,9 @@ async live(context: Context) {
 
 A message may carry both: the comment lines are written first, then the event.
 
-::: tip Before, a heartbeat had to be a real event
-The usual workaround was `writeSSE({ data: 'heartbeat', event: 'ping' })`, which every client had
-to know about and filter out. It still works — nothing about `data` changed — but a `comment` is
-the shape that needs no cooperation from the client.
+::: tip A data heartbeat also works
+`writeSSE({ data: 'heartbeat', event: 'ping' })` holds the connection open just as well, but every
+client has to know about that event and filter it out. A `comment` asks nothing of the client.
 :::
 
 #### Error Handling
@@ -1015,17 +1005,6 @@ context.appendResponseHeader('Vary', 'Origin');
 Cookies go through [`setCookie()`](#cookie-management), never through either method.
 `Set-Cookie` is the one header that must repeat rather than comma-join, and on Ergenecore
 `appendResponseHeader` comma-joins.
-:::
-
-::: warning Upgrading from hono-adapter 3.x
-`setResponseHeader` on the Hono adapter used to **append**. Calling it twice with the same key
-left two values on the response; the same header set by both a global and a route middleware was
-emitted twice — which is what produced duplicated `X-RateLimit-*` headers when two rate limiters
-overlapped. It now replaces, matching Ergenecore and the core contract.
-
-Code that relied on the old behaviour to build a multi-valued header should call
-`appendResponseHeader` instead. Everything else keeps working, and a few double-header bugs
-disappear on their own.
 :::
 
 ## Adapter-Specific Features

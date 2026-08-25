@@ -415,18 +415,12 @@ With any `origin` config other than the literal `'*'`, the response depends on t
 `Origin` — the allowed value is reflected back for arrays and functions, and the CORS headers are
 present or absent depending on the caller. The middleware therefore sets `Vary: Origin` on both the
 actual response and the preflight `204`, so a CDN or shared proxy keys its cache on that header.
+The value is appended, so a `Vary` an upstream middleware already wrote survives, and `Origin` is
+not listed twice when the middleware runs more than once.
 
 Without it, a cache in front of the API can serve a response carrying one origin's
 `Access-Control-Allow-Origin` to a request from a different origin. With `origin: '*'` the answer is
 the same for everyone, so no `Vary` is set and cache hit rate is unaffected.
-
-::: tip Since hono-adapter 4.0 / ergenecore 4.0, `Vary` is appended
-Both middlewares now add `Origin` through
-[`appendResponseHeader`](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader)
-with an "already listed" guard. A `Vary: Accept-Encoding` written by an upstream middleware
-survives instead of being replaced, and `Origin` is never listed twice when the CORS middleware
-runs more than once (a global plus a route-level registration).
-:::
 
 ### Rate Limiter Middleware
 

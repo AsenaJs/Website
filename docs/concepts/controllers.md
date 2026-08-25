@@ -367,10 +367,6 @@ import type { Context } from '@asenajs/hono-adapter'
 The whole table above is unified - `setResponseHeader()` included. What actually differs is
 the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
 
-Response-header semantics are now identical too: `setResponseHeader()` **replaces** on both
-adapters, and `appendResponseHeader()` **appends** on both. Hono's `setResponseHeader()` used to
-append — see [Response Headers](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader).
-
 See adapter documentation for the complete API reference.
 :::
 

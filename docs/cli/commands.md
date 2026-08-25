@@ -358,7 +358,7 @@ Build the project for production deployment.
 - **Configuration Processing** - Reads and processes `asena-config.ts`
 - **Wrapper Entry** - Bundles through a temporary wrapper created **outside** your source folder; your entry file is never rewritten and its module-level code is not executed at build time
 - **Import Management** - Detected components are handed to the server through the build component list. No manual imports needed
-- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list
+- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list. See [Which source wins](/docs/concepts/dependency-injection#which-source-wins)
 
 ### Usage
 
@@ -375,6 +375,8 @@ asena build
 5. Outputs the bundle to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
 
 The output is always `<outdir>/index.asena.js`, whatever your entry file is called.
+The bundle needs `@asenajs/asena` 0.11 or newer — that is what reads the build component
+list — and the CLI declares it as a peer.
 
 ### Build Output
 
@@ -388,28 +390,6 @@ After building, you can run your application with:
 ```bash
 bun dist/index.asena.js
 ```
-:::
-
-::: warning Upgrading from asena-cli 0.x builds
-The build used to rewrite your entry file: it parsed the `AsenaServerFactory.create({...})` call
-and injected a `components: [...]` array into it. That imposed formatting rules nobody could see
-in the source — the call had to match an exact shape, the options object could not contain
-comments, the factory token could appear only once — and it executed the entry's module-level
-code at build time ([#25](https://github.com/AsenaJs/Asena-cli/issues/25)).
-
-The wrapper entry removes all of it. **What you need to know:**
-
-- **Your entry file is untouched.** Any formatting, any comments, arbitrary code around the
-  bootstrap call — all fine now.
-- **A `components: [...]` array you wrote is yours.** It is no longer overwritten, and a
-  non-empty one takes precedence over the build's list. Delete it to let the build supply the
-  components; keep it to pin them by hand. See
-  [Which source wins](/docs/concepts/dependency-injection#which-source-wins).
-- **This requires `@asenajs/asena` 0.11 or newer.** That is the first core version that reads
-  the build component list. On an older core the bundle falls back to the filesystem scan and
-  dies in production with `No components or configuration found`, so the CLI declares
-  `^0.11.0`.
-- **`minify.identifiers` is forced off.** See below.
 :::
 
 ### Minification and component names
@@ -434,7 +414,7 @@ untouched — they are where the size win is anyway.
 `keepNames: true` looks like the answer and is not: Bun's bundler (measured on 1.4.0) does **not**
 preserve class names under identifier minification, whether `keepNames` sits inside `minify` or
 beside it. The only rule that works is `identifiers: false`, which is what `asena init` writes and
-what the build now enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
+what the build enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
 as a safeguard.
 
 [`asena doctor`](#asena-doctor) flags a config that enables identifier minification, so a project

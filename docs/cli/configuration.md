@@ -373,8 +373,7 @@ export default defineConfig({
 | `keepNames`   | `boolean` | Preserves function and class names in stack traces. Does **not** protect component names — see the warning below |
 
 ::: warning identifiers is not a size/debugging trade-off
-It used to be presented as one — readable in development, shorter in production. It is not:
-identifier minification breaks name-based component resolution at runtime, so `asena build`
+Identifier minification breaks name-based component resolution at runtime, so `asena build`
 overrides it to `false` in every environment. Whitespace and syntax minification stay on and are
 where the size win is anyway.
 

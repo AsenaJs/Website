@@ -14,9 +14,9 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release <span class="pill pill-teal">In progress</span>
+## Next Release <span class="pill pill-teal">v0.11 · In progress</span>
 
-Not published yet. Tracked here so the behaviour changes are visible before the release lands. Version numbers are settled at release time; the adapters go out as a **major** because their context semantics change.
+Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics change.
 
 - **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
 - **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
@@ -117,7 +117,7 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**The first step is landing in the next release:**
+**The first step lands in v0.11:**
 [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
 gap that made a plugin impossible to write at all — the component scan never walks
 `node_modules`, so a package's components had no way into the container short of the consumer

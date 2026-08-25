@@ -1457,9 +1457,9 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release (In progress)
+## Next Release (v0.11 · In progress)
 
-Not published yet. Tracked here so the behaviour changes are visible before the release lands. Version numbers are settled at release time; the adapters go out as a **major** because their context semantics change.
+Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics change.
 
 - **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
 - **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
@@ -1560,7 +1560,7 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**The first step is landing in the next release:**
+**The first step lands in v0.11:**
 [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
 gap that made a plugin impossible to write at all — the component scan never walks
 `node_modules`, so a package's components had no way into the container short of the consumer
@@ -2061,10 +2061,6 @@ import type { Context } from '@asenajs/hono-adapter'
 ::: tip What differs between adapters
 The whole table above is unified - `setResponseHeader()` included. What actually differs is
 the **type of `context.req`**: a native `Request` on Ergenecore, a `HonoRequest` on Hono.
-
-Response-header semantics are now identical too: `setResponseHeader()` **replaces** on both
-adapters, and `appendResponseHeader()` **appends** on both. Hono's `setResponseHeader()` used to
-append — see [Response Headers](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader).
 
 See adapter documentation for the complete API reference.
 :::
@@ -5233,18 +5229,12 @@ With any `origin` config other than the literal `'*'`, the response depends on t
 `Origin` — the allowed value is reflected back for arrays and functions, and the CORS headers are
 present or absent depending on the caller. The middleware therefore sets `Vary: Origin` on both the
 actual response and the preflight `204`, so a CDN or shared proxy keys its cache on that header.
+The value is appended, so a `Vary` an upstream middleware already wrote survives, and `Origin` is
+not listed twice when the middleware runs more than once.
 
 Without it, a cache in front of the API can serve a response carrying one origin's
 `Access-Control-Allow-Origin` to a request from a different origin. With `origin: '*'` the answer is
 the same for everyone, so no `Vary` is set and cache hit rate is unaffected.
-
-::: tip Since hono-adapter 4.0 / ergenecore 4.0, `Vary` is appended
-Both middlewares now add `Origin` through
-[`appendResponseHeader`](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader)
-with an "already listed" guard. A `Vary: Accept-Encoding` written by an upstream middleware
-survives instead of being replaced, and `Origin` is never listed twice when the CORS middleware
-runs more than once (a global plus a route-level registration).
-:::
 
 ### Rate Limiter Middleware
 
@@ -5725,7 +5715,7 @@ const id = Number(context.getParam('id'));
 Extract query string values using `getQuery()` and `getQueryAll()`.
 
 `getQuery()` returns `Promise<string | undefined>`. It distinguishes the two cases a query string
-can express, and both adapters answer identically:
+can express:
 
 | URL | `await getQuery('page')` |
 |:----|:-------------------------|
@@ -5754,15 +5744,6 @@ async search(context: Context) {
   });
 }
 ```
-
-::: warning Upgrading from ergenecore 3.x
-Ergenecore used to return `''` for an absent parameter, which made "not given" and "given as
-empty" indistinguishable. It now returns `undefined`, matching Hono and the core contract.
-
-`|| default` behaves the same as before for an absent parameter and is safe to keep. It is only
-wrong where the empty string is meaningful — `?q=` used to mean "clear the filter" and now falls
-through to the default with `||`. Switch those to `?? default`, which only fires on `undefined`.
-:::
 
 ### Request Body
 
@@ -6245,10 +6226,9 @@ async live(context: Context) {
 
 A message may carry both: the comment lines are written first, then the event.
 
-::: tip Before, a heartbeat had to be a real event
-The usual workaround was `writeSSE({ data: 'heartbeat', event: 'ping' })`, which every client had
-to know about and filter out. It still works — nothing about `data` changed — but a `comment` is
-the shape that needs no cooperation from the client.
+::: tip A data heartbeat also works
+`writeSSE({ data: 'heartbeat', event: 'ping' })` holds the connection open just as well, but every
+client has to know about that event and filter it out. A `comment` asks nothing of the client.
 :::
 
 #### Error Handling
@@ -6540,17 +6520,6 @@ context.appendResponseHeader('Vary', 'Origin');
 Cookies go through [`setCookie()`](#cookie-management), never through either method.
 `Set-Cookie` is the one header that must repeat rather than comma-join, and on Ergenecore
 `appendResponseHeader` comma-joins.
-:::
-
-::: warning Upgrading from hono-adapter 3.x
-`setResponseHeader` on the Hono adapter used to **append**. Calling it twice with the same key
-left two values on the response; the same header set by both a global and a route middleware was
-emitted twice — which is what produced duplicated `X-RateLimit-*` headers when two rate limiters
-overlapped. It now replaces, matching Ergenecore and the core contract.
-
-Code that relied on the old behaviour to build a multi-valued header should call
-`appendResponseHeader` instead. Everything else keeps working, and a few double-header bugs
-disappear on their own.
 :::
 
 ## Adapter-Specific Features
@@ -12836,21 +12805,6 @@ return context.send({ id, page, body }, 200);
 The differences are in what `context.req` gives you: a native `Request` on Ergenecore,
 a `HonoRequest` on Hono. See [Context API](/docs/concepts/context) for the full surface.
 
-Three parts of that surface used to differ between the adapters and no longer do:
-
-| | Both adapters |
-|:--|:--|
-| `getQuery(name)` | `Promise<string \| undefined>` — `undefined` when absent, `''` when present but empty. Ergenecore returned `''` for both until `4.0.0`. |
-| `setResponseHeader(key, value)` | Replaces any value already set. Hono appended until `4.0.0`. |
-| `appendResponseHeader(key, value)` | Appends, keeping existing values — for `Vary`, `Link` and other multi-valued headers. New in `4.0.0` on both. |
-
-::: warning Upgrading to adapter 4.0.0
-Both adapters release the change above as a **major**. Neither one moved on its own: the core
-`AsenaContext` contract in `@asenajs/asena` 0.11 is what both now implement, which is why
-handler code stays portable. The per-case migration notes live on
-[Context API](/docs/concepts/context#query-parameters).
-:::
-
 ## Migration Between Adapters
 
 ::: tip
@@ -13045,49 +12999,6 @@ library and its version.
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
-
-## Context semantics
-
-Ergenecore implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
-is portable between adapters. Two points changed in `4.0.0`:
-
-```typescript
-// undefined when absent, '' when present but empty ("?page=")
-const page = (await context.getQuery('page')) ?? '1';
-
-// Replaces any value already set for that header
-context.setResponseHeader('X-Request-Id', crypto.randomUUID());
-
-// Appends, keeping existing values - for Vary, Link and other multi-valued headers
-context.appendResponseHeader('Vary', 'Origin');
-```
-
-`appendResponseHeader` comma-joins, and header names are matched case-insensitively.
-`Set-Cookie` cannot be comma-joined and is **not** supported here — cookies go through
-`setCookie`.
-
-An SSE message may carry a `comment` instead of — or alongside — `data`, emitted as `: <line>`
-lines before any `event:` / `data:` lines and invisible to `EventSource` clients:
-
-```typescript
-return context.streamSSE(async (stream) => {
-  await stream.writeSSE({ data: JSON.stringify({ tick: 1 }), event: 'tick', id: '1' });
-  await stream.writeSSE({ comment: 'ping' });   // keep-alive
-});
-```
-
-A message needs `data`, `comment`, or both — `writeSSE` throws when given neither.
-
-::: warning Upgrading from 3.x
-`getQuery` returned `''` for an absent parameter and now returns `undefined`. `|| default` still
-produces the same result for an absent parameter; it is only wrong where the empty string carries
-meaning (`?q=` as "clear the filter"), which now falls through to the default. Switch those to
-`?? default`.
-
-`CorsMiddleware` benefits directly: it appends `Vary: Origin` instead of rewriting the header, so
-an upstream `Vary: Accept-Encoding` survives, and `Origin` is not listed twice when the middleware
-runs more than once.
-:::
 
 ## Quick Start
 
@@ -13783,45 +13694,6 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
 
-## Context semantics
-
-The adapter implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
-is portable between adapters. Three points of that contract are worth stating here, because two of
-them changed in `4.0.0`:
-
-- **`setResponseHeader(key, value)` replaces** any value already set for that header. It used to
-  append.
-- **`appendResponseHeader(key, value)` appends**, keeping existing values — for multi-valued
-  headers such as `Vary` and `Link`. Cookies go through `setCookie`, not through either method.
-- **`getQuery(name)` is typed `string | undefined`**: `undefined` when the parameter is absent,
-  `''` when present but empty (`?name=`). The runtime already behaved this way; only the type
-  changed.
-
-An SSE message may carry a `comment` instead of — or alongside — `data`. Comments are emitted as
-`: <line>` lines, which `EventSource` clients ignore, which makes them the right shape for a
-keep-alive ping:
-
-```typescript
-await stream.writeSSE({ comment: 'ping' });   // writes ": ping\n\n"
-```
-
-At least one of `data` / `comment` must be set; `writeSSE` throws otherwise.
-
-::: warning Upgrading from 3.x
-`setResponseHeader` appending was the source of two visible bugs, both of which this release
-closes:
-
-- **`CorsMiddleware` clobbered `Vary`.** It now appends `Vary: Origin` with an "already listed"
-  guard, so an upstream `Vary: Accept-Encoding` survives and `Origin` is never listed twice when
-  the middleware runs more than once.
-- **`RateLimiterMiddleware` duplicated its headers.** A global and a route limiter on the same
-  request emitted two sets of `X-RateLimit-*`. With replace semantics the innermost limiter wins
-  and each header appears exactly once.
-
-If your own code called `setResponseHeader` twice on purpose to build a multi-valued header,
-switch those calls to `appendResponseHeader`.
-:::
-
 ## Quick Start
 
 ### Basic Server Setup
@@ -14113,7 +13985,7 @@ The middleware automatically sets these headers:
 - `Retry-After`: Seconds to wait (on 429 response)
 
 Each appears exactly once, even when a global and a route limiter both run — the innermost one
-writes last and wins. Before `4.0.0` that pairing emitted both sets.
+writes last and wins.
 
 #### Using Rate Limiter
 
@@ -15200,7 +15072,7 @@ export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schem
 
 A thunk cannot carry a `name` — the options do not exist when the decorator registers the class —
 so the thunk form registers under the **decorated class's own name** (`MyDatabase` above). Use the
-object form when you need an explicit registration key. The object form is otherwise unchanged.
+object form when you need an explicit registration key.
 
 ::: tip Composes with `imports`
 A `@Database` in a package is registered by handing it to
@@ -15310,10 +15182,10 @@ The body is intentionally empty — this class exists only so AsenaJS's componen
 The package works fine without `@Drizzle` — you'll still get repositories, the typed query builder, pagination, and `BaseRepository#transaction(cb)`. You only need this step to enable the `@Transaction` decorator.
 :::
 
-::: danger Skipping it while using `@Transaction` now fails the boot
-Missing this step used to be silent: `@Transaction` methods ran with autocommit, every write
-landed, every test passed, and nothing was transactional. The boot now refuses to start and names
-each unwrapped method — see [The boot guard](#the-boot-guard).
+::: danger `@Transaction` without this step fails the boot
+An unwrapped `@Transaction` method would run with autocommit — every write landing, nothing
+transactional — so the boot refuses to start and names each one, rather than letting the
+application serve traffic in that state. See [The boot guard](#the-boot-guard).
 :::
 
 ### 5. Use in Services
@@ -16050,6 +15922,9 @@ Two situations produce it:
    dependencies are constructed in bootstrap Phase A, *before* post-processing is active, so
    those instances can never be wrapped. Keep transactional services out of that closure.
 
+Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
+skipped, so the guard does not fire on a mocked service.
+
 ::: info When the check runs
 Once per container, from the first database service's [`@OnStart`](/docs/concepts/lifecycle).
 
@@ -16058,19 +15933,6 @@ itself a dependency of a post-processor, it is constructed before registration f
 checking at that moment would report components that have not had their turn yet. In that case
 the check is deferred to the first `connection` / `rootConnection` read that lands after the
 service is registered.
-:::
-
-::: warning Upgrading from asena-drizzle 3.x
-This is a **breaking behaviour change**, even though the package version is a minor: an
-application that used `@Transaction` without a `@Drizzle` subclass booted before and will now
-fail to start.
-
-That application was never running transactions — the guard is reporting a bug that was already
-there, not creating one. The fix is the same either way: add the `@Drizzle` class, or drop
-`@Transaction` from methods that do not need it.
-
-Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
-skipped, so the guard does not fire on a mocked service.
 :::
 
 ### `connection` vs `rootConnection`
@@ -16105,15 +15967,8 @@ export class ReportService {
 a transaction commits outside that transaction — which is occasionally what you want (an audit row
 that must survive a rollback) and is otherwise a bug.
 
-::: warning Upgrading from asena-drizzle 3.x
-`connection` used to always return the pooled connection. Hand-written queries written against it
-inside a `@Transaction` were silently non-transactional; they now join the transaction, which is
-almost certainly what the code intended. If a specific call deliberately wanted to escape the
-transaction, change it to `rootConnection`.
-
-Repositories are unaffected: `BaseRepository.db` performs its own transaction lookup and its
-fallback is pinned to `rootConnection`.
-:::
+Repositories do not go through either accessor: `BaseRepository.db` performs its own transaction
+lookup and its fallback is pinned to `rootConnection`.
 
 ::: tip Roadmap — full auto-resolution
 Today, single-database projects can use `@Drizzle({ defaultDb })` once and call `@Transaction()` with no arguments thereafter. Multi-database projects still need to name the target explicitly. Once AsenaJS core ships an `afterAllComponentsRegistered` post-processor hook (see [`docs/asena-core-feature-request-afterAllComponentsRegistered.md`](https://github.com/AsenaJs/asena-drizzle/blob/master/docs/asena-core-feature-request-afterAllComponentsRegistered.md) in the asena-drizzle repository), v1.3.0 will skip even the `defaultDb` step when exactly one `@Database` service is registered, mirroring Spring Boot's auto-wired repositories.
@@ -18763,7 +18618,7 @@ Build the project for production deployment.
 - **Configuration Processing** - Reads and processes `asena-config.ts`
 - **Wrapper Entry** - Bundles through a temporary wrapper created **outside** your source folder; your entry file is never rewritten and its module-level code is not executed at build time
 - **Import Management** - Detected components are handed to the server through the build component list. No manual imports needed
-- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list
+- **User-Owned `components:`** - A hand-written `components: [...]` array in your entry is left alone and, when non-empty, wins over the build's list. See [Which source wins](/docs/concepts/dependency-injection#which-source-wins)
 
 ### Usage
 
@@ -18780,6 +18635,8 @@ asena build
 5. Outputs the bundle to `buildOptions.outdir` (CLI default `./out`; the scaffolded `asena-config.ts` sets `dist`)
 
 The output is always `<outdir>/index.asena.js`, whatever your entry file is called.
+The bundle needs `@asenajs/asena` 0.11 or newer — that is what reads the build component
+list — and the CLI declares it as a peer.
 
 ### Build Output
 
@@ -18793,28 +18650,6 @@ After building, you can run your application with:
 ```bash
 bun dist/index.asena.js
 ```
-:::
-
-::: warning Upgrading from asena-cli 0.x builds
-The build used to rewrite your entry file: it parsed the `AsenaServerFactory.create({...})` call
-and injected a `components: [...]` array into it. That imposed formatting rules nobody could see
-in the source — the call had to match an exact shape, the options object could not contain
-comments, the factory token could appear only once — and it executed the entry's module-level
-code at build time ([#25](https://github.com/AsenaJs/Asena-cli/issues/25)).
-
-The wrapper entry removes all of it. **What you need to know:**
-
-- **Your entry file is untouched.** Any formatting, any comments, arbitrary code around the
-  bootstrap call — all fine now.
-- **A `components: [...]` array you wrote is yours.** It is no longer overwritten, and a
-  non-empty one takes precedence over the build's list. Delete it to let the build supply the
-  components; keep it to pin them by hand. See
-  [Which source wins](/docs/concepts/dependency-injection#which-source-wins).
-- **This requires `@asenajs/asena` 0.11 or newer.** That is the first core version that reads
-  the build component list. On an older core the bundle falls back to the filesystem scan and
-  dies in production with `No components or configuration found`, so the CLI declares
-  `^0.11.0`.
-- **`minify.identifiers` is forced off.** See below.
 :::
 
 ### Minification and component names
@@ -18839,7 +18674,7 @@ untouched — they are where the size win is anyway.
 `keepNames: true` looks like the answer and is not: Bun's bundler (measured on 1.4.0) does **not**
 preserve class names under identifier minification, whether `keepNames` sits inside `minify` or
 beside it. The only rule that works is `identifiers: false`, which is what `asena init` writes and
-what the build now enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
+what the build enforces. `keepNames` is harmless — leave it or drop it — but do not treat it
 as a safeguard.
 
 [`asena doctor`](#asena-doctor) flags a config that enables identifier minification, so a project
@@ -19350,8 +19185,7 @@ export default defineConfig({
 | `keepNames`   | `boolean` | Preserves function and class names in stack traces. Does **not** protect component names — see the warning below |
 
 ::: warning identifiers is not a size/debugging trade-off
-It used to be presented as one — readable in development, shorter in production. It is not:
-identifier minification breaks name-based component resolution at runtime, so `asena build`
+Identifier minification breaks name-based component resolution at runtime, so `asena build`
 overrides it to `false` in every environment. Whitespace and syntax minification stay on and are
 where the size win is anyway.
 
@@ -23584,18 +23418,7 @@ UserController.userService injects 'UserService', which is not in components or 
 OrderService.mailer injects Mailer, which is not a decorated component
 ```
 
-::: warning Upgrading from 0.10
-The same mistakes used to surface much later and much less clearly: a name-injected dependency
-nobody provided reached the container as a bare `<key> is not registered` mid-boot — or, under
-[`createWebTest`](/docs/testing/web-test), as a 500 on the first request. `@Inject(SomeClass)`
-where `SomeClass` carried no component decorator failed with `undefined is not registered`.
-
-If a test asserts on either message, update the matcher to the
-`createTestApp: missing dependencies:` prefix. Tests that listed the whole closure by hand keep
-working unchanged — listing a class the walk would have found anyway is a no-op.
-:::
-
-Inside the container the corresponding failure now names the dependent as well:
+Inside the container the corresponding failure names the dependent as well:
 `'MailService' is not registered (injected into OrderService.mail)`, with the original error
 attached as `cause`.
 

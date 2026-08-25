@@ -72,45 +72,6 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
 
-## Context semantics
-
-The adapter implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
-is portable between adapters. Three points of that contract are worth stating here, because two of
-them changed in `4.0.0`:
-
-- **`setResponseHeader(key, value)` replaces** any value already set for that header. It used to
-  append.
-- **`appendResponseHeader(key, value)` appends**, keeping existing values — for multi-valued
-  headers such as `Vary` and `Link`. Cookies go through `setCookie`, not through either method.
-- **`getQuery(name)` is typed `string | undefined`**: `undefined` when the parameter is absent,
-  `''` when present but empty (`?name=`). The runtime already behaved this way; only the type
-  changed.
-
-An SSE message may carry a `comment` instead of — or alongside — `data`. Comments are emitted as
-`: <line>` lines, which `EventSource` clients ignore, which makes them the right shape for a
-keep-alive ping:
-
-```typescript
-await stream.writeSSE({ comment: 'ping' });   // writes ": ping\n\n"
-```
-
-At least one of `data` / `comment` must be set; `writeSSE` throws otherwise.
-
-::: warning Upgrading from 3.x
-`setResponseHeader` appending was the source of two visible bugs, both of which this release
-closes:
-
-- **`CorsMiddleware` clobbered `Vary`.** It now appends `Vary: Origin` with an "already listed"
-  guard, so an upstream `Vary: Accept-Encoding` survives and `Origin` is never listed twice when
-  the middleware runs more than once.
-- **`RateLimiterMiddleware` duplicated its headers.** A global and a route limiter on the same
-  request emitted two sets of `X-RateLimit-*`. With replace semantics the innermost limiter wins
-  and each header appears exactly once.
-
-If your own code called `setResponseHeader` twice on purpose to build a multi-valued header,
-switch those calls to `appendResponseHeader`.
-:::
-
 ## Quick Start
 
 ### Basic Server Setup
@@ -402,7 +363,7 @@ The middleware automatically sets these headers:
 - `Retry-After`: Seconds to wait (on 429 response)
 
 Each appears exactly once, even when a global and a route limiter both run — the innermost one
-writes last and wins. Before `4.0.0` that pairing emitted both sets.
+writes last and wins.
 
 #### Using Rate Limiter
 

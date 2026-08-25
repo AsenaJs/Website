@@ -68,49 +68,6 @@ library and its version.
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
 
-## Context semantics
-
-Ergenecore implements the core [`AsenaContext`](/docs/concepts/context) contract, so handler code
-is portable between adapters. Two points changed in `4.0.0`:
-
-```typescript
-// undefined when absent, '' when present but empty ("?page=")
-const page = (await context.getQuery('page')) ?? '1';
-
-// Replaces any value already set for that header
-context.setResponseHeader('X-Request-Id', crypto.randomUUID());
-
-// Appends, keeping existing values - for Vary, Link and other multi-valued headers
-context.appendResponseHeader('Vary', 'Origin');
-```
-
-`appendResponseHeader` comma-joins, and header names are matched case-insensitively.
-`Set-Cookie` cannot be comma-joined and is **not** supported here — cookies go through
-`setCookie`.
-
-An SSE message may carry a `comment` instead of — or alongside — `data`, emitted as `: <line>`
-lines before any `event:` / `data:` lines and invisible to `EventSource` clients:
-
-```typescript
-return context.streamSSE(async (stream) => {
-  await stream.writeSSE({ data: JSON.stringify({ tick: 1 }), event: 'tick', id: '1' });
-  await stream.writeSSE({ comment: 'ping' });   // keep-alive
-});
-```
-
-A message needs `data`, `comment`, or both — `writeSSE` throws when given neither.
-
-::: warning Upgrading from 3.x
-`getQuery` returned `''` for an absent parameter and now returns `undefined`. `|| default` still
-produces the same result for an absent parameter; it is only wrong where the empty string carries
-meaning (`?q=` as "clear the filter"), which now falls through to the default. Switch those to
-`?? default`.
-
-`CorsMiddleware` benefits directly: it appends `Vary: Origin` instead of rewriting the header, so
-an upstream `Vary: Accept-Encoding` survives, and `Origin` is not listed twice when the middleware
-runs more than once.
-:::
-
 ## Quick Start
 
 ### Basic Server Setup

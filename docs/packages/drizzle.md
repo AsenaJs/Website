@@ -133,7 +133,7 @@ export class MyDatabase extends AsenaDatabaseService<BunSQLDatabase<typeof Schem
 
 A thunk cannot carry a `name` — the options do not exist when the decorator registers the class —
 so the thunk form registers under the **decorated class's own name** (`MyDatabase` above). Use the
-object form when you need an explicit registration key. The object form is otherwise unchanged.
+object form when you need an explicit registration key.
 
 ::: tip Composes with `imports`
 A `@Database` in a package is registered by handing it to
@@ -243,10 +243,10 @@ The body is intentionally empty — this class exists only so AsenaJS's componen
 The package works fine without `@Drizzle` — you'll still get repositories, the typed query builder, pagination, and `BaseRepository#transaction(cb)`. You only need this step to enable the `@Transaction` decorator.
 :::
 
-::: danger Skipping it while using `@Transaction` now fails the boot
-Missing this step used to be silent: `@Transaction` methods ran with autocommit, every write
-landed, every test passed, and nothing was transactional. The boot now refuses to start and names
-each unwrapped method — see [The boot guard](#the-boot-guard).
+::: danger `@Transaction` without this step fails the boot
+An unwrapped `@Transaction` method would run with autocommit — every write landing, nothing
+transactional — so the boot refuses to start and names each one, rather than letting the
+application serve traffic in that state. See [The boot guard](#the-boot-guard).
 :::
 
 ### 5. Use in Services
@@ -983,6 +983,9 @@ Two situations produce it:
    dependencies are constructed in bootstrap Phase A, *before* post-processing is active, so
    those instances can never be wrapped. Keep transactional services out of that closure.
 
+Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
+skipped, so the guard does not fire on a mocked service.
+
 ::: info When the check runs
 Once per container, from the first database service's [`@OnStart`](/docs/concepts/lifecycle).
 
@@ -991,19 +994,6 @@ itself a dependency of a post-processor, it is constructed before registration f
 checking at that moment would report components that have not had their turn yet. In that case
 the check is deferred to the first `connection` / `rootConnection` read that lands after the
 service is registered.
-:::
-
-::: warning Upgrading from asena-drizzle 3.x
-This is a **breaking behaviour change**, even though the package version is a minor: an
-application that used `@Transaction` without a `@Drizzle` subclass booted before and will now
-fail to start.
-
-That application was never running transactions — the guard is reporting a bug that was already
-there, not creating one. The fix is the same either way: add the `@Drizzle` class, or drop
-`@Transaction` from methods that do not need it.
-
-Test doubles seeded through `overrides` and transient (`Scope.PROTOTYPE`) registrations are
-skipped, so the guard does not fire on a mocked service.
 :::
 
 ### `connection` vs `rootConnection`
@@ -1038,15 +1028,8 @@ export class ReportService {
 a transaction commits outside that transaction — which is occasionally what you want (an audit row
 that must survive a rollback) and is otherwise a bug.
 
-::: warning Upgrading from asena-drizzle 3.x
-`connection` used to always return the pooled connection. Hand-written queries written against it
-inside a `@Transaction` were silently non-transactional; they now join the transaction, which is
-almost certainly what the code intended. If a specific call deliberately wanted to escape the
-transaction, change it to `rootConnection`.
-
-Repositories are unaffected: `BaseRepository.db` performs its own transaction lookup and its
-fallback is pinned to `rootConnection`.
-:::
+Repositories do not go through either accessor: `BaseRepository.db` performs its own transaction
+lookup and its fallback is pinned to `rootConnection`.
 
 ::: tip Roadmap — full auto-resolution
 Today, single-database projects can use `@Drizzle({ defaultDb })` once and call `@Transaction()` with no arguments thereafter. Multi-database projects still need to name the target explicitly. Once AsenaJS core ships an `afterAllComponentsRegistered` post-processor hook (see [`docs/asena-core-feature-request-afterAllComponentsRegistered.md`](https://github.com/AsenaJs/asena-drizzle/blob/master/docs/asena-core-feature-request-afterAllComponentsRegistered.md) in the asena-drizzle repository), v1.3.0 will skip even the `defaultDb` step when exactly one `@Database` service is registered, mirroring Spring Boot's auto-wired repositories.

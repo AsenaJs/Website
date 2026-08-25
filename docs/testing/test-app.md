@@ -85,18 +85,7 @@ UserController.userService injects 'UserService', which is not in components or 
 OrderService.mailer injects Mailer, which is not a decorated component
 ```
 
-::: warning Upgrading from 0.10
-The same mistakes used to surface much later and much less clearly: a name-injected dependency
-nobody provided reached the container as a bare `<key> is not registered` mid-boot — or, under
-[`createWebTest`](/docs/testing/web-test), as a 500 on the first request. `@Inject(SomeClass)`
-where `SomeClass` carried no component decorator failed with `undefined is not registered`.
-
-If a test asserts on either message, update the matcher to the
-`createTestApp: missing dependencies:` prefix. Tests that listed the whole closure by hand keep
-working unchanged — listing a class the walk would have found anyway is a no-op.
-:::
-
-Inside the container the corresponding failure now names the dependent as well:
+Inside the container the corresponding failure names the dependent as well:
 `'MailService' is not registered (injected into OrderService.mail)`, with the original error
 attached as `cause`.
 
