@@ -14,9 +14,13 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release <span class="pill pill-teal">v0.11 · In progress</span>
+## Current Release <span class="pill pill-live">v0.11.x · Stable</span>
 
-Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics change.
+These features are **stable and production-ready** in the current release:
+
+### New in v0.11
+
+`@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics changed. Every official package took a major alongside it, since each now requires core 0.11.
 
 - **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
 - **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
@@ -25,13 +29,7 @@ Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a ma
 - **[`asena build` no longer rewrites your entry file](/docs/cli/commands#asena-build)** - it bundles through a temporary wrapper instead, so the entry's formatting rules are gone and its module-level code no longer runs at build time
 - **Unified context semantics** *(adapter majors)* - [`getQuery` returns `undefined` when absent](/docs/concepts/context#query-parameters) on both adapters, [`setResponseHeader` replaces and `appendResponseHeader` appends](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader) on both, and [SSE messages can carry a `comment`](/docs/concepts/context#keep-alive-comments) for keep-alive pings
 - **[Lazy decorator options](/docs/packages/drizzle#lazy-options)** - `@Database`, `@Redis` and `@Otel` accept a thunk, so a service configured from the environment can ship inside a package
-- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method now fails the boot instead of silently running with autocommit
-
----
-
-## Current Release <span class="pill pill-live">v0.10.x · Stable</span>
-
-These features are **stable and production-ready** in the current release:
+- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method fails the boot instead of silently running with autocommit
 
 ### New in v0.10
 
@@ -100,7 +98,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.10.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.11.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -117,7 +115,7 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**The first step lands in v0.11:**
+**The first step landed in v0.11:**
 [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
 gap that made a plugin impossible to write at all — the component scan never walks
 `node_modules`, so a package's components had no way into the container short of the consumer
@@ -203,9 +201,9 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.8.x  | Older | Possible | Yes (with caution) |
-| v0.9.x  | Previous | Possible | Yes (with caution) |
-| v0.10.x | Current | Possible | Yes (with caution) |
+| v0.9.x  | Older | Possible | Yes (with caution) |
+| v0.10.x | Previous | Possible | Yes (with caution) |
+| v0.11.x | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -248,7 +246,8 @@ We welcome contributions in many forms:
 - **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
 - **v0.9.0** - Released July 2026 (Decorator inheritance, `onNotFound` hook, uniform error and 404 handling across adapters, branded `HttpException`)
 - **v0.9.2** - Released July 2026 (One `HttpException` in core, thrown identically on both adapters; the Hono adapter's default response and log level both moved onto the brand)
-- **v0.10.0** - Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`. **Breaking:** start hooks moved from the component scan to `server.start()`
+- **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
+- **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress
