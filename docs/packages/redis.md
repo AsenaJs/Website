@@ -149,13 +149,6 @@ connection the service runs on, and `@OnStop` treats it the same way. If you nee
 alive past the server, do not hand it to `@Redis`.
 :::
 
-::: warning This was not true before
-This page previously claimed disconnection on shutdown was automatic. It was not — the framework
-had no stop phase, so nothing ever called `disconnect()` and every connection outlived the server
-that opened it. `@OnStop` is what makes the claim accurate, and it needs `@asenajs/asena` 0.11.0
-or higher.
-:::
-
 ## Adapter Selection
 
 By default, `@asenajs/asena-redis` uses Bun's native `RedisClient`. For environments requiring the `redis` (node-redis) package:
