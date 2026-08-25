@@ -661,7 +661,7 @@ class AppConfig implements AsenaConfig {
   public globalMiddlewares() {
     return [
       LoggerMiddleware,
-      CorsMiddleware,
+      GlobalCors,
       CompressionMiddleware,
     ];
   }

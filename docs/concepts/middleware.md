@@ -155,7 +155,7 @@ export class AppConfig extends ConfigService {
 
       // Apply to all routes except /health and /metrics
       {
-        middleware: RateLimiterMiddleware,
+        middleware: ApiRateLimiter,
         routes: { exclude: ['/health', '/metrics'] }
       }
     ];

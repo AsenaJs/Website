@@ -33,6 +33,7 @@ bun add @asenajs/asena-openapi
 ## Quick Start
 
 ```typescript
+// src/openapi/AppOpenApi.ts
 import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 
 @OpenApi({
@@ -51,7 +52,7 @@ Now:
 - `GET /api/openapi/ui` → Swagger UI page
 
 ::: tip Zero Setup
-You don't need to register `AppOpenApi` anywhere. Asena's IoC container automatically discovers and initializes it during bootstrap, just like any other component.
+You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder`, so the component scan discovers and initializes it during bootstrap, just like any other component.
 :::
 
 ## How It Works

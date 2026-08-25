@@ -110,6 +110,12 @@ class — so the thunk form registers under the **decorated class's own name**. 
 with `name` to choose the registration key explicitly. Nothing outside the thunk's return value is
 mutated.
 
+::: tip Composes with `imports`
+A `@Redis` service in a package is registered by handing it to
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages); the thunk
+is what lets that package read the consumer's environment at the right moment.
+:::
+
 ### 2. Inject and Use
 
 ```typescript

@@ -4969,7 +4969,7 @@ export class AppConfig extends ConfigService {
 
       // Apply to all routes except /health and /metrics
       {
-        middleware: RateLimiterMiddleware,
+        middleware: ApiRateLimiter,
         routes: { exclude: ['/health', '/metrics'] }
       }
     ];
@@ -16105,6 +16105,7 @@ bun add @asenajs/asena-openapi
 ## Quick Start
 
 ```typescript
+// src/openapi/AppOpenApi.ts
 import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 
 @OpenApi({
@@ -16123,7 +16124,7 @@ Now:
 - `GET /api/openapi/ui` → Swagger UI page
 
 ::: tip Zero Setup
-You don't need to register `AppOpenApi` anywhere. Asena's IoC container automatically discovers and initializes it during bootstrap, just like any other component.
+You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder`, so the component scan discovers and initializes it during bootstrap, just like any other component.
 :::
 
 ## How It Works
@@ -17010,6 +17011,12 @@ A thunk cannot carry a `name` — the options do not exist yet when the decorato
 class — so the thunk form registers under the **decorated class's own name**. Use the object form
 with `name` to choose the registration key explicitly. Nothing outside the thunk's return value is
 mutated.
+
+::: tip Composes with `imports`
+A `@Redis` service in a package is registered by handing it to
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages); the thunk
+is what lets that package read the consumer's environment at the right moment.
+:::
 
 ### 2. Inject and Use
 
@@ -20819,7 +20826,7 @@ class AppConfig implements AsenaConfig {
   public globalMiddlewares() {
     return [
       LoggerMiddleware,
-      CorsMiddleware,
+      GlobalCors,
       CompressionMiddleware,
     ];
   }
