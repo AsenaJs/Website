@@ -1,6 +1,6 @@
 ---
 title: Asena OpenAPI
-description: Zero-config OpenAPI 3.1 spec generation from your existing validators, with built-in Swagger UI
+description: Zero-config OpenAPI 3.1 spec generation from your existing validators, with built-in Swagger UI and Scalar API Reference
 outline: deep
 ---
 
@@ -12,7 +12,7 @@ Automatic OpenAPI 3.1 spec generation for AsenaJS — zero config, uses your exi
 
 - **Zero Config** - Extracts schemas from existing validators, no extra annotations needed
 - **OpenAPI 3.1** - Generates JSON Schema draft-2020-12 compatible spec
-- **Built-in Swagger UI** - CDN-based UI page, no npm install required
+- **Built-in API Docs UIs** - Swagger UI or Scalar, CDN-based, no npm install required
 - **@Hidden Decorator** - Class and method level exclusion from spec
 - **Zod v4 Native** - Uses `z.toJSONSchema()` for accurate conversion
 - **Pluggable Converters** - `SchemaConverter` interface for custom schema types
@@ -39,7 +39,7 @@ import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: true, // Swagger UI at /api/openapi/ui
+  ui: 'scalar', // or true / 'swagger' — API docs UI at /api/openapi/ui
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
@@ -49,7 +49,7 @@ Asena automatically discovers it — that's it.
 Now:
 
 - `GET /api/openapi` → OpenAPI 3.1 JSON spec
-- `GET /api/openapi/ui` → Swagger UI page
+- `GET /api/openapi/ui` → API docs UI (Swagger UI or Scalar)
 
 ::: tip Zero Setup
 You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder`, so the component scan discovers and initializes it during bootstrap, just like any other component.
@@ -60,10 +60,10 @@ You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder
 The `OpenApiPostProcessor` automatically:
 
 1. **Intercepts** every `@Controller` during IoC setup
-2. **Extracts** route metadata (`@Get`, `@Post`, `@Put`, `@Delete`)
+2. **Extracts** route metadata (`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, … — `@All` and `@Connect` are skipped, OpenAPI has no path item field for them)
 3. **Resolves** validators and converts their Zod schemas to JSON Schema
 4. **Generates** a complete OpenAPI 3.1 spec
-5. **Registers** GET endpoints on the adapter for spec and Swagger UI
+5. **Registers** GET endpoints on the adapter for spec and the docs UI
 
 Your existing validators do double duty — they validate requests **AND** generate documentation.
 
@@ -127,6 +127,42 @@ The `response()` method supports two formats per status code:
 - **Detailed:** An object with `schema` and optional `description` (e.g., `400: { schema: z.object({ ... }), description: '...' }`)
 :::
 
+### Descriptions
+
+The text the docs UI shows comes from code you already write:
+
+| Source | Lands in |
+|:-------|:---------|
+| `@Controller({ path, description })` | Tag description — the controller's section in the UI |
+| `@Get({ path, summary, description })` (any verb decorator) | Operation summary and description |
+| `.describe()` on a `query()` / `param()` / `header()` field | Parameter description |
+| `.describe()` on a field inside a `json()` / `form()` / `response()` schema | Property description |
+| `.describe()` on the `json()` / `form()` object itself | `requestBody.description` — the schema itself does not carry it, so UIs that print both show it once |
+| `response()` detailed form `{ schema, description }` | Response description |
+
+```typescript
+@Controller({ path: '/api/users', description: 'User accounts and profiles' })
+export class UserController {
+  @Post({
+    path: '/',
+    validator: CreateUserValidator,
+    summary: 'Create a user',
+    description: 'Creates the account and sends the welcome email.',
+  })
+  create(context: Context) { /* ... */ }
+}
+
+// CreateUserValidator
+json() {
+  return z
+    .object({
+      name: z.string().min(1).describe('Display name, 1-200 characters'),
+      email: z.string().email().describe('Must be unique across accounts'),
+    })
+    .describe('New account');
+}
+```
+
 ## @Hidden Decorator
 
 Hide controllers or individual routes from the spec:
@@ -168,7 +204,7 @@ export class ApiController {
     description: 'My app',   // Optional
   },
   path: '/api/openapi',      // Default: '/openapi'
-  ui: true,                  // Default: false — enables Swagger UI at {path}/ui
+  ui: 'scalar',              // Default: none — 'swagger' (or true), 'scalar', or { provider, configuration }
   servers: [                 // Optional
     { url: 'https://api.example.com', description: 'Production' },
   ],
@@ -183,20 +219,36 @@ export class AppOpenApi extends OpenApiPostProcessor {}
 |:-------|:-----|:--------|:------------|
 | `info` | `{ title, version, description? }` | — | API metadata (required) |
 | `path` | `string` | `'/openapi'` | Base path for spec and UI endpoints |
-| `ui` | `boolean` | `false` | Enable Swagger UI at `{path}/ui` |
+| `ui` | `boolean \| 'swagger' \| 'scalar' \| { provider, configuration? }` | — | API docs UI served at `{path}/ui` |
 | `servers` | `ServerObject[]` | — | Server URLs for the spec |
 | `converters` | `SchemaConverter[]` | `[ZodSchemaConverter]` | Schema converters |
 
-## Swagger UI
+## API Docs UI
 
-When `ui: true`, a Swagger UI page is served at `{path}/ui`. It loads from CDN — zero npm dependencies:
+Set `ui` to serve an API documentation page at `{path}/ui`. Both providers load from CDN — zero npm dependencies:
 
-- Uses `swagger-ui-dist@5` from unpkg CDN
-- No build step required
-- Works in development and production
+| Value | UI served |
+|:------|:----------|
+| `true` / `'swagger'` | Swagger UI (`swagger-ui-dist@5` from unpkg) |
+| `'scalar'` | Scalar API Reference (`@scalar/api-reference@1` from jsdelivr) |
+| `{ provider, configuration }` | Either provider, with raw provider configuration merged over the defaults |
+| `false` / unset | None |
+
+```typescript
+@OpenApi({
+  info: { title: 'My API', version: '1.0.0' },
+  ui: {
+    provider: 'scalar',
+    configuration: { theme: 'purple', darkMode: true },
+  },
+})
+export class AppOpenApi extends OpenApiPostProcessor {}
+```
+
+`configuration` is passed straight through: for Scalar it lands in `Scalar.createApiReference`, for Swagger in `SwaggerUIBundle`. Its keys override the defaults — including `url`, if you want the UI to read a spec from somewhere else. An unknown provider fails at boot with a clear error instead of serving a broken page.
 
 ::: warning Production Consideration
-Swagger UI loads from CDN, which requires internet access. If your production environment has no external network access, consider setting `ui: false` and using an external API documentation tool.
+Both UIs load from CDN, which requires internet access. If your production environment has no external network access, consider leaving `ui` unset and using an external API documentation tool.
 :::
 
 ## Best Practices

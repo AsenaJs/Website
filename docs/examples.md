@@ -662,7 +662,7 @@ import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: true,
+  ui: 'scalar', // or true / 'swagger' for Swagger UI
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
@@ -699,7 +699,7 @@ export class CreateUserValidator extends ValidationService {
 # Get OpenAPI spec
 curl http://localhost:3000/api/openapi
 
-# Open Swagger UI in browser
+# Open the API docs UI in the browser
 open http://localhost:3000/api/openapi/ui
 ```
 

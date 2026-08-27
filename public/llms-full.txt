@@ -1060,7 +1060,7 @@ import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: true,
+  ui: 'scalar', // or true / 'swagger' for Swagger UI
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
@@ -1097,7 +1097,7 @@ export class CreateUserValidator extends ValidationService {
 # Get OpenAPI spec
 curl http://localhost:3000/api/openapi
 
-# Open Swagger UI in browser
+# Open the API docs UI in the browser
 open http://localhost:3000/api/openapi/ui
 ```
 
@@ -1362,7 +1362,7 @@ Dependency injection and modular architecture enable easy scaling from small int
 Built-in cron scheduling with `@Schedule` lets you run background jobs — database cleanup, cache warming, report generation — without external tools like Bull or Agenda.
 
 ### API Documentation
-Automatic OpenAPI 3.1 spec generation from your existing validators with `@asenajs/asena-openapi`. Built-in Swagger UI, zero extra annotations needed.
+Automatic OpenAPI 3.1 spec generation from your existing validators with `@asenajs/asena-openapi`. Built-in Swagger UI or Scalar API Reference, zero extra annotations needed.
 
 ### 🚀 Coming Soon
 More projects are being built with Asena! Check back soon or [submit your project](https://github.com/AsenaJs/Asena/issues).
@@ -1457,9 +1457,13 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release (v0.11 · In progress)
+## Current Release (v0.11.x · Stable)
 
-Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics change.
+These features are **stable and production-ready** in the current release:
+
+### New in v0.11
+
+`@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a major, because their context semantics changed. Every official package took a major alongside it, since each now requires core 0.11.
 
 - **[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages)** - packages hand their components to the server directly, since the scan never walks `node_modules`. The first step towards the plugin system below
 - **[`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)** - configuration injection from the environment, with `parse`, `default` and a loud failure for a required variable that is unset
@@ -1468,13 +1472,7 @@ Not published yet: `@asenajs/asena` 0.11.0, with both adapters at 4.0.0 — a ma
 - **[`asena build` no longer rewrites your entry file](/docs/cli/commands#asena-build)** - it bundles through a temporary wrapper instead, so the entry's formatting rules are gone and its module-level code no longer runs at build time
 - **Unified context semantics** *(adapter majors)* - [`getQuery` returns `undefined` when absent](/docs/concepts/context#query-parameters) on both adapters, [`setResponseHeader` replaces and `appendResponseHeader` appends](/docs/concepts/context#response-headers-setresponseheader-and-appendresponseheader) on both, and [SSE messages can carry a `comment`](/docs/concepts/context#keep-alive-comments) for keep-alive pings
 - **[Lazy decorator options](/docs/packages/drizzle#lazy-options)** - `@Database`, `@Redis` and `@Otel` accept a thunk, so a service configured from the environment can ship inside a package
-- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method now fails the boot instead of silently running with autocommit
-
----
-
-## Current Release (v0.10.x · Stable)
-
-These features are **stable and production-ready** in the current release:
+- **[The drizzle transaction boot guard](/docs/packages/drizzle#the-boot-guard)** - an unwrapped `@Transaction` method fails the boot instead of silently running with autocommit
 
 ### New in v0.10
 
@@ -1543,7 +1541,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.10.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.11.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -1560,7 +1558,7 @@ These features are **planned for the v1.0 release** and will make Asena enterpri
 
 A powerful plugin architecture allowing third-party extensions.
 
-**The first step lands in v0.11:**
+**The first step landed in v0.11:**
 [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) closes the
 gap that made a plugin impossible to write at all — the component scan never walks
 `node_modules`, so a package's components had no way into the container short of the consumer
@@ -1646,9 +1644,9 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.8.x  | Older | Possible | Yes (with caution) |
-| v0.9.x  | Previous | Possible | Yes (with caution) |
-| v0.10.x | Current | Possible | Yes (with caution) |
+| v0.9.x  | Older | Possible | Yes (with caution) |
+| v0.10.x | Previous | Possible | Yes (with caution) |
+| v0.11.x | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -1691,7 +1689,8 @@ We welcome contributions in many forms:
 - **v0.8.0** - Released July 2026 (Microservices, Headless mode, Kafka package, test harness, Redis Streams transport, distributed tracing)
 - **v0.9.0** - Released July 2026 (Decorator inheritance, `onNotFound` hook, uniform error and 404 handling across adapters, branded `HttpException`)
 - **v0.9.2** - Released July 2026 (One `HttpException` in core, thrown identically on both adapters; the Hono adapter's default response and log level both moved onto the brand)
-- **v0.10.0** - Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`. **Breaking:** start hooks moved from the component scan to `server.start()`
+- **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
+- **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress
@@ -16082,7 +16081,7 @@ Automatic OpenAPI 3.1 spec generation for AsenaJS — zero config, uses your exi
 
 - **Zero Config** - Extracts schemas from existing validators, no extra annotations needed
 - **OpenAPI 3.1** - Generates JSON Schema draft-2020-12 compatible spec
-- **Built-in Swagger UI** - CDN-based UI page, no npm install required
+- **Built-in API Docs UIs** - Swagger UI or Scalar, CDN-based, no npm install required
 - **@Hidden Decorator** - Class and method level exclusion from spec
 - **Zod v4 Native** - Uses `z.toJSONSchema()` for accurate conversion
 - **Pluggable Converters** - `SchemaConverter` interface for custom schema types
@@ -16109,7 +16108,7 @@ import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: true, // Swagger UI at /api/openapi/ui
+  ui: 'scalar', // or true / 'swagger' — API docs UI at /api/openapi/ui
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
@@ -16119,7 +16118,7 @@ Asena automatically discovers it — that's it.
 Now:
 
 - `GET /api/openapi` → OpenAPI 3.1 JSON spec
-- `GET /api/openapi/ui` → Swagger UI page
+- `GET /api/openapi/ui` → API docs UI (Swagger UI or Scalar)
 
 ::: tip Zero Setup
 You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder`, so the component scan discovers and initializes it during bootstrap, just like any other component.
@@ -16130,10 +16129,10 @@ You don't need to register `AppOpenApi` anywhere. It lives in your `sourceFolder
 The `OpenApiPostProcessor` automatically:
 
 1. **Intercepts** every `@Controller` during IoC setup
-2. **Extracts** route metadata (`@Get`, `@Post`, `@Put`, `@Delete`)
+2. **Extracts** route metadata (`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, … — `@All` and `@Connect` are skipped, OpenAPI has no path item field for them)
 3. **Resolves** validators and converts their Zod schemas to JSON Schema
 4. **Generates** a complete OpenAPI 3.1 spec
-5. **Registers** GET endpoints on the adapter for spec and Swagger UI
+5. **Registers** GET endpoints on the adapter for spec and the docs UI
 
 Your existing validators do double duty — they validate requests **AND** generate documentation.
 
@@ -16197,6 +16196,42 @@ The `response()` method supports two formats per status code:
 - **Detailed:** An object with `schema` and optional `description` (e.g., `400: { schema: z.object({ ... }), description: '...' }`)
 :::
 
+### Descriptions
+
+The text the docs UI shows comes from code you already write:
+
+| Source | Lands in |
+|:-------|:---------|
+| `@Controller({ path, description })` | Tag description — the controller's section in the UI |
+| `@Get({ path, summary, description })` (any verb decorator) | Operation summary and description |
+| `.describe()` on a `query()` / `param()` / `header()` field | Parameter description |
+| `.describe()` on a field inside a `json()` / `form()` / `response()` schema | Property description |
+| `.describe()` on the `json()` / `form()` object itself | `requestBody.description` — the schema itself does not carry it, so UIs that print both show it once |
+| `response()` detailed form `{ schema, description }` | Response description |
+
+```typescript
+@Controller({ path: '/api/users', description: 'User accounts and profiles' })
+export class UserController {
+  @Post({
+    path: '/',
+    validator: CreateUserValidator,
+    summary: 'Create a user',
+    description: 'Creates the account and sends the welcome email.',
+  })
+  create(context: Context) { /* ... */ }
+}
+
+// CreateUserValidator
+json() {
+  return z
+    .object({
+      name: z.string().min(1).describe('Display name, 1-200 characters'),
+      email: z.string().email().describe('Must be unique across accounts'),
+    })
+    .describe('New account');
+}
+```
+
 ## @Hidden Decorator
 
 Hide controllers or individual routes from the spec:
@@ -16238,7 +16273,7 @@ export class ApiController {
     description: 'My app',   // Optional
   },
   path: '/api/openapi',      // Default: '/openapi'
-  ui: true,                  // Default: false — enables Swagger UI at {path}/ui
+  ui: 'scalar',              // Default: none — 'swagger' (or true), 'scalar', or { provider, configuration }
   servers: [                 // Optional
     { url: 'https://api.example.com', description: 'Production' },
   ],
@@ -16253,20 +16288,36 @@ export class AppOpenApi extends OpenApiPostProcessor {}
 |:-------|:-----|:--------|:------------|
 | `info` | `{ title, version, description? }` | — | API metadata (required) |
 | `path` | `string` | `'/openapi'` | Base path for spec and UI endpoints |
-| `ui` | `boolean` | `false` | Enable Swagger UI at `{path}/ui` |
+| `ui` | `boolean \| 'swagger' \| 'scalar' \| { provider, configuration? }` | — | API docs UI served at `{path}/ui` |
 | `servers` | `ServerObject[]` | — | Server URLs for the spec |
 | `converters` | `SchemaConverter[]` | `[ZodSchemaConverter]` | Schema converters |
 
-## Swagger UI
+## API Docs UI
 
-When `ui: true`, a Swagger UI page is served at `{path}/ui`. It loads from CDN — zero npm dependencies:
+Set `ui` to serve an API documentation page at `{path}/ui`. Both providers load from CDN — zero npm dependencies:
 
-- Uses `swagger-ui-dist@5` from unpkg CDN
-- No build step required
-- Works in development and production
+| Value | UI served |
+|:------|:----------|
+| `true` / `'swagger'` | Swagger UI (`swagger-ui-dist@5` from unpkg) |
+| `'scalar'` | Scalar API Reference (`@scalar/api-reference@1` from jsdelivr) |
+| `{ provider, configuration }` | Either provider, with raw provider configuration merged over the defaults |
+| `false` / unset | None |
+
+```typescript
+@OpenApi({
+  info: { title: 'My API', version: '1.0.0' },
+  ui: {
+    provider: 'scalar',
+    configuration: { theme: 'purple', darkMode: true },
+  },
+})
+export class AppOpenApi extends OpenApiPostProcessor {}
+```
+
+`configuration` is passed straight through: for Scalar it lands in `Scalar.createApiReference`, for Swagger in `SwaggerUIBundle`. Its keys override the defaults — including `url`, if you want the UI to read a spec from somewhere else. An unknown provider fails at boot with a clear error instead of serving a broken page.
 
 ::: warning Production Consideration
-Swagger UI loads from CDN, which requires internet access. If your production environment has no external network access, consider setting `ui: false` and using an external API documentation tool.
+Both UIs load from CDN, which requires internet access. If your production environment has no external network access, consider leaving `ui` unset and using an external API documentation tool.
 :::
 
 ## Best Practices
