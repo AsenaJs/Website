@@ -75,7 +75,7 @@ Dependency injection and modular architecture enable easy scaling from small int
 Built-in cron scheduling with `@Schedule` lets you run background jobs — database cleanup, cache warming, report generation — without external tools like Bull or Agenda.
 
 ### API Documentation
-Automatic OpenAPI 3.1 spec generation from your existing validators with `@asenajs/asena-openapi`. Built-in Swagger UI, zero extra annotations needed.
+Automatic OpenAPI 3.1 spec generation from your existing validators with `@asenajs/asena-openapi`. Built-in Swagger UI or Scalar API Reference, zero extra annotations needed.
 
 ### 🚀 Coming Soon
 More projects are being built with Asena! Check back soon or [submit your project](https://github.com/AsenaJs/Asena/issues).
