@@ -747,19 +747,13 @@ export class ProductController {
   validator: CreateUserValidator
 })
 async create(context: Context) {
-  // Ergenecore: AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
-  // Hono:       CreateUserValidator -> AuthMiddleware -> RateLimitMiddleware -> handler
+  // AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
 }
 ```
 
-::: danger Validators and route middleware run in a different order per adapter
-Ergenecore validates **after** the route's middleware chain; Hono registers validators
-**before** route middleware, so validation happens first.
-
-This matters when a middleware populates state the validator depends on - an
-`AuthMiddleware` that calls `context.setValue('user', …)` has not run yet on Hono. Global
-middleware is unaffected: it is top-level on both adapters and always runs first.
-:::
+Both adapters run the route's middleware chain first and validate after it, so a middleware that
+calls `context.setValue('user', …)` has already run when the validator reads the request. Global
+middleware is top-level and always runs before both.
 
 ## Zod Schema Definition
 
