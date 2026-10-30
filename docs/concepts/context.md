@@ -253,6 +253,12 @@ async createUser(context: Context) {
 }
 ```
 
+::: tip Validated, typed input
+The generic is a cast - nothing checks the body against `CreateUserDto`. A
+[route context contract](/docs/concepts/validation#route-context-contracts) validates the request
+and types `getBody()` from the schema, with the validated values on `context.input`.
+:::
+
 ::: warning Empty Body Handling
 **Ergenecore**: Empty request body returns `{}` (empty object)
 
@@ -1071,6 +1077,7 @@ async useNative(context: Context) {
 | `getArrayBuffer()` | `Promise<ArrayBuffer>` | Get binary body |
 | `getBlob()` | `Promise<Blob>` | Get body as Blob |
 | `getRequestIp()` | `string \| null` | Get client IP address (lazy, cached) |
+| `input` | `Readonly<…>` | Validated input of a [route context contract](/docs/concepts/validation#route-context-contracts); throws on a route without one |
 
 ### Response Methods
 

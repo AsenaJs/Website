@@ -8,6 +8,11 @@ outline: deep
 
 Asena provides built-in validation support using [Zod](https://zod.dev). Validation ensures that incoming request data meets your requirements before reaching your route handlers.
 
+A route declares its validation in one of two ways:
+
+- **A validator class** - a `ValidationService` subclass passed as the route's `validator` option. Its methods return Zod schemas.
+- **A [route context contract](#route-context-contracts)** - a context subclass built with `Context.define()`, taken as the handler's first parameter. Its schemas can come from any [Standard Schema v1](https://standardschema.dev) library, and the handler reads typed, validated values from `context.input`.
+
 <div class="card-grid">
   <a class="info-card" href="#quick-start">
     <span class="ic-kicker">01</span>
@@ -38,6 +43,16 @@ Asena provides built-in validation support using [Zod](https://zod.dev). Validat
     <span class="ic-kicker">06</span>
     <div class="ic-title">Zod Schemas</div>
     <p class="ic-desc">Defining the schemas the validators return.</p>
+  </a>
+  <a class="info-card" href="#route-context-contracts">
+    <span class="ic-kicker">07</span>
+    <div class="ic-title">Route Context Contracts</div>
+    <p class="ic-desc"><code>Context.define()</code> and typed <code>context.input</code>.</p>
+  </a>
+  <a class="info-card" href="#schema-factory-caching">
+    <span class="ic-kicker">08</span>
+    <div class="ic-title">Schema Factory Caching</div>
+    <p class="ic-desc">The <code>validatorCache</code> route option.</p>
   </a>
 </div>
 
@@ -262,6 +277,46 @@ export class UniqueEmailValidator extends ValidationService {
   }
 }
 ```
+
+The `refine` callback runs on every validation, so the lookup sees the current data. The method
+that *returns* the schema is a different matter - see the next section.
+
+### Schema Factory Caching
+
+`json()`, `query()` and the other validator methods are **schema factories**. How often a route
+calls them is set by the `validatorCache` option, available on every HTTP method decorator and on
+both adapters:
+
+```typescript
+@Post({ path: '/', validator: CreateUserValidator, validatorCache: false })
+async create(context: Context) {
+  return context.send(await context.getBody(), 201);
+}
+```
+
+| `validatorCache` | When the factory runs | Use it when |
+|:-----------------|:----------------------|:------------|
+| `true` (default) | Once per route and target, while the server starts | The schema is fixed once the application is up |
+| `false` | On every request that reaches validation | The factory builds its schema from settings that change after startup or between requests |
+
+With the default, an `async` factory is awaited during startup, and a factory that throws fails
+the startup with an error naming the route and the target. `@OnStart` hooks complete before
+controller routes are initialized, so state they establish is visible to the factory in either
+mode.
+
+With `false`, the validator's methods are still discovered and its injections resolved at
+startup; only the factory call moves to the request.
+
+What the cache holds is the prepared **schema and hook**, nothing else:
+
+- Validation itself, and the hook, run on every request.
+- No request body, parsed value or response is stored or shared.
+- A `refine` that reads mutable state still reads it on each validation.
+- The cache belongs to one route of one server instance. Two routes using the same validator
+  class, or two applications in one process, each prepare their own.
+
+`validatorCache` applies to the `validator` option only. Setting it on a route without a
+validator, or on a route that uses a [context contract](#route-context-contracts), fails startup.
 
 ## Validation Hooks
 
@@ -500,6 +555,165 @@ not have to know which.
 If the validator's `hook` returns a `Response`, that response is sent as-is and `onError`
 is never reached for that request. See [Validation Hooks](#validation-hooks).
 :::
+
+## Route Context Contracts
+
+A route context contract puts a route's request schemas on a context class. The handler takes
+that class as its first parameter, and Asena validates the request against it before the handler
+runs. The same schemas drive the validated values, their TypeScript types and the
+[OpenAPI request schemas](/docs/packages/openapi#route-context-contracts).
+
+### Defining a Contract
+
+`Context` is exported by both adapters as a type **and** a value. `Context.define()` takes a schema
+map and returns a context class to extend:
+
+::: code-group
+```typescript [ergenecore]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({ name: z.string().trim(), age: z.coerce.number().default(18) }),
+  query: z.object({ notify: z.stringbool().default(false) }),
+}) {
+  get displayName() {
+    return this.input.body.name.toUpperCase();
+  }
+}
+
+@Controller('/users')
+export class UserController {
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = await context.getBody(); // { name: string; age: number }
+
+    return context.send({ name: context.displayName, notify: context.input.query.notify, user }, 201);
+  }
+}
+```
+
+```typescript [hono]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/hono-adapter';
+import { z } from 'zod';
+
+class CreateOrderContext extends Context.define({
+  body: z.object({ quantity: z.coerce.number().int().positive() }),
+  params: z.object({ shopId: z.coerce.number() }),
+}) {}
+
+@Controller('/shops')
+export class OrderController {
+  @Post('/:shopId/orders')
+  async create(context: CreateOrderContext) {
+    const { shopId } = context.input.params; // number
+    const { quantity } = await context.getBody(); // number
+
+    return context.send({ shopId, quantity }, 201);
+  }
+}
+```
+:::
+
+The handler receives a real instance of your subclass, so `instanceof` and getters you add to it
+work. A class built by one adapter's `Context.define()` cannot be used on the other adapter; the
+route fails at startup naming both.
+
+### Targets
+
+| Key | Validates | Value passed to the schema |
+|:----|:----------|:---------------------------|
+| `body` | JSON request body | The parsed JSON; `undefined` when the body is empty |
+| `form` | `multipart/form-data` or URL-encoded body | An object; a repeated field becomes an array |
+| `query` | Query string | An object; a repeated key becomes an array, a single one stays a string |
+| `params` | Route parameters | An object of strings |
+| `headers` | Request headers | An object with lowercase header names |
+
+Each schema must implement Standard Schema v1. Zod is one such library; any other implementation
+works the same way, and both synchronous and `async` validation are supported. Asena does not
+depend on a schema library for contracts.
+
+`Context.define()` rejects a key outside this list, a value that is not a Standard Schema, and a map
+that declares both `body` and `form`.
+
+Targets are validated in the order `body`/`form`, `query`, `params`, `headers`. Validation stops at
+the first target that fails.
+
+### What the Handler Sees
+
+`context.input` holds the schema **output** for each declared target, with defaults, transforms
+and coercions applied. Only declared targets exist on it - `context.input.params` on a contract
+without `params` is a compile error.
+
+| Accessor | Returns |
+|:---------|:--------|
+| `context.input.<target>` | The validated output of that target |
+| `getBody()` | The validated `body` output, typed without a generic |
+| `getParseBody()` | The validated `form` output, typed without a generic |
+| `getQuery()`, `getParam()`, `headers` | The raw request values |
+
+`input` is ready synchronously when the handler runs, and each request gets its own. The map is
+read-only and frozen at the top level; the schemas and the output objects inside it are not
+deep-frozen.
+
+`input` throws when read before route validation has finished - in a middleware, in the class
+constructor, or in a field initializer. A getter on the subclass is fine, as long as it is read from
+the handler.
+
+### Execution Order
+
+```
+global middleware → controller middleware → route middleware → contract validation → handler
+```
+
+This order is the same on both adapters. A middleware that reads the body does not consume it:
+validation still receives the full body. When validation fails or a middleware answers the request
+itself, the handler does not run.
+
+### Errors
+
+| Situation | Status |
+|:----------|:-------|
+| A schema reports issues | **400** |
+| Malformed JSON in a `body` request | **400** |
+| A non-empty `body` request whose content type is not `application/json` or `application/*+json` | **415** |
+| A `form` request whose content type is not `multipart/form-data` or `application/x-www-form-urlencoded` | **415** |
+
+A failing schema throws an error that `isValidationError()` recognizes, so it reaches your
+`onError` like a validator failure does. Its `target` is the contract key (`body`, `form`, `query`,
+`params`, `headers`) and its `issues` carry `path` and `message`, with each path segment
+normalized to a string or a number. Without an `onError` that answers it, the response is:
+
+```json
+{
+  "error": "Validation failed",
+  "target": "body",
+  "issues": [{ "message": "Too small: expected number to be >0", "path": ["quantity"] }]
+}
+```
+
+An exception thrown from inside a schema is not a validation failure. It reaches `onError` as it
+was thrown.
+
+A route cannot combine a contract with the `validator` option. Doing so, or setting
+`validatorCache` on a contract route, fails startup.
+
+### Requirements
+
+Asena finds the contract from the TypeScript metadata of the handler's first parameter. That
+needs:
+
+- `experimentalDecorators` and `emitDecoratorMetadata` enabled in `tsconfig.json`
+- the context class referenced as a **value** - declared in the same file, or imported without
+  `import type`
+
+When the metadata is missing, the route is registered without a contract: nothing is validated and
+reading `context.input` throws. A class that TypeScript erased to a type cannot be recovered at
+runtime.
 
 ## Integration with Controllers
 

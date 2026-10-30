@@ -163,6 +163,58 @@ json() {
 }
 ```
 
+## Route Context Contracts
+
+A route that takes a [`Context.define()`](/docs/concepts/validation#route-context-contracts)
+subclass as its first parameter is documented from that contract - no validator class needed:
+
+| Contract key | OpenAPI Output | Location |
+|:-------------|:---------------|:---------|
+| `body` | RequestBody (required) | `application/json` |
+| `form` | RequestBody (required) | `multipart/form-data` |
+| `query` | ParameterObject[] | `in: query` |
+| `params` | ParameterObject[] | `in: path` |
+| `headers` | ParameterObject[] | `in: header` |
+
+```typescript
+import { Context } from '@asenajs/hono-adapter'; // or '@asenajs/ergenecore'
+import { z } from 'zod';
+
+class ListOrdersContext extends Context.define({
+  query: z.object({ page: z.coerce.number().int().default(1) }),
+  params: z.object({ shopId: z.string() }),
+}) {}
+
+@Get('/:shopId/orders')
+async list(context: ListOrdersContext) { /* ... */ }
+```
+
+`page` appears as an optional query parameter, because the client may omit it - the default is
+applied on the server.
+
+### Input and output shapes
+
+A schema with a transform, coercion or default has two shapes: what the client sends and what the
+handler receives. The spec documents each side from the perspective of the client:
+
+- **Request** schemas - contract targets and the validator's `json()`, `form()`, `query()`,
+  `param()`, `header()` - use the **input** shape.
+- **Response** schemas from `response()` use the **output** shape.
+
+`z.string().pipe(z.coerce.number())` is documented as a `string` in a request and as a `number` in
+a response; a field with `.default()` is optional in a request and required in a response. A
+`.transform()` has no JSON Schema for its result, so its output side is documented as an
+unconstrained schema (`{}`).
+
+### Contracts that cannot be documented
+
+Each declared contract target must be convertible. When a converter cannot turn a target into JSON
+Schema, or a `query`, `params` or `headers` schema does not convert to an object with properties,
+spec generation fails with an error naming the route and the target. No partial spec is cached.
+
+A contract can use any Standard Schema library at runtime, but OpenAPI needs a
+[converter](#custom-converters) for it. The built-in `ZodSchemaConverter` covers Zod.
+
 ## @Hidden Decorator
 
 Hide controllers or individual routes from the spec:
@@ -222,6 +274,33 @@ export class AppOpenApi extends OpenApiPostProcessor {}
 | `ui` | `boolean \| 'swagger' \| 'scalar' \| { provider, configuration? }` | — | API docs UI served at `{path}/ui` |
 | `servers` | `ServerObject[]` | — | Server URLs for the spec |
 | `converters` | `SchemaConverter[]` | `[ZodSchemaConverter]` | Schema converters |
+
+### Custom Converters
+
+A converter teaches the generator a schema library other than Zod. The first converter whose
+`canConvert()` returns `true` handles the schema:
+
+```typescript
+import type { JsonSchema, SchemaConverter, SchemaDirection } from '@asenajs/asena-openapi';
+
+export class MySchemaConverter implements SchemaConverter {
+  canConvert(schema: unknown, direction?: SchemaDirection): boolean {
+    return isMySchema(schema);
+  }
+
+  convert(schema: unknown, direction: SchemaDirection = 'output', options?: { strict?: boolean }): JsonSchema | undefined {
+    return toJsonSchema(schema, direction);
+  }
+}
+```
+
+- `direction` is `'input'` for request schemas and `'output'` for response schemas - see
+  [Input and output shapes](#input-and-output-shapes).
+- `options.strict` is `true` for route context contracts. A strict conversion should throw, or
+  return `undefined`, rather than approximate a part it cannot represent; either one fails spec
+  generation with the route and target named.
+
+Keep `ZodSchemaConverter` in the list when you add one, so Zod schemas are still converted.
 
 ## API Docs UI
 

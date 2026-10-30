@@ -14,6 +14,16 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
+## Next Release · v0.12 <span class="pill pill-teal">In progress</span>
+
+Not published yet. `@asenajs/asena` 0.12.0; Ergenecore goes out as a **major**, because its legacy validator factories run at startup by default.
+
+- **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
+- **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
+- **[OpenAPI from contracts](/docs/packages/openapi#route-context-contracts)** - contracts become request schemas, documented in their input shape; responses keep the output shape
+
+---
+
 ## Current Release <span class="pill pill-live">v0.11.x · Stable</span>
 
 These features are **stable and production-ready** in the current release:
