@@ -67,6 +67,11 @@ The `OpenApiPostProcessor` automatically:
 
 The schemas that validate a request are the ones that document it.
 
+### Routes That Cannot Be Documented
+
+- **Two routes claiming the same path and method throw.** Generation stops and the error names both controllers, so neither endpoint silently disappears from the docs. With `OpenApiPostProcessor` this surfaces on the first request to the spec endpoint, not at boot.
+- **`operationId` collisions get a numeric suffix.** Two controller classes sharing a name would otherwise produce duplicate ids, which OpenAPI forbids. The first occurrence keeps the bare id.
+
 ## Validator Mapping
 
 Each validator method maps to a specific part of the OpenAPI spec:
@@ -126,6 +131,10 @@ The `response()` method supports two formats per status code:
 - **Simple:** A Zod schema directly (e.g., `201: z.object({ ... })`)
 - **Detailed:** An object with `schema` and optional `description` (e.g., `400: { schema: z.object({ ... }), description: '...' }`)
 :::
+
+### Path Parameters
+
+Every variable in a route path is documented, whether or not a `param()` validator describes it. `@Get('/:id')` on its own emits `id` as a required `string`; a `param()` schema replaces that default with its own definition. A `param()` field the path template does not mention is dropped — OpenAPI has nowhere to put it.
 
 ### Descriptions
 
@@ -329,6 +338,23 @@ export class AppOpenApi extends OpenApiPostProcessor {}
 ::: warning Production Consideration
 Both UIs load from CDN, which requires internet access. If your production environment has no external network access, consider leaving `ui` unset and using an external API documentation tool.
 :::
+
+## Manual Spec Generation
+
+`OpenApiGenerator` builds the spec from a started server's container on demand, without registering any endpoint. Prefer `OpenApiPostProcessor` for serving it.
+
+```typescript
+import { OpenApiGenerator, ZodSchemaConverter } from '@asenajs/asena-openapi';
+
+const generator = new OpenApiGenerator({
+  info: { title: 'My API', version: '1.0.0' },
+  converters: [new ZodSchemaConverter()],
+});
+
+const spec = await generator.generate(server.coreContainer.container);
+```
+
+`OpenApiGenerator` has no default converter — pass `ZodSchemaConverter` explicitly. Both builders share one operation builder, so a route documents identically either way.
 
 ## Best Practices
 

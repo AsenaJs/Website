@@ -64,7 +64,7 @@ bun add @asenajs/asena-kafka kafkajs
 **Requirements:**
 - [Bun](https://bun.sh) v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
-- [kafkajs](https://kafka.js.org) v2.2 or higher
+- [kafkajs](https://kafka.js.org) v2.2.4 (peer dependency)
 
 ::: warning Broker compatibility
 Use Apache Kafka **2.8 – 3.9**. Kafka 4.0 removed old protocol API versions (KIP-896) and kafkajs 2.2.4 has reported incompatibilities — pin your broker to 3.9.x. See [Client Roadmap](#client-roadmap) for why kafkajs is the client today.
@@ -87,6 +87,8 @@ docker run -d --name asena-kafka --restart always -p 9092:9092 \
   -e KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS=1000 \
   apache/kafka:3.9.1
 ```
+
+`KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS=1000` lets tests use low `sessionTimeout` values for fast crash detection; production brokers can keep the default.
 
 ## Quick Start
 
@@ -227,7 +229,7 @@ await admin.disconnect();
 | `disconnect()` | Close the default producer. Called for you by `@OnStop` on `server.stop()` |
 | `testConnection()` | Bounded broker probe (3s), returns `boolean` |
 
-Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer, and `server.stop()` now calls it through the service's `@OnStop`. Before the framework grew a stop phase nothing did, so the client outlived the server that opened it.
+Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer; `server.stop()` calls it through the service's `@OnStop`.
 
 ### Configuration
 
@@ -418,7 +420,7 @@ Broker list, credentials and TLS now live in exactly one place. Config classes a
 
 | Purpose | Kafka Topic | Mechanism |
 |---|---|---|
-| Events | `asena.ms.evt` (shared) | Keyless round-robin production; one consumer group per service; wildcard patterns matched locally; at-least-once with committed offsets |
+| Events | `asena.ms.evt` (shared) | Keyless round-robin production; one consumer group per service; wildcard patterns matched locally (non-matching records are committed immediately); at-least-once with committed offsets |
 | Requests | `asena.ms.req.<pattern>` (topic per pattern) | Consumer group distributes each request to exactly one replica |
 | Replies | `asena.ms.reply` (shared) | Per-instance ephemeral consumer group filters by correlationId |
 | Dead letters | `asena.ms.dlq` | Poison events after `maxRetries`, with provenance headers |
@@ -436,7 +438,7 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 ### Retries and DLQ
 
 - A failed **event** handler leaves the offset uncommitted. The partition is paused, seeked back, and re-fetched after `retryBackoffMs` — the broker genuinely redelivers, sharing one mechanism with crash recovery.
-- After `maxRetries` the event is produced to the DLQ topic with provenance headers (`origin_stream`, original value and headers preserved).
+- After `maxRetries` the event is produced to the DLQ topic with its original value and headers, plus provenance headers: `origin_stream` (source topic), `origin_group` (the `serviceName`), `origin_offset` (`topic:partition:offset`), `delivery_count` and `dlq_ts`.
 - **RPC errors are final.** The caller receives the error and the offset is committed; only event handlers are retried. Retrying a request is the caller's decision.
 
 ### Options
@@ -535,7 +537,7 @@ await this.ulak.emit('invoices', { invoiceId: 'inv-1' }, { headers: { 'x-tenant'
 **Inbound rules** (external topics with a matching `@EventPattern`):
 
 - The dispatch pattern is **always the topic name** — a foreign record's incidental `p` header never steers routing.
-- The handler must resolve to exactly the topic name, so use `prefix: false` on any prefixed controller.
+- The handler pattern is matched against the topic name like any event pattern, so use `prefix: false` on any prefixed controller. Segment wildcards apply: an `upstream.*` handler also consumes an external `upstream.orders` topic.
 - `context.headers` exposes **all raw record headers**. `context.messageId` honors a `mid` header, otherwise it falls back to the record position `topic:partition:offset` — stable across groups and redeliveries, so [messageId dedup](/docs/concepts/microservices#idempotent-handlers) still works.
 - Retry, DLQ (`origin_stream` = the foreign topic; value and headers preserved) and `context.attempt` work exactly as for own topics.
 
@@ -601,7 +603,7 @@ The topic does not exist, or its metadata has not propagated yet. The client nev
 
 ### The service boots but consumes nothing
 
-Check the boot log for the resolved patterns. Since Asena 0.8 the `@MessageController` prefix applies to `@EventPattern` as well, so a handler you expect on `orders` may have registered as `billing.orders`:
+Check the boot log for the resolved patterns. The `@MessageController` prefix applies to `@EventPattern` as well, so a handler you expect on `orders` may have registered as `billing.orders`:
 
 ```
 [Microservice] OrdersListener → "default" (prefix "billing") evt: billing.orders

@@ -80,14 +80,14 @@ import { AsenaLogger } from '@asenajs/asena-logger';
 export const logger = new AsenaLogger();
 ```
 
-The constructor also takes an optional Winston logger and an options object, which is the
-simplest way to change the level or add transports without building a Winston logger
-yourself:
+The constructor also takes an optional Winston logger and an options object (`level`,
+`format`, `transports`), which is the simplest way to change the level or the transports
+without building a Winston logger yourself:
 
 ```typescript
 export const logger = new AsenaLogger(undefined, {
   level: 'debug',
-  transports: [/* extra Winston transports */],
+  transports: [/* Winston transports - replaces the default console transport */],
 });
 ```
 
@@ -352,6 +352,9 @@ const winstonLogger = winston.createLogger({
 // Use with AsenaLogger
 export const logger = new AsenaLogger(winstonLogger);
 ```
+
+A custom Winston instance is used as-is: AsenaLogger's own [output format](#output-format) is
+not applied to it, so give it a `format` of your own.
 
 ::: info Winston Documentation
 For detailed Winston configuration options (transports, formats, log rotation, etc.), see the [Winston Documentation](https://github.com/winstonjs/winston).

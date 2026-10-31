@@ -163,6 +163,10 @@ export default defineConfig({
 
 After build, `public/` is copied to `dist/public/`, and HTML import paths are automatically rewritten to resolve correctly.
 
+::: warning Do not add `*.html` to `buildOptions.external`
+The build already treats `.html` imports as external and rewrites their paths. Listing them in `external` yourself bypasses that step, and the bundle points at paths that do not exist in the output directory.
+:::
+
 ::: tip Directories are copied recursively
 You can include both files and directories. Directories are copied recursively.
 ```typescript

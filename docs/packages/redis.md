@@ -164,7 +164,7 @@ export class AppRedis extends AsenaRedisService {}
 | Adapter | Package | Best For |
 |:--------|:--------|:---------|
 | `'bun'` (default) | None (Bun built-in) | Bun runtime, maximum performance |
-| `'node-redis'` | `redis` ^5.11.0 | Node.js compatibility, Redis modules |
+| `'node-redis'` | `redis` ^5.12.1 | Node.js compatibility, Redis modules |
 
 ## API Reference
 
@@ -340,12 +340,14 @@ public transport() {
 
 ### How It Works
 
-Each server instance gets a unique pod ID. When a WebSocket message is published:
+Each server instance gets a unique pod ID. When a message is published through the server (the service-level `this.to()` / `this.in()`):
 
 1. The message is delivered locally via `server.publish()`
 2. The message is sent to Redis pub/sub with the originating pod ID
 3. Other pods receive the message and deliver it to their local sockets
 4. Messages from the same pod are deduplicated automatically
+
+`ws.publish()` takes a different route: it [excludes the sender](/docs/concepts/websocket#publishing-messages), so it does the local delivery itself and hands the transport only step 2 onwards via `publishRemote()`. Steps 3 and 4 are unchanged.
 
 ### Options
 

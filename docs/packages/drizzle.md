@@ -478,6 +478,9 @@ back to `PGHOST`/`PGPORT`/pg's defaults — **never** to the discrete value you 
 `{ port: 5555, connectionString: 'postgres://u:p@host/db' }` resolves to 5432.
 
 That is why Asena omits the discrete fields outright rather than emitting both. Pick one.
+
+`extra` follows the same driver rules: on `pg`, `extra: { host: 'x' }` cannot override a
+connection string; on `mysql2` it can.
 :::
 
 ::: info Where `ssl` fits
