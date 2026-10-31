@@ -17,6 +17,11 @@ title: Asena
 
 <CopyCmd cmd="bun install -g @asenajs/asena-cli && asena create my-app" />
 
+<div class="lp-hero-skill">
+<span class="lp-hero-skill-label">Coding with an AI agent?</span>
+<CopyCmd cmd="npx skills add asenajs/skills" />
+</div>
+
 <div class="lp-hero-actions">
 <a class="lp-btn-brand" href="/docs/get-started">Get Started</a>
 <a class="lp-btn-alt" href="https://github.com/AsenaJs/Asena" target="_blank" rel="noopener">View on GitHub</a>
@@ -42,7 +47,7 @@ title: Asena
 <li><b>IoC container</b> — components are discovered by scanning, never registered by hand.</li>
 <li><b>Field injection</b> — <code>@Inject</code> sits on the field; constructors stay yours.</li>
 <li><b>Pluggable adapters</b> — Ergenecore or Hono behind the same business code.</li>
-<li><b>Type-safe validation</b> — Zod schemas at route, controller or global level.</li>
+<li><b>Route context contracts</b> — one schema validates, types and documents a route.</li>
 </ul>
 <a class="lp-more" href="/docs/concepts/dependency-injection">How injection works →</a>
 </div>
@@ -111,6 +116,8 @@ export class UserController {
 
 </section>
 
+<TypeShowcase />
+
 <section class="lp-bench lp-bleed lp-section">
 
 <div class="lp-wrap">
@@ -119,36 +126,36 @@ export class UserController {
 
 <div class="lp-cols-text">
 <span class="lp-eyebrow">Benchmarks</span>
-<div class="lp-bench-num">2.49<span>×</span></div>
+<div class="lp-bench-num">2.65<span>×</span></div>
 <h2 class="lp-h2">Faster than NestJS, with nothing tuned</h2>
-<p class="lp-lead">Byte-for-byte identical workloads on the same machine, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
+<p class="lp-lead">Byte-for-byte identical workloads on the same machine, one CPU per server, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
 <a class="lp-more" href="/docs/benchmarks">Full methodology →</a>
 </div>
 
 <div class="lp-bars">
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Plaintext</b><span>2.49× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:100%"></span></div><span class="lp-bar-val"><b>202,066</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:40.1%"></span></div><span class="lp-bar-val"><b>80,988</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Plaintext</b><span>2.65× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:100%"></span></div><span class="lp-bar-val"><b>151,923</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:37.8%"></span></div><span class="lp-bar-val"><b>57,408</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Request validation</b><span>3.76× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:66.7%"></span></div><span class="lp-bar-val"><b>134,793</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:17.8%"></span></div><span class="lp-bar-val"><b>35,873</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Request validation</b><span>4.23× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:54.4%"></span></div><span class="lp-bar-val"><b>82,584</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:12.9%"></span></div><span class="lp-bar-val"><b>19,546</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Database · read by id</b><span>2.80× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:38.6%"></span></div><span class="lp-bar-val"><b>78,023</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:13.8%"></span></div><span class="lp-bar-val"><b>27,883</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Database · read by id</b><span>4.20× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:42.8%"></span></div><span class="lp-bar-val"><b>64,995</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:10.2%"></span></div><span class="lp-bar-val"><b>15,461</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Full API endpoint</b><span>2.24× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:58.9%"></span></div><span class="lp-bar-val"><b>119,095</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:26.3%"></span></div><span class="lp-bar-val"><b>53,236</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Full API endpoint</b><span>2.70× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:57.1%"></span></div><span class="lp-bar-val"><b>86,710</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:21.1%"></span></div><span class="lp-bar-val"><b>32,119</b> NestJS</span></div>
 </div>
 
 </div>

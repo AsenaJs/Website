@@ -27,12 +27,12 @@ Ergenecore is the **fastest** Asena adapter:
 
 | Adapter            | Runtime | Plaintext   | JSON serialization |
 |:-------------------|:--------|------------:|-------------------:|
-| **Ergenecore**     | Bun     | **202,066** | **195,494**        |
-| Hono adapter       | Bun     | 190,030     | 178,857            |
-| NestJS · Express   | Bun     | 131,281     | 119,195            |
+| **Ergenecore**     | Bun     | **151,923** | **148,415**        |
+| Hono adapter       | Bun     | 141,822     | 132,708            |
+| NestJS · Express   | Bun     | 65,750      | 63,540             |
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
@@ -64,7 +64,7 @@ library and its version.
 
 **Requirements:**
 - Bun v1.4 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.0 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.9.3 or higher
 

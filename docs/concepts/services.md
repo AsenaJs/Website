@@ -798,4 +798,4 @@ describe('UserService', () => {
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
 - [WebSocket](/docs/concepts/websocket) - Namespaces and socket handling
 - [Drizzle ORM](/docs/packages/drizzle) - Repository pattern for the data layer
-- [Testing Guide](/docs/guides/testing) - Testing services in isolation
+- [Testing Guide](/docs/testing/overview) - Testing services in isolation

@@ -61,7 +61,7 @@ This is why Redis, Kafka, OpenTelemetry, Drizzle and Winston all live in optiona
 
 Asena is not a framework that happens to run on Bun. It is built for Bun.
 
-`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 202,066 req/s on plaintext in [our published benchmarks](/docs/benchmarks).
+`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 151,923 req/s on plaintext from a single CPU in [our published benchmarks](/docs/benchmarks).
 
 The trade-off is deliberate: Asena will not run on Node.js. In exchange, it does not pay the abstraction tax that portability demands.
 

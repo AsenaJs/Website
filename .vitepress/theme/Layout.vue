@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vitepress'
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { useData, useRoute } from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
+import DocAiBar from './components/DocAiBar.vue'
 
 const { Layout } = DefaultTheme
 const route = useRoute()
+const { page } = useData()
+
+const showAiBar = computed(() => page.value.relativePath.startsWith('docs/') && !page.value.isNotFound)
 
 let observer: IntersectionObserver | undefined
 
@@ -52,5 +56,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <Layout />
+    <Layout>
+        <template #doc-before>
+            <DocAiBar v-if="showAiBar" :key="page.relativePath" />
+        </template>
+    </Layout>
 </template>

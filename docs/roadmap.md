@@ -14,19 +14,22 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release · v0.12 <span class="pill pill-teal">In progress</span>
+## Current Release <span class="pill pill-live">v0.12.x · Stable</span>
 
-Not published yet. `@asenajs/asena` 0.12.0; Ergenecore goes out as a **major**, because its legacy validator factories run at startup by default.
+These features are **stable and production-ready** in the current release:
+
+### New in v0.12
+
+`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default.
 
 - **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
 - **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
 - **[OpenAPI from contracts](/docs/packages/openapi#route-context-contracts)** - contracts become request schemas, documented in their input shape; responses keep the output shape
-
----
-
-## Current Release <span class="pill pill-live">v0.11.x · Stable</span>
-
-These features are **stable and production-ready** in the current release:
+- **The auth contract** - `@asenajs/asena/auth` ships the provider interface, session shapes, the `@Protected` / `@Public` / `@Roles` markers and `getAuthSession` / `requireAuthSession`, so auth implementations share one contract. Core never calls it
+- **One middleware order** - global → controller → route → validator → handler on both adapters; controller middlewares attach to the controller's own routes instead of a `/prefix/*` pattern
+- **Canonical duplicate-route detection** - routes that differ only in a trailing slash fail the boot instead of one silently shadowing the other
+- **[Rate limiting keyed on the peer](/docs/adapters/ergenecore#ratelimitermiddleware)** *(adapter majors)* - `RateLimiterMiddleware` ignores client-set forwarding headers unless `trustProxy` says otherwise, and `maxBuckets` bounds its memory
+- **`WebSocketOriginMiddleware`** - rejects a WebSocket handshake whose `Origin` is not allowed, which `CorsMiddleware` does not do
 
 ### New in v0.11
 
@@ -108,7 +111,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.11.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.12.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -211,9 +214,9 @@ These CLI features are **ideas under discussion** and do not have a fixed releas
 
 | Version | Status | Breaking Changes | Production Use |
 |:--------|:-------|:-----------------|:---------------|
-| v0.9.x  | Older | Possible | Yes (with caution) |
-| v0.10.x | Previous | Possible | Yes (with caution) |
-| v0.11.x | Current | Possible | Yes (with caution) |
+| v0.10.x | Older | Possible | Yes (with caution) |
+| v0.11.x | Previous | Possible | Yes (with caution) |
+| v0.12.x | Current | Possible | Yes (with caution) |
 | v1.0.0+ | Stable | Semantic versioning | Recommended |
 
 ### Development Priorities
@@ -258,6 +261,7 @@ We welcome contributions in many forms:
 - **v0.9.2** - Released July 2026 (One `HttpException` in core, thrown identically on both adapters; the Hono adapter's default response and log level both moved onto the brand)
 - **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
 - **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
+- **v0.12.0** - Released October 2026 (Route context contracts, `validatorCache`, OpenAPI from contracts, the `@asenajs/asena/auth` contract, one middleware order on both adapters, canonical duplicate-route detection, `WebSocketOriginMiddleware`). **Breaking:** both adapters moved to 5.0.0 — `RateLimiterMiddleware` keys on the connecting peer
 - **v1.0.0** - TBD (Plugin system)
 
 ::: tip Follow Progress

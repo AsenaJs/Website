@@ -202,6 +202,289 @@
   font-weight: 600;
 }
 
+/* ---- page AI bar ---- */
+
+.doc-ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 22px;
+}
+
+.doc-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  background: var(--vp-c-bg-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
+}
+
+.doc-ai-btn:hover,
+.doc-ai-btn:focus-visible {
+  border-color: var(--asena-accent);
+  color: var(--vp-c-text-1);
+}
+
+.doc-ai-btn.is-done {
+  border-color: var(--asena-accent);
+  color: var(--asena-accent);
+}
+
+.doc-ai-btn svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+/* ---- diagrams ---- */
+
+.dg {
+  margin: 28px 0;
+  padding: 18px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background:
+    radial-gradient(110% 90% at 100% 0%, rgba(13, 198, 196, 0.1), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(127, 201, 58, 0.07), transparent 60%),
+    var(--vp-code-block-bg);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 26px 50px -38px rgba(13, 198, 196, 0.5);
+}
+
+.dg code {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--vp-c-default-soft);
+  color: var(--vp-c-text-1);
+}
+
+.dg-section {
+  padding: 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg);
+}
+
+.dg-label {
+  margin-bottom: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--asena-accent);
+}
+
+.dg-label code {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  color: var(--asena-accent);
+  background: var(--vp-c-brand-soft);
+}
+
+.dg-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dg-step {
+  position: relative;
+  margin: 0;
+  display: grid;
+  grid-template-columns: var(--dg-tag-w, 190px) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--card-wash);
+}
+
+.dg-step + .dg-step::before,
+.dg-link {
+  content: '';
+  display: block;
+  width: 2px;
+  background: linear-gradient(var(--grad-a), var(--grad-b));
+  border-radius: 2px;
+}
+
+.dg-step + .dg-step::before {
+  position: absolute;
+  top: -15px;
+  left: 30px;
+  height: 14px;
+}
+
+.dg-link {
+  height: 18px;
+  margin: 0 0 0 44px;
+}
+
+.dg-tag {
+  font-family: var(--vp-font-family-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--vp-c-text-3);
+  overflow-wrap: anywhere;
+}
+
+.dg-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--vp-c-text-1);
+}
+
+.dg-detail {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+}
+
+.dg-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+/* layers: one card per box, no step chrome */
+
+.dg-layers .dg-step {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.dg-layers .dg-cell {
+  padding: 10px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--card-wash);
+}
+
+.dg-layers .dg-link {
+  margin: 0 auto;
+}
+
+.dg-exits {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 12px;
+}
+
+.dg-exits li {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 190px auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.dg-when {
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.dg-arrow {
+  color: var(--asena-accent);
+}
+
+.dg-then {
+  color: var(--vp-c-text-2);
+}
+
+/* .vp-doc spaces every p and li for prose; a diagram needs none of it */
+.vp-doc .dg p,
+.vp-doc .dg li,
+.vp-doc .dg li + li {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.vp-doc .dg .dg-detail {
+  margin-top: 2px;
+}
+
+.vp-doc .dg ol,
+.vp-doc .dg ul {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 0;
+}
+
+.vp-doc .dg .dg-exits {
+  margin-top: 16px;
+  padding: 12px 14px;
+}
+
+.dg-caption {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vp-c-text-3);
+}
+
+@media (max-width: 640px) {
+  .dg {
+    padding: 12px;
+  }
+
+  .dg-section {
+    padding: 10px;
+  }
+
+  .dg-wide-tags .dg-step {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .dg-wide-tags .dg-tag:empty {
+    display: none;
+  }
+
+  .dg-step + .dg-step::before {
+    left: 22px;
+  }
+
+  .dg-link {
+    margin-left: 36px;
+  }
+
+  .dg-exits li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .dg-arrow {
+    display: none;
+  }
+}
+
 /* ---- reduced motion ---- */
 
 @media (prefers-reduced-motion: reduce) {

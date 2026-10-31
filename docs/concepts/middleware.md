@@ -569,6 +569,11 @@ first makes it run first. Controller-level middleware always follows the whole g
 because the config is applied before controllers are registered.
 :::
 
+Validation runs after the whole middleware chain, right before the handler. The same order holds
+on both adapters:
+
+<DocDiagram id="request-pipeline" />
+
 **Example:**
 
 ```typescript

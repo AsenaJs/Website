@@ -28,13 +28,13 @@ Hono Adapter delivers excellent performance powered by Bun and Hono:
 
 | Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
 |:-------------------|:--------|------------:|-------------------:|------------------:|
-| Ergenecore         | Bun     | 202,066     | 195,494            | 119,095           |
-| **Hono adapter**   | Bun     | **190,030** | **178,857**        | **126,251**       |
+| Ergenecore         | Bun     | 151,923     | 148,415            | 86,710            |
+| **Hono adapter**   | Bun     | **141,822** | **132,708**        | **86,840**        |
 
-The Hono adapter pulls ahead on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
+The two are level on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
@@ -67,7 +67,7 @@ the libraries it wraps. That is what keeps you and the adapter on one copy of `h
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.4 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher (peer dependency)
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.0 or higher (peer dependency)
 - [Hono](https://hono.dev) v4.12.9 or higher (peer dependency)
 - [Zod](https://zod.dev) v4.3.6 or higher (peer dependency)
 - TypeScript v5.8.2 or higher
@@ -799,7 +799,7 @@ Use the `components` parameter to register only the controllers needed for testi
 :::
 
 ::: info
-For testing strategies, see [Testing Guide](/docs/guides/testing).
+For testing strategies, see [Testing Guide](/docs/testing/overview).
 :::
 
 ## Best Practices
@@ -904,5 +904,5 @@ export class MyHonoMiddleware extends AsenaMiddlewareService {
 - [Context API](/docs/concepts/context) - Request/response handling
 - [Middleware](/docs/concepts/middleware) - Custom middleware patterns
 - [Validation](/docs/concepts/validation) - Request validation with Zod
-- [Testing Guide](/docs/guides/testing) - Testing strategies
+- [Testing Guide](/docs/testing/overview) - Testing strategies
 - [Hono Documentation](https://hono.dev/) - Official Hono docs
