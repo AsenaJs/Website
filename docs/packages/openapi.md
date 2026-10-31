@@ -1,16 +1,16 @@
 ---
 title: Asena OpenAPI
-description: Zero-config OpenAPI 3.1 spec generation from your existing validators, with built-in Swagger UI and Scalar API Reference
+description: Zero-config OpenAPI 3.1 spec generation from your route context contracts and validators, with built-in Swagger UI and Scalar API Reference
 outline: deep
 ---
 
 # Asena OpenAPI
 
-Automatic OpenAPI 3.1 spec generation for AsenaJS — zero config, uses your existing validators. Your `@Controller` routes and validator schemas (`json()`, `query()`, `param()`, `response()`) are automatically converted to a full OpenAPI specification. No extra annotations needed.
+Automatic OpenAPI 3.1 spec generation for AsenaJS — zero config. Your `@Controller` routes, their [route context contracts](#route-context-contracts) and validator schemas (`json()`, `query()`, `param()`, `response()`) are converted to a full OpenAPI specification. No extra annotations needed.
 
 ## Features
 
-- **Zero Config** - Extracts schemas from existing validators, no extra annotations needed
+- **Zero Config** - Extracts schemas from route context contracts and validators, no extra annotations needed
 - **OpenAPI 3.1** - Generates JSON Schema draft-2020-12 compatible spec
 - **Built-in API Docs UIs** - Swagger UI or Scalar, CDN-based, no npm install required
 - **@Hidden Decorator** - Class and method level exclusion from spec
@@ -61,11 +61,11 @@ The `OpenApiPostProcessor` automatically:
 
 1. **Intercepts** every `@Controller` during IoC setup
 2. **Extracts** route metadata (`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, … — `@All` and `@Connect` are skipped, OpenAPI has no path item field for them)
-3. **Resolves** validators and converts their Zod schemas to JSON Schema
+3. **Resolves** each route's context contract or validator and converts its Zod schemas to JSON Schema
 4. **Generates** a complete OpenAPI 3.1 spec
 5. **Registers** GET endpoints on the adapter for spec and the docs UI
 
-Your existing validators do double duty — they validate requests **AND** generate documentation.
+The schemas that validate a request are the ones that document it.
 
 ## Validator Mapping
 
@@ -345,20 +345,22 @@ export class InternalController { }
 export class InternalController { }
 ```
 
-### 2. Keep Validators Co-located
+### 2. Prefer Contracts for Request Schemas
 
 ```typescript
-// ✅ Good: Validator next to its controller
-// src/controllers/UserController.ts
-// src/validators/CreateUserValidator.ts
+// ✅ Good: The contract types the handler and documents the request
+class CreateUserContext extends Context.define({
+  body: z.object({ name: z.string(), email: z.email() }),
+}) {}
 
-// ❌ Bad: Validators scattered across the project
+@Post('/')
+async create(context: CreateUserContext) { /* ... */ }
 ```
 
 ### 3. Use Response Schemas
 
 ```typescript
-// ✅ Good: Document response schemas for better API docs
+// ✅ Good: Document response schemas in a validator's response()
 response() {
   return {
     200: z.object({ users: z.array(userSchema) }),
@@ -369,7 +371,7 @@ response() {
 
 ## Related
 
-- [Validation](/docs/concepts/validation) - Request validation with Zod, the source of the schemas
+- [Validation](/docs/concepts/validation) - Route context contracts and validators, the source of the schemas
 - [Controllers](/docs/concepts/controllers) - HTTP route handling
 - [Middleware](/docs/concepts/middleware) - Middleware and validators
 - [PostProcessor](/docs/concepts/post-processor) - The interception system this package is built on

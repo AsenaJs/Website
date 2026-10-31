@@ -513,25 +513,31 @@ export class AuthMiddleware extends MiddlewareService {
 For middleware patterns, see [Middleware](/docs/concepts/middleware).
 :::
 
-### Validation Service
+### Validation
 
-Extend `ValidationService` for request validation:
+Build a route context contract with `Context.define()` and take it as the handler's first
+parameter:
 
 ```typescript
-import { Middleware } from '@asenajs/asena/decorators';
-import { ValidationService } from '@asenajs/hono-adapter';
+import { Context } from '@asenajs/hono-adapter';
 import { z } from 'zod';
 
-@Middleware({ validator: true })
-export class CreateUserValidator extends ValidationService {
-  json() {
-    return z.object({
-      name: z.string().min(3),
-      email: z.string().email()
-    });
-  }
+class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3),
+    email: z.email(),
+  }),
+}) {}
+
+@Post('/')
+async create(context: CreateUserContext) {
+  const { name, email } = context.input.body;
+  // ...
 }
 ```
+
+A validator class - `ValidationService` with `@Middleware({ validator: true })` - covers what a
+contract does not: injected dependencies and `response()` schemas for OpenAPI.
 
 ::: info
 For validation patterns, see [Validation](/docs/concepts/validation).
@@ -712,7 +718,7 @@ export class UserController {
 - **Dependency Injection** - Built-in IoC container with `@Inject`
 - **Code Organization** - Controller-based routing with decorators
 - **Service Layer** - Clean separation of concerns
-- **Built-in Validation** - Zod validation with `ValidationService`
+- **Built-in Validation** - Typed route context contracts with `Context.define()`
 - **WebSocket Support** - Native WebSocket integration
 - **Type Safety** - Full TypeScript support with decorators
 - **@Override Support** - Use existing Hono middleware without changes
