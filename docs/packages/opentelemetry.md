@@ -328,8 +328,13 @@ private meter: Meter;
 
 | Metric | Type | Description |
 |:-------|:-----|:------------|
-| `http.server.request.count` | Counter | Total requests by method/path |
-| `http.server.request.duration` | Histogram (ms) | Request duration by method/path |
+| `http.server.request.count` | Counter | Total requests by method, route and status code |
+| `http.server.request.duration` | Histogram (ms) | Request duration by method, route and status code |
+
+Metrics carry only low-cardinality attributes: `http.request.method`, `http.route` (`unmatched` when
+no route matched) and `http.response.status_code`. `url.path` stays on the span — raw paths from
+scanner or bot traffic would otherwise create an unbounded number of metric series. An allow-list
+`View` on the `http.server.*` instruments enforces the same three attributes.
 
 The middleware also extracts incoming W3C `traceparent` headers, enabling distributed tracing when other services call your API.
 
@@ -344,18 +349,9 @@ Each step runs independently and every failure is logged rather than thrown, so 
 cannot be reached does not take the application down with it. `shutdown()` is safe to call twice;
 the second call has nothing left to release.
 
-::: warning The package no longer installs its own signal handlers
-Up to now this package registered `process.on('SIGTERM')` and `process.on('SIGINT')` of its own.
-That was wrong three ways: the async listener's rejection was unheld, so an unreachable collector
-— the normal case for a local `Ctrl+C` — killed the process with `ECONNREFUSED`; the listeners were
-never removed, so repeated boots in one process piled them up; and `server.stop()` on its own
-flushed nothing, leaving the `BatchSpanProcessor` timer and the metric reader's export interval
-running.
-
-Signals are now [handled by the server](/docs/concepts/lifecycle#signal-handling), which calls
-`stop()`, which drives this hook. If you added a `SIGTERM` handler of your own to work around the
-missing flush, remove it.
-:::
+The package installs no signal handlers of its own: `SIGTERM` and `SIGINT` are
+[handled by the server](/docs/concepts/lifecycle#signal-handling), which calls `stop()`, which
+drives this hook.
 
 ## Configuration
 

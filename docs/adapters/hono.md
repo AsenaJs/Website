@@ -65,6 +65,10 @@ bun add @asenajs/hono-adapter hono zod
 the libraries it wraps. That is what keeps you and the adapter on one copy of `hono` — see
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
 
+Declare both in your own `package.json` even where peers auto-install (bun, npm 7+, pnpm 8+), so
+they survive a clean install. Yarn 1 does not install peers at all - there, `yarn add hono zod` is
+required.
+
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.0 or higher (peer dependency)

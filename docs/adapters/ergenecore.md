@@ -60,7 +60,9 @@ bun add @asenajs/ergenecore zod
 ```
 
 `zod` is a **peer dependency**: the adapter defines the validation contract, your project owns the
-library and its version.
+library and its version. bun, npm 7+ and pnpm 8+ install peers automatically, but declare `zod`
+anyway so it survives a clean install; yarn 1 does not install peers at all, so `yarn add zod` is
+required there.
 
 **Requirements:**
 - Bun v1.4 or higher
@@ -412,7 +414,7 @@ RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal 
 ::: info Its sweep timer is released on shutdown
 `RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
 
-The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+The timer is `unref()`'d and never holds the process open. Clearing it on stop matters for stop/start cycles *inside* one process (an ordinary test suite does twenty): a restarted server starts with fresh rate-limit state, and no timer keeps sweeping a stopped server's map.
 :::
 
 ## Performance & Architecture
@@ -560,11 +562,9 @@ body. The per-route `StaticServeService.onNotFound` still runs first when you de
 
 ### Every thrown error reaches `onError` first
 
-Including `HttpException`. The adapter used to answer an `HttpException` straight from
-`getResponse()` at several points and only consult your handler for everything else, so an
-application could reshape its own 4xx envelopes on the Hono adapter but not here. Your handler now
-sees all of them, and the adapter falls back to `getResponse()` (or a generic 500) only when there
-is no handler, when it returns nothing, or when it throws.
+Including `HttpException`, so you can reshape your own 4xx envelopes the same way on both
+adapters. The adapter falls back to `getResponse()` (or a generic 500) only when there is no
+handler, when it returns nothing, or when it throws.
 
 With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
 thrown message is deliberately not echoed to the caller — it is written to the log with its stack
