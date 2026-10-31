@@ -481,6 +481,10 @@ import type { Context } from '@asenajs/hono-adapter';
 
 The Hono adapter Context wraps Hono's native context with Asena enhancements.
 
+`Context` is also a value: `Context.define()` builds a
+[route context contract](/docs/concepts/validation#route-context-contracts) for this adapter. Import
+it without `type` when you call it.
+
 ::: info
 For complete Context API, see [Context](/docs/concepts/context).
 :::
