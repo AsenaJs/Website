@@ -180,8 +180,8 @@ export class UserController {
 <div class="lp-cols-text">
 <span class="lp-eyebrow">OpenAPI</span>
 <h2 class="lp-h2">A spec you never write</h2>
-<p class="lp-lead">Extend one class and Asena walks the container at boot — every controller, route, Zod schema and status code lands in an OpenAPI 3.1 document. Swagger UI is served from the same config.</p>
-<div class="lp-pills"><a class="lp-pill" href="/docs/packages/openapi">asena-openapi</a><span class="lp-pill">OpenAPI 3.1</span><span class="lp-pill">Swagger UI</span></div>
+<p class="lp-lead">Extend one class and Asena walks the container at boot — every controller, route contract, Zod schema and status code lands in an OpenAPI 3.1 document. Scalar or Swagger UI is served from the same config.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/packages/openapi">asena-openapi</a><span class="lp-pill">OpenAPI 3.1</span><span class="lp-pill">Scalar</span><span class="lp-pill">Swagger UI</span></div>
 </div>
 
 <div class="lp-code">
@@ -190,7 +190,7 @@ export class UserController {
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: true, // Swagger UI at /api/openapi/ui
+  ui: 'scalar', // or 'swagger' — served at /api/openapi/ui
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
@@ -310,7 +310,7 @@ export class TimingPostProcessor
 <div class="lp-cols-text">
 <span class="lp-eyebrow">Testing</span>
 <h2 class="lp-h2">Boot the web layer, mock the rest</h2>
-<p class="lp-lead">The equivalent of Spring's @WebMvcTest. Controllers, middlewares and validators run for real; every other dependency is auto-mocked into a stub shaped like the real class. No database, no Redis, no HTTP client — just the routing and validation you meant to test.</p>
+<p class="lp-lead">The equivalent of Spring's @WebMvcTest. Controllers, middlewares, contracts and validators run for real; every other dependency is auto-mocked into a stub shaped like the real class. No database, no Redis, no HTTP client — just the routing and validation you meant to test.</p>
 <div class="lp-pills"><a class="lp-pill" href="/docs/testing/web-test">createWebTest</a><span class="lp-pill">createTestApp</span><span class="lp-pill">mockComponent</span></div>
 </div>
 

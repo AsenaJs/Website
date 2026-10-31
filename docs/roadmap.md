@@ -74,7 +74,7 @@ These features are **stable and production-ready** in the current release:
 - **Service Layer** - Service components with lifecycle management
 - **Middleware System** - Global, pattern-based, controller, and route-level middleware
 - **Context API** - Unified request context abstraction across adapters
-- **[Validation](/docs/concepts/validation)** - Zod-based request validation with `@Middleware({ validator: true })`
+- **[Validation](/docs/concepts/validation)** - Typed route context contracts with `Context.define()` (any Standard Schema), and Zod validator classes with `@Middleware({ validator: true })`
 - **[Static File Serving](/docs/concepts/static-files)** - `@StaticServe` with lifecycle hooks
 - **WebSocket Support** - Decorator-based WebSocket with namespace, room management, and [multi-pod transport](/docs/concepts/websocket#multi-pod-websocket)
 - **[Ulak](/docs/concepts/ulak)** - Central message hub that breaks circular dependencies between services, WebSocket namespaces, and microservice transports

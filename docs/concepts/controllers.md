@@ -202,16 +202,14 @@ async getById(context: Context) {
 
 ```typescript
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
-import { CreateUserValidator } from '../validators/CreateUserValidator';
-import type { Context } from '@asenajs/hono-adapter';
+import { CreateUserContext } from './UserContracts';
 
 @Post({
   path: '/',
-  middlewares: [AuthMiddleware],
-  validator: CreateUserValidator
+  middlewares: [AuthMiddleware]
 })
-public async create(context: Context) {
-  const body = await context.getBody();
+public async create(context: CreateUserContext) {
+  const body = context.input.body;
   return context.send({ created: true, data: body }, 201);
 }
 ```
@@ -595,45 +593,37 @@ Middleware executes in this order:
 
 ## Validation
 
-Asena supports automatic request validation using Zod schemas. Both adapters support it.
+A route validates its request through a route context contract: a context class built with
+`Context.define()`, taken as the handler's first parameter. Both adapters support it.
 
-### Create a Validator
+### Define a Contract
 
 ```typescript
-// src/validators/CreateUserValidator.ts
-import { Middleware } from '@asenajs/asena/decorators';
-import { ValidationService } from '@asenajs/ergenecore';
+// src/controllers/UserContracts.ts
+import { Context } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
-@Middleware({ validator: true })
-export class CreateUserValidator extends ValidationService {
-  json() {
-    return z.object({
-      name: z.string().min(3).max(50),
-      email: z.string().email(),
-      age: z.number().min(18).max(120)
-    });
-  }
-}
+export class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+    age: z.number().min(18).max(120)
+  })
+}) {}
 ```
 
-### Use Validator in Controller
+### Take It in the Handler
 
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore';
-import { CreateUserValidator } from '../validators/CreateUserValidator';
+import { CreateUserContext } from './UserContracts';
 
 @Controller('/users')
 export class UserController {
-  @Post({
-    path: '/',
-    validator: CreateUserValidator
-  })
-  async create(context: Context) {
-    // Body is automatically validated
-    const body = await context.getBody();
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const body = context.input.body; // { name: string; email: string; age: number }
 
     return context.send({ created: true, data: body }, 201);
   }
@@ -661,11 +651,27 @@ Here's a real-world example combining services, middleware, and validation:
 import { Controller } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import { Get, Post, Put, Delete } from '@asenajs/asena/decorators/http';
+import { HttpException } from '@asenajs/asena/adapter';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
 import { AuthMiddleware } from '../middlewares/AuthMiddleware';
-import { CreatePostValidator } from '../validators/CreatePostValidator';
-import { UpdatePostValidator } from '../validators/UpdatePostValidator';
 import { PostService } from '../services/PostService';
-import type { Context } from '@asenajs/ergenecore';
+
+const postId = z.object({ id: z.coerce.number().int() });
+const postBody = z.object({ title: z.string().min(1), content: z.string() });
+
+class ListPostsContext extends Context.define({
+  query: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().max(100).default(10)
+  })
+}) {}
+
+class PostIdContext extends Context.define({ params: postId }) {}
+
+class CreatePostContext extends Context.define({ body: postBody }) {}
+
+class UpdatePostContext extends Context.define({ params: postId, body: postBody.partial() }) {}
 
 @Controller({
   path: '/posts',
@@ -676,68 +682,54 @@ export class PostController {
   private postService: PostService;
 
   @Get('/')
-  async list(context: Context) {
-    const page = Number(await context.getQuery('page')) || 1;
-    const limit = Number(await context.getQuery('limit')) || 10;
+  async list(context: ListPostsContext) {
+    const { page, limit } = context.input.query;
 
     const posts = await this.postService.findAll(page, limit);
     return context.send({ posts, page, limit });
   }
 
   @Get('/:id')
-  async getById(context: Context) {
-    const id = Number(context.getParam('id'));
-    const post = await this.postService.findById(id);
+  async getById(context: PostIdContext) {
+    const post = await this.postService.findById(context.input.params.id);
 
     if (!post) {
-      return context.send({ error: 'Post not found' }, 404);
+      throw new HttpException(404, { error: 'Post not found' });
     }
 
     return context.send({ post });
   }
 
-  @Post({
-    path: '/',
-    validator: CreatePostValidator
-  })
-  async create(context: Context) {
+  @Post('/')
+  async create(context: CreatePostContext) {
     const userId = context.getValue('userId');
-    const body = await context.getBody<{
-      title: string;
-      content: string;
-    }>();
 
-    const post = await this.postService.create(userId, body);
+    const post = await this.postService.create(userId, context.input.body);
     return context.send({ created: true, post }, 201);
   }
 
-  @Put({
-    path: '/:id',
-    validator: UpdatePostValidator
-  })
-  async update(context: Context) {
-    const id = Number(context.getParam('id'));
+  @Put('/:id')
+  async update(context: UpdatePostContext) {
     const userId = context.getValue('userId');
-    const body = await context.getBody();
+    const { params, body } = context.input;
 
-    const post = await this.postService.update(id, userId, body);
+    const post = await this.postService.update(params.id, userId, body);
 
     if (!post) {
-      return context.send({ error: 'Post not found or unauthorized' }, 404);
+      throw new HttpException(404, { error: 'Post not found or unauthorized' });
     }
 
     return context.send({ updated: true, post });
   }
 
   @Delete('/:id')
-  async delete(context: Context) {
-    const id = Number(context.getParam('id'));
+  async delete(context: PostIdContext) {
     const userId = context.getValue('userId');
 
-    const deleted = await this.postService.delete(id, userId);
+    const deleted = await this.postService.delete(context.input.params.id, userId);
 
     if (!deleted) {
-      return context.send({ error: 'Post not found or unauthorized' }, 404);
+      throw new HttpException(404, { error: 'Post not found or unauthorized' });
     }
 
     return context.send({ deleted: true });

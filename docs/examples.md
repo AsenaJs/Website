@@ -37,7 +37,7 @@ Practical examples showing how to build real applications with Asena. Each examp
   <a class="info-card" href="#openapi-auto-documentation">
     <span class="ic-kicker">API Docs</span>
     <div class="ic-title">OpenAPI</div>
-    <p class="ic-desc">Specs generated from existing validators.</p>
+    <p class="ic-desc">Specs generated from route contracts, with Scalar or Swagger UI.</p>
   </a>
   <a class="info-card" href="#redis-caching">
     <span class="ic-kicker">Caching</span>
@@ -69,9 +69,8 @@ my-api/
 │   │   └── UserController.ts
 │   ├── services/
 │   │   └── UserService.ts
-│   ├── validators/
-│   │   ├── CreateUserValidator.ts
-│   │   └── UpdateUserValidator.ts
+│   ├── contracts/
+│   │   └── UserContracts.ts
 │   ├── middlewares/
 │   │   └── AuthMiddleware.ts
 │   ├── repositories/
@@ -116,8 +115,9 @@ export class MainDB extends AsenaDatabaseService {}
 ```typescript
 // src/repositories/UserRepository.ts
 import { Repository, BaseRepository } from '@asenajs/asena-drizzle';
-import { users } from '../database';
 import { eq } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { users } from '../database';
 
 @Repository({ table: users, databaseService: 'MainDB' })
 export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<any>> {
@@ -150,7 +150,8 @@ Without the database type parameter, TypeScript cannot infer the correct query b
 
 **Complete Example:**
 ```typescript
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { eq } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { users } from './schema';
 
 @Repository({ table: users, databaseService: 'MainDatabase' })
@@ -169,6 +170,7 @@ export class UserRepository extends BaseRepository<typeof users, NodePgDatabase<
 // src/services/UserService.ts
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
+import { HttpException } from '@asenajs/asena/adapter';
 import { UserRepository } from '../repositories/UserRepository';
 
 @Service()
@@ -177,64 +179,78 @@ export class UserService {
   private userRepo: UserRepository;
 
   async getAllUsers() {
-    return await this.userRepo.findAll();
+    return this.userRepo.findAll();
   }
 
   async getUserById(id: string) {
     const user = await this.userRepo.findById(id);
+
     if (!user) {
-      throw new Error('User not found');
+      throw new HttpException(404, { error: 'User not found' });
     }
+
     return user;
   }
 
   async createUser(data: { name: string; email: string }) {
-    const existing = await this.userRepo.findByEmail(data.email);
-    if (existing) {
-      throw new Error('Email already exists');
+    if (await this.userRepo.findByEmail(data.email)) {
+      throw new HttpException(409, { error: 'Email already exists' });
     }
 
-    return await this.userRepo.create(data);
+    return this.userRepo.create(data);
   }
 
   async updateUser(id: string, data: Partial<{ name: string; email: string }>) {
-    return await this.userRepo.update(id, data);
+    const user = await this.userRepo.updateById(id, data);
+
+    if (!user) {
+      throw new HttpException(404, { error: 'User not found' });
+    }
+
+    return user;
   }
 
   async deleteUser(id: string) {
-    return await this.userRepo.delete(id);
+    if (!(await this.userRepo.deleteById(id))) {
+      throw new HttpException(404, { error: 'User not found' });
+    }
   }
 }
 ```
 
-### Validators
+A thrown `HttpException` becomes the response, so the controller needs no `try`/`catch`.
+
+### Contracts
+
+Each route declares its request schemas as a [route context contract](/docs/concepts/validation#route-context-contracts):
+a context class built with `Context.define()`. A request that fails a schema gets a **400** before
+the handler runs.
 
 ```typescript
-// src/validators/CreateUserValidator.ts
-import { Middleware } from '@asenajs/asena/decorators';
-import { ValidationService } from '@asenajs/ergenecore';
+// src/contracts/UserContracts.ts
+import { Context } from '@asenajs/ergenecore';
 import { z } from 'zod';
 
-@Middleware({ validator: true })
-export class CreateUserValidator extends ValidationService {
-  json() {
-    return z.object({
-      name: z.string().min(3).max(50),
-      email: z.string().email()
-    });
-  }
-}
+const userId = z.object({ id: z.uuid() });
 
-// src/validators/UpdateUserValidator.ts
-@Middleware({ validator: true })
-export class UpdateUserValidator extends ValidationService {
-  json() {
-    return z.object({
-      name: z.string().min(3).max(50).optional(),
-      email: z.string().email().optional()
-    });
-  }
-}
+export class GetUserContext extends Context.define({
+  params: userId,
+}) {}
+
+export class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+  }),
+}) {}
+
+export class UpdateUserContext extends Context.define({
+  params: userId,
+  body: z.object({
+    name: z.string().min(3).max(50).optional(),
+    email: z.email().optional(),
+  }),
+}) {}
 ```
 
 ### Controller
@@ -246,8 +262,7 @@ import { Get, Post, Put, Delete } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore';
 import { UserService } from '../services/UserService';
-import { CreateUserValidator } from '../validators/CreateUserValidator';
-import { UpdateUserValidator } from '../validators/UpdateUserValidator';
+import { CreateUserContext, GetUserContext, UpdateUserContext } from '../contracts/UserContracts';
 
 @Controller('/users')
 export class UserController {
@@ -257,53 +272,43 @@ export class UserController {
   @Get('/')
   async list(context: Context) {
     const users = await this.userService.getAllUsers();
+
     return context.send({ users });
   }
 
   @Get('/:id')
-  async getById(context: Context) {
-    try {
-      const user = await this.userService.getUserById(context.getParam('id'));
-      return context.send({ user });
-    } catch (error) {
-      return context.send({ error: error.message }, 404);
-    }
+  async getById(context: GetUserContext) {
+    const user = await this.userService.getUserById(context.input.params.id);
+
+    return context.send({ user });
   }
 
-  @Post({ path: '/', validator: CreateUserValidator })
-  async create(context: Context) {
-    try {
-      const data = await context.getBody<{ name: string; email: string }>();
-      const user = await this.userService.createUser(data);
-      return context.send({ created: true, user }, 201);
-    } catch (error) {
-      return context.send({ error: error.message }, 400);
-    }
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = await this.userService.createUser(context.input.body);
+
+    return context.send({ created: true, user }, 201);
   }
 
-  @Put({ path: '/:id', validator: UpdateUserValidator })
-  async update(context: Context) {
-    try {
-      const id = context.getParam('id');
-      const data = await context.getBody();
-      const user = await this.userService.updateUser(id, data);
-      return context.send({ updated: true, user });
-    } catch (error) {
-      return context.send({ error: error.message }, 400);
-    }
+  @Put('/:id')
+  async update(context: UpdateUserContext) {
+    const { params, body } = context.input;
+    const user = await this.userService.updateUser(params.id, body);
+
+    return context.send({ updated: true, user });
   }
 
   @Delete('/:id')
-  async delete(context: Context) {
-    try {
-      await this.userService.deleteUser(context.getParam('id'));
-      return context.send({ deleted: true });
-    } catch (error) {
-      return context.send({ error: error.message }, 404);
-    }
+  async delete(context: GetUserContext) {
+    await this.userService.deleteUser(context.input.params.id);
+
+    return context.send({ deleted: true });
   }
 }
 ```
+
+Asena finds a contract from the handler's parameter type, so import the contract classes as values
+(not with `import type`) and keep `emitDecoratorMetadata` enabled in `tsconfig.json`.
 
 ### Entry Point
 
@@ -342,11 +347,11 @@ asena dev start
 You'll see:
 
 ```
-2025-10-15 20:21:56 [INFO]:     ✅ Database Connected [POSTGRESQL]
-2025-10-15 20:21:56 [INFO]:     Adapter: ErgenecoreAdapter implemented
-2025-10-15 20:21:56 [INFO]:     All components registered and ready to use
-2025-10-15 20:21:56 [INFO]:     ✓ Successfully registered CONTROLLER UserController (5 routes)
-2025-10-15 20:21:56 [INFO]:     Server running at http://localhost:3000
+[INFO]: Adapter: Ergenecore implemented
+[INFO]: ✅ Database Connected [POSTGRESQL]
+[INFO]: All components registered and ready to use
+[INFO]: ✓ Successfully registered CONTROLLER UserController (5 routes)
+[INFO]: Server ready → http://localhost:3000
 ```
 
 ### Test the API
@@ -378,80 +383,134 @@ curl -X DELETE http://localhost:3000/users/123e4567-e89b-12d3-a456-426614174000
 
 A real-time chat application with room management and broadcasting.
 
+### Handshake Middleware
+
+The middleware runs on the upgrade request. Whatever it passes to `setWebSocketValue()` becomes
+`ws.data.values` on the socket.
+
+```typescript
+// src/middlewares/ChatHandshake.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
+@Middleware()
+export class ChatHandshake extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>) {
+    const username = (await context.getQuery('username')) ?? 'Anonymous';
+    const room = (await context.getQuery('room')) ?? 'general';
+
+    context.setWebSocketValue({ username, room });
+
+    await next();
+  }
+}
+```
+
 ### WebSocket Service
 
 ```typescript
 // src/websockets/ChatSocket.ts
 import { WebSocket } from '@asenajs/asena/decorators';
-import { AsenaWebSocketService } from '@asenajs/asena/web-socket';
-import type { Socket } from '@asenajs/asena/web-socket';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+import { ChatHandshake } from '../middlewares/ChatHandshake';
 
 interface ChatData {
   username: string;
   room: string;
 }
 
-@WebSocket({ path: '/chat', name: 'ChatSocket' })
+@WebSocket({ path: '/chat', name: 'ChatSocket', middlewares: [ChatHandshake] })
 export class ChatSocket extends AsenaWebSocketService<ChatData> {
 
   protected async onOpen(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.values?.username || 'Anonymous';
-    const room = ws.data.values?.room || 'general';
+    const { username, room } = ws.data.values;
 
-    // Send message to socket
-    ws.send(`Hello ${username}`)
-
-    // Join room
+    ws.send(JSON.stringify({ type: 'welcome', room }));
     ws.subscribe(room);
 
-    // send message to all room.
-    this.server.to(room, `User joined: ${username}`)
+    // Every subscriber of the room, this socket included
+    this.to(room, { type: 'joined', username });
   }
 
-  protected async onMessage(ws: Socket<ChatData>, message: string): Promise<void> {
-    const username = ws.data.values?.username || 'Anonymous';
-    const room = ws.data.values?.room || 'general';
+  protected async onMessage(ws: Socket<ChatData>, message: string | Buffer): Promise<void> {
+    const { username, room } = ws.data.values;
 
-    // send message to other sockets in room. (except itself)
-    ws.publish(room, message);
+    // Every subscriber of the room except the sender
+    ws.publish(room, JSON.stringify({ type: 'message', username, text: String(message) }));
   }
 
   protected async onClose(ws: Socket<ChatData>): Promise<void> {
-    const username = ws.data.values?.username || 'Anonymous';
-    const room = ws.data.values?.room || 'general';
+    const { username, room } = ws.data.values;
 
-    // leave room
-    ws.unsubscribe(room);
-
-    // send message to all room.
-    this.server.to(room, `User leaved: ${username}`)
+    this.to(room, { type: 'left', username });
   }
 }
 ```
 
+`ws.subscribe()` and `ws.publish()` prefix the room with the namespace, and `this.to()` does the
+same, so both reach the same subscribers. Room subscriptions end with the connection, so `onClose`
+needs no `unsubscribe()`. Pass objects to `this.to()` as they are; it serializes them.
+
+```bash
+bunx wscat -c "ws://localhost:3000/chat?username=ada&room=general"
+```
+
+::: info
+For full documentation, see [WebSocket](/docs/concepts/websocket).
+:::
+
+---
+
 ## Authentication with Middleware
 
 Implementing JWT authentication with middleware.
+
+### Typed Context State
+
+Declare what middleware puts on the context once, and `getValue()` / `setValue()` are type-checked
+everywhere:
+
+```typescript
+// src/types/ContextState.ts
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: 'user' | 'admin';
+}
+
+declare module '@asenajs/asena/adapter' {
+  interface AsenaVariables {
+    user: AuthUser;
+  }
+}
+```
 
 ### Auth Service
 
 ```typescript
 // src/services/AuthService.ts
 import { Service } from '@asenajs/asena/decorators';
+import { HttpException } from '@asenajs/asena/adapter';
+import type { AuthUser } from '../types/ContextState';
 
 @Service()
 export class AuthService {
-  async verifyToken(token: string): Promise<{ id: string; email: string }> {
-    // In production, use proper JWT verification
-    if (token === 'valid-token') {
-      return { id: '123', email: 'user@example.com' };
+  async login(email: string, password: string): Promise<string> {
+    // Replace with a real credential check and JWT signing
+    if (email === 'user@example.com' && password === 'password') {
+      return 'valid-token';
     }
-    throw new Error('Invalid token');
+
+    throw new HttpException(401, { error: 'Invalid credentials' });
   }
 
-  async generateToken(userId: string): Promise<string> {
-    // In production, use proper JWT generation
-    return 'valid-token';
+  async verifyToken(token: string): Promise<AuthUser> {
+    // Replace with real JWT verification
+    if (token === 'valid-token') {
+      return { id: '123', email: 'user@example.com', role: 'user' };
+    }
+
+    throw new HttpException(401, { error: 'Invalid token' });
   }
 }
 ```
@@ -461,8 +520,9 @@ export class AuthService {
 ```typescript
 // src/middlewares/AuthMiddleware.ts
 import { Middleware } from '@asenajs/asena/decorators';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 import { Inject } from '@asenajs/asena/decorators/ioc';
+import { HttpException } from '@asenajs/asena/adapter';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 import { AuthService } from '../services/AuthService';
 
 @Middleware()
@@ -470,23 +530,22 @@ export class AuthMiddleware extends MiddlewareService {
   @Inject(AuthService)
   private authService: AuthService;
 
-  async handle(context: Context, next: () => Promise<void>): Promise<any> {
-    const token = context.headers['authorization']?.replace('Bearer ', '');
+  async handle(context: Context, next: () => Promise<void>) {
+    const header = context.req.headers.get('authorization');
 
-    if (!token) {
-      return context.send({ error: 'No token provided' }, 401);
+    if (!header?.startsWith('Bearer ')) {
+      throw new HttpException(401, { error: 'No token provided' });
     }
 
-    try {
-      const user = await this.authService.verifyToken(token);
-      context.setValue('user', user);
-      await next();
-    } catch (error) {
-      return context.send({ error: 'Invalid token' }, 401);
-    }
+    context.setValue('user', await this.authService.verifyToken(header.slice(7)));
+
+    await next();
   }
 }
 ```
+
+A thrown `HttpException` reaches your [`onError`](/docs/guides/error-handling) first; when nothing
+answers it there, its own status and body become the response.
 
 ### Protected Controller
 
@@ -501,13 +560,13 @@ import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 export class ProfileController {
   @Get('/')
   async getProfile(context: Context) {
-    const user = context.getValue('user');
-    return context.send({ user });
+    return context.send({ user: context.getValue('user') });
   }
 
   @Get('/settings')
   async getSettings(context: Context) {
-    const user = context.getValue('user');
+    const user = context.getValue('user'); // AuthUser
+
     return context.send({ userId: user.id, settings: {} });
   }
 }
@@ -515,13 +574,24 @@ export class ProfileController {
 
 ### Login Controller
 
+The login body is a [route context contract](/docs/concepts/validation#route-context-contracts):
+a malformed body gets a 400 before `login` runs, and `context.input.body` is typed from the schema.
+
 ```typescript
 // src/controllers/AuthController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { Context } from '@asenajs/ergenecore';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
 import { AuthService } from '../services/AuthService';
+
+class LoginContext extends Context.define({
+  body: z.object({
+    email: z.email(),
+    password: z.string().min(1),
+  }),
+}) {}
 
 @Controller('/auth')
 export class AuthController {
@@ -529,19 +599,10 @@ export class AuthController {
   private authService: AuthService;
 
   @Post('/login')
-  async login(context: Context) {
-    const { email, password } = await context.getBody<{
-      email: string;
-      password: string;
-    }>();
+  async login(context: LoginContext) {
+    const { email, password } = context.input.body;
 
-    // Validate credentials (simplified)
-    if (email === 'user@example.com' && password === 'password') {
-      const token = await this.authService.generateToken('123');
-      return context.send({ token });
-    }
-
-    return context.send({ error: 'Invalid credentials' }, 401);
+    return context.send({ token: await this.authService.login(email, password) });
   }
 }
 ```
@@ -560,7 +621,7 @@ curl -X POST http://localhost:3000/auth/login \
 curl http://localhost:3000/profile \
   -H "Authorization: Bearer valid-token"
 
-# Response: {"user":{"id":"123","email":"user@example.com"}}
+# Response: {"user":{"id":"123","email":"user@example.com","role":"user"}}
 ```
 
 ---
@@ -580,35 +641,39 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
     super({
       capacity: 100,        // 100 requests
       refillRate: 100 / 60, // per minute
-      keyGenerator: (ctx) => {
-        // Rate limit per user or IP
-        const user = ctx.getValue('user');
-        return user?.id || ctx.req.headers.get('x-forwarded-for') || 'anonymous';
-      },
-      skip: (ctx) => {
-        // Skip for admins
-        const user = ctx.getValue('user');
-        return user?.role === 'admin';
-      },
-      cost: (ctx) => {
-        // Expensive operations cost more tokens
-        if (ctx.req.url.includes('/search')) return 5;
-        if (ctx.req.url.includes('/export')) return 10;
-        return 1;
-      }
+      // Per user once AuthMiddleware has run, otherwise per client IP
+      keyGenerator: (ctx) => ctx.getValue('user')?.id ?? ctx.getRequestIp() ?? 'unknown',
+      trustProxy: true,     // one reverse proxy in front: read the client from X-Forwarded-For
+      skip: (ctx) => ctx.getValue('user')?.role === 'admin',
+      cost: (ctx) => (new URL(ctx.req.url).pathname.endsWith('/export') ? 10 : 1),
     });
   }
 }
 
-// Apply to specific routes
-@Controller('/api')
-export class ApiController {
-  @Get({ path: '/data', middlewares: [ApiRateLimiter] })
-  async getData(context: Context) {
-    return context.send({ data: [] });
+// src/controllers/ReportController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+import { AuthMiddleware } from '../middlewares/AuthMiddleware';
+import { ApiRateLimiter } from '../middlewares/ApiRateLimiter';
+
+@Controller({ path: '/reports', middlewares: [AuthMiddleware] })
+export class ReportController {
+  @Get({ path: '/', middlewares: [ApiRateLimiter] })
+  async list(context: Context) {
+    return context.send({ reports: [] });
+  }
+
+  @Get({ path: '/export', middlewares: [ApiRateLimiter] })
+  async export(context: Context) {
+    return context.send({ url: '/downloads/reports.csv' });
   }
 }
 ```
+
+Controller middleware runs before route middleware, so `user` is already set when the limiter
+reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
+client could otherwise pick its own bucket by sending the header.
 
 ---
 
@@ -651,7 +716,8 @@ export class ServerConfig extends ConfigService {
 
 ## OpenAPI Auto-Documentation
 
-Automatically generate OpenAPI specs from your existing validators — zero extra annotations.
+Generate an OpenAPI 3.1 spec from the routes you already have, and serve it with Scalar or Swagger
+UI - no extra annotations.
 
 ### Setup
 
@@ -662,12 +728,37 @@ import { OpenApi, OpenApiPostProcessor } from '@asenajs/asena-openapi';
 @OpenApi({
   info: { title: 'My API', version: '1.0.0' },
   path: '/api/openapi',
-  ui: 'scalar', // or true / 'swagger' for Swagger UI
+  ui: 'scalar', // or 'swagger' (true) for Swagger UI
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
 ```
 
-### Validator with Response Schema
+### Request Schemas from Contracts
+
+Every route that takes a [context contract](#contracts) is documented from it: `body` becomes the
+request body, `params`, `query` and `headers` become parameters. The contracts from the REST API
+example above need no changes:
+
+```typescript
+export class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+  }),
+}) {}
+
+@Post('/')
+async create(context: CreateUserContext) { /* ... */ }
+```
+
+Request schemas are documented in their **input** shape - a field with `.default()` is optional,
+because the client may omit it.
+
+### Response Schemas
+
+Response schemas come from the `response()` method of a validator class. A route takes either a
+contract or a `validator`, not both, so a route that documents its responses uses a validator class
+for its request schemas too:
 
 ```typescript
 // src/validators/CreateUserValidator.ts
@@ -679,24 +770,29 @@ import { z } from 'zod';
 export class CreateUserValidator extends ValidationService {
   json() {
     return z.object({
-      name: z.string().min(1),
-      email: z.string().email(),
+      name: z.string().min(3).max(50),
+      email: z.email(),
     });
   }
 
   response() {
     return {
-      201: z.object({ id: z.string(), name: z.string() }),
-      400: { schema: z.object({ error: z.string() }), description: 'Validation error' },
+      201: z.object({ id: z.uuid(), name: z.string() }),
+      409: { schema: z.object({ error: z.string() }), description: 'Email already exists' },
     };
   }
 }
+
+@Post({ path: '/', validator: CreateUserValidator })
+async create(context: Context) { /* ... */ }
 ```
+
+A route without `response()` is documented with a single `200` response.
 
 ### Test
 
 ```bash
-# Get OpenAPI spec
+# Get the OpenAPI spec
 curl http://localhost:3000/api/openapi
 
 # Open the API docs UI in the browser
@@ -737,30 +833,47 @@ export class AppRedis extends AsenaRedisService {
 }
 ```
 
-### Cache Controller
+### Service and Controller
 
 ```typescript
+// src/services/UserNameService.ts
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { AppRedis } from '../redis/AppRedis';
+
+@Service()
+export class UserNameService {
+
+  @Inject(AppRedis)
+  private redis: AppRedis;
+
+  async getName(id: string): Promise<string> {
+    return this.redis.getOrSet(`user:${id}`, async () => {
+      // Replace with the database lookup
+      return `User-${id}`;
+    }, 60);
+  }
+
+}
+
 // src/controllers/CacheController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { Context } from '@asenajs/ergenecore';
+import { UserNameService } from '../services/UserNameService';
 
 @Controller('/api/cache')
 export class CacheController {
 
-  @Inject('AppRedis')
-  private redis: AppRedis;
+  @Inject(UserNameService)
+  private userNames: UserNameService;
 
   @Get('/user/:id')
   async getUser(context: Context) {
     const id = context.getParam('id');
-    const name = await this.redis.getOrSet(`user:${id}`, async () => {
-      // Simulate DB lookup
-      return `User-${id}`;
-    }, 60);
 
-    return context.send({ id, name, cached: true });
+    return context.send({ id, name: await this.userNames.getName(id) });
   }
 
 }
@@ -793,20 +906,24 @@ Run background jobs on a cron schedule using Bun's native cron support.
 import { Schedule } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 import type { AsenaSchedule } from '@asenajs/asena/schedule';
+import { SessionService } from '../services/SessionService';
 
 @Schedule({ cron: '0 2 * * *' }) // Daily at 2:00 AM
 export class SessionCleanup implements AsenaSchedule {
 
-  @Inject('SessionRepository')
-  private sessionRepo: SessionRepository;
+  @Inject(SessionService)
+  private sessionService: SessionService;
 
   public async execute() {
-    const count = await this.sessionRepo.deleteExpired();
+    const count = await this.sessionService.deleteExpired();
     console.log(`Cleaned up ${count} expired sessions`);
   }
 
 }
 ```
+
+A task is a component like any other; it reaches the database through the domain service that
+owns the repository.
 
 ### Cron Health Endpoint
 
@@ -890,7 +1007,9 @@ For full documentation, see [Frontend Controller](/docs/concepts/frontend-contro
 - [Controllers](/docs/concepts/controllers) - HTTP routing
 - [Services](/docs/concepts/services) - Business logic
 - [Middleware](/docs/concepts/middleware) - Request interception
-- [Validation](/docs/concepts/validation) - Request validation
+- [Validation](/docs/concepts/validation) - Route context contracts and validators
+- [Context](/docs/concepts/context) - Request, response and typed context state
+- [Error Handling](/docs/guides/error-handling) - `HttpException` and `onError`
 - [WebSocket](/docs/concepts/websocket) - Real-time communication
 - [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling
 - [Frontend Controller](/docs/concepts/frontend-controller) - HTML page serving
