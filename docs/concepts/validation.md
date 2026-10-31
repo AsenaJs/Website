@@ -10,44 +10,44 @@ Asena provides built-in validation support using [Zod](https://zod.dev). Validat
 
 A route declares its validation in one of two ways:
 
-- **A validator class** - a `ValidationService` subclass passed as the route's `validator` option. Its methods return Zod schemas.
-- **A [route context contract](#route-context-contracts)** - a context subclass built with `Context.define()`, taken as the handler's first parameter. Its schemas can come from any [Standard Schema v1](https://standardschema.dev) library, and the handler reads typed, validated values from `context.input`.
+- **A [route context contract](#route-context-contracts)** (recommended) - a context subclass built with `Context.define()`, taken as the handler's first parameter. Its schemas can come from any [Standard Schema v1](https://standardschema.dev) library, and the handler reads typed, validated values from `context.input`.
+- **A [validator class](#validator-classes)** - a `ValidationService` subclass passed as the route's `validator` option. Its methods return Zod schemas.
 
 <div class="card-grid">
   <a class="info-card" href="#quick-start">
     <span class="ic-kicker">01</span>
     <div class="ic-title">Quick Start</div>
-    <p class="ic-desc">A validator class wired to a route.</p>
+    <p class="ic-desc">A contract on a route, typed end to end.</p>
   </a>
-  <a class="info-card" href="#what-getbody-returns">
+  <a class="info-card" href="#route-context-contracts">
     <span class="ic-kicker">02</span>
-    <div class="ic-title">What getBody() Returns</div>
-    <p class="ic-desc">The schema's output, not the raw client JSON.</p>
+    <div class="ic-title">Route Context Contracts</div>
+    <p class="ic-desc"><code>Context.define()</code> and typed <code>context.input</code>.</p>
+  </a>
+  <a class="info-card" href="#validator-classes">
+    <span class="ic-kicker">03</span>
+    <div class="ic-title">Validator Classes</div>
+    <p class="ic-desc">A <code>ValidationService</code> wired with the <code>validator</code> option.</p>
   </a>
   <a class="info-card" href="#validationservice-api">
-    <span class="ic-kicker">03</span>
+    <span class="ic-kicker">04</span>
     <div class="ic-title">ValidationService API</div>
     <p class="ic-desc"><code>json()</code>, <code>query()</code>, <code>param()</code> and header validation.</p>
   </a>
   <a class="info-card" href="#validation-hooks">
-    <span class="ic-kicker">04</span>
+    <span class="ic-kicker">05</span>
     <div class="ic-title">Validation Hooks</div>
     <p class="ic-desc">Custom logic that runs after validation.</p>
   </a>
   <a class="info-card" href="#validation-error-responses">
-    <span class="ic-kicker">05</span>
+    <span class="ic-kicker">06</span>
     <div class="ic-title">Error Responses</div>
     <p class="ic-desc">The 400 Bad Request shape Asena returns.</p>
   </a>
   <a class="info-card" href="#zod-schema-definition">
-    <span class="ic-kicker">06</span>
+    <span class="ic-kicker">07</span>
     <div class="ic-title">Zod Schemas</div>
     <p class="ic-desc">Defining the schemas the validators return.</p>
-  </a>
-  <a class="info-card" href="#route-context-contracts">
-    <span class="ic-kicker">07</span>
-    <div class="ic-title">Route Context Contracts</div>
-    <p class="ic-desc"><code>Context.define()</code> and typed <code>context.input</code>.</p>
   </a>
   <a class="info-card" href="#schema-factory-caching">
     <span class="ic-kicker">08</span>
@@ -89,6 +89,70 @@ resolved by hoisting out of the adapter's own dependencies, which was never some
 - **Automatic Error Handling**: 400 Bad Request responses automatically
 
 ## Quick Start
+
+Define the contract with `Context.define()` and take it as the handler's first parameter:
+
+::: code-group
+```typescript [ergenecore]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+    age: z.number().min(18).max(120),
+  }),
+}) {}
+
+@Controller('/users')
+export class UserController {
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = context.input.body; // { name: string; email: string; age: number }
+
+    return context.send({ created: true, user }, 201);
+  }
+}
+```
+
+```typescript [hono]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/hono-adapter';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+    age: z.number().min(18).max(120),
+  }),
+}) {}
+
+@Controller('/users')
+export class UserController {
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = context.input.body; // { name: string; email: string; age: number }
+
+    return context.send({ created: true, user }, 201);
+  }
+}
+```
+:::
+
+The request is validated before the handler runs. A body that fails the schema gets a **400** and
+never reaches `create`. See [Route Context Contracts](#route-context-contracts) for every target,
+the execution order and the error shape.
+
+## Validator Classes
+
+A validator class keeps the schemas on a `ValidationService` component instead of the context.
+Use it when a route needs [validation hooks](#validation-hooks), schemas built from injected
+services, or [schema factory caching](#schema-factory-caching).
 
 ### 1. Create a Validator
 
@@ -638,7 +702,9 @@ works the same way, and both synchronous and `async` validation are supported. A
 depend on a schema library for contracts.
 
 `Context.define()` rejects a key outside this list, a value that is not a Standard Schema, and a map
-that declares both `body` and `form`.
+that declares both `body` and `form`. A misspelled target is already a compile error:
+
+<HoverCode id="validation-typo" />
 
 Targets are validated in the order `body`/`form`, `query`, `params`, `headers`. Validation stops at
 the first target that fails.
@@ -648,6 +714,10 @@ the first target that fails.
 `context.input` holds the schema **output** for each declared target, with defaults, transforms
 and coercions applied. Only declared targets exist on it - `context.input.params` on a contract
 without `params` is a compile error.
+
+Hover the highlighted names to see what each schema produces:
+
+<HoverCode id="validation-input" />
 
 | Accessor | Returns |
 |:---------|:--------|

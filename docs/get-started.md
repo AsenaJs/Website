@@ -63,7 +63,8 @@ curl http://localhost:3000
 # Output: Hello asena
 ```
 
-That's it! You now have a working Asena application. Skip to [Next Steps](#next-steps) to learn more.
+That's it! You now have a working Asena application. Skip to [Next Steps](#next-steps) to learn more,
+or set up [your AI coding agent](#using-an-ai-coding-agent) first.
 
 ---
 
@@ -272,11 +273,35 @@ my-app/
 
 ---
 
+## Using an AI Coding Agent
+
+Install the Asena agent skill so Claude Code, Cursor, Copilot or any other agent that supports
+Agent Skills writes Asena code with the right imports, adapter factories and decorators:
+
+```bash
+npx skills add asenajs/skills
+```
+
+Every docs page can also be copied as Markdown or opened in Claude or ChatGPT from the buttons
+above its title. See [AI tooling](/docs/#ai) for the `llms.txt` files.
+
+---
+
 ## Next Steps
 
 Now that you have a working Asena application:
 
 <div class="card-grid">
+  <a class="info-card" href="/docs/key-concepts">
+    <span class="ic-kicker">Overview</span>
+    <div class="ic-title">Key Concepts</div>
+    <p class="ic-desc">The six ideas the rest of Asena builds on.</p>
+  </a>
+  <a class="info-card" href="/docs/best-practices">
+    <span class="ic-kicker">Structure</span>
+    <div class="ic-title">Best Practices</div>
+    <p class="ic-desc">Layout, layering and the traps that fail silently.</p>
+  </a>
   <a class="info-card" href="/docs/concepts/controllers">
     <span class="ic-kicker">Routing</span>
     <div class="ic-title">Controllers</div>

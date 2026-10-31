@@ -1,6 +1,6 @@
 # Asena
 
-> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection, achieving 200k-300k requests/sec.
+> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection.
 
 - Documentation: https://asena.sh
 - GitHub: https://github.com/AsenaJs/Asena
@@ -10,9 +10,15 @@
 
 - [Philosophy](https://asena.sh/raw/philosophy.md): Why Asena exists, the principles behind its design, and the trade-offs it deliberately makes
 - [Get Started](https://asena.sh/raw/get-started.md): Install Asena, configure TypeScript decorators, and build your first controller and service on Bun
+- [Key Concepts](https://asena.sh/raw/key-concepts.md): The six ideas the rest of Asena builds on - the container and component scan, field injection, scopes, bootstrap order, adapters and the request context
+- [Best Practices](https://asena.sh/raw/best-practices.md): Project layout, thin controllers, repository ownership, validation with route contracts, testing levels, and the common traps with right-and-wrong examples
 - [Examples](https://asena.sh/raw/examples.md): Complete worked examples - REST APIs, WebSocket chat, authentication, and database integration
 - [Showcase](https://asena.sh/raw/showcase.md): Real-world applications built with Asena Framework - production-ready projects using Asena's features
 - [Roadmap](https://asena.sh/raw/roadmap.md): Asena Framework development roadmap - completed features, active development, and future plans
+
+## Migrate
+
+- [Coming from NestJS](https://asena.sh/raw/migrate/from-nestjs.md): NestJS concepts mapped to Asena side by side - modules, injection, controllers, guards, pipes, interceptors, exception filters, config, testing, WebSockets and microservices
 
 ## Concepts
 

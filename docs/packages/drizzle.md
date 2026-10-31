@@ -274,6 +274,11 @@ export class UserService {
 }
 ```
 
+Return types come from the table schema, and column names are checked. Hover the highlighted
+names:
+
+<HoverCode id="drizzle-repository" />
+
 ## @Database Decorator API
 
 The `@Database` decorator configures a database connection:
@@ -1127,5 +1132,5 @@ export class UserRepository extends BaseRepository<typeof users> {
 - [Component Lifecycle](/docs/concepts/lifecycle) - When the pool is opened and released
 - [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration) - Server configuration
-- [Testing](/docs/guides/testing) - Testing code that uses repositories
+- [Testing](/docs/testing/overview) - Testing code that uses repositories
 - [Drizzle ORM Documentation](https://orm.drizzle.team/) - The underlying ORM

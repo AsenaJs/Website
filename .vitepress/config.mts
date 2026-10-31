@@ -1,6 +1,31 @@
 import {defineConfig} from "vitepress";
+import {existsSync, readFileSync} from "fs";
+import {fileURLToPath} from "url";
+import {resolve, sep} from "path";
+
+const docsDir = fileURLToPath(new URL('../docs', import.meta.url));
 
 export default defineConfig({
+    vite: {
+        plugins: [
+            {
+                // buildEnd publishes /raw/*.md for production; the dev server serves the same paths from source
+                name: 'asena-raw-docs-dev',
+                apply: 'serve',
+                configureServer(server) {
+                    server.middlewares.use('/raw', (req, res, next) => {
+                        const file = resolve(docsDir, '.' + decodeURIComponent((req.url ?? '').split('?')[0]));
+
+                        if (!file.startsWith(docsDir + sep) || !file.endsWith('.md') || !existsSync(file)) return next();
+
+                        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+                        res.end(readFileSync(file));
+                    });
+                },
+            },
+        ],
+    },
+
     title: "Asena",
     description: "High-performance IoC web framework built on Bun runtime",
     lang: "en-US",
@@ -47,24 +72,37 @@ export default defineConfig({
 
         nav: [
             {text: "Home", link: "/"},
-            {text: "Docs", link: "/docs/get-started"},
+            {text: "Docs", link: "/docs/", activeMatch: "^/docs/(?!examples|benchmarks|showcase|roadmap)"},
             {text: "Examples", link: "/docs/examples"},
             {text: "Benchmarks", link: "/docs/benchmarks"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
-            {text: "LLMS.txt", link: "/llms.txt"},
-            {text: "LLMS-full.txt", link: "/llms-full.txt"},
+            {
+                text: "AI",
+                items: [
+                    {text: "Agent Skill", link: "/docs/#ai"},
+                    {text: "llms.txt", link: "/llms.txt"},
+                    {text: "llms-full.txt", link: "/llms-full.txt"},
+                ],
+            },
         ],
 
         sidebar: [
+            {text: "Overview", link: "/docs/"},
             {text: "Philosophy", link: "/docs/philosophy"},
             {text: "Quick Start", link: "/docs/get-started"},
+            {text: "Key Concepts", link: "/docs/key-concepts"},
+            {text: "Best Practices", link: "/docs/best-practices"},
             {text: "Examples", link: "/docs/examples"},
             {text: "Benchmarks", link: "/docs/benchmarks"},
             {text: "Showcase", link: "/docs/showcase"},
             {text: "Roadmap", link: "/docs/roadmap"},
-            {text: "📄 LLMS.txt", link: "/llms.txt"},
-            {text: "📄 LLMS-full.txt", link: "/llms-full.txt"},
+            {
+                text: "Migrate",
+                items: [
+                    {text: "Coming from NestJS", link: "/docs/migrate/from-nestjs"},
+                ],
+            },
             {
                 text: "Concepts",
                 items: [

@@ -1,6 +1,6 @@
 # Asena
 
-> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection, achieving 200k-300k requests/sec.
+> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection.
 
 - Documentation: https://asena.sh
 - GitHub: https://github.com/AsenaJs/Asena
@@ -47,7 +47,7 @@ This is why Redis, Kafka, OpenTelemetry, Drizzle and Winston all live in optiona
 
 Asena is not a framework that happens to run on Bun. It is built for Bun.
 
-`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 202,066 req/s on plaintext in [our published benchmarks](/docs/benchmarks).
+`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 151,923 req/s on plaintext from a single CPU in [our published benchmarks](/docs/benchmarks).
 
 The trade-off is deliberate: Asena will not run on Node.js. In exchange, it does not pay the abstraction tax that portability demands.
 
@@ -162,7 +162,8 @@ curl http://localhost:3000
 # Output: Hello asena
 ```
 
-That's it! You now have a working Asena application. Skip to [Next Steps](#next-steps) to learn more.
+That's it! You now have a working Asena application. Skip to [Next Steps](#next-steps) to learn more,
+or set up [your AI coding agent](#using-an-ai-coding-agent) first.
 
 ---
 
@@ -371,10 +372,26 @@ my-app/
 
 ---
 
+## Using an AI Coding Agent
+
+Install the Asena agent skill so Claude Code, Cursor, Copilot or any other agent that supports
+Agent Skills writes Asena code with the right imports, adapter factories and decorators:
+
+```bash
+npx skills add asenajs/skills
+```
+
+Every docs page can also be copied as Markdown or opened in Claude or ChatGPT from the buttons
+above its title. See [AI tooling](/docs/#ai) for the `llms.txt` files.
+
+---
+
 ## Next Steps
 
 Now that you have a working Asena application:
 
+- [Key Concepts](/docs/key-concepts) - The six ideas the rest of Asena builds on.
+- [Best Practices](/docs/best-practices) - Layout, layering and the traps that fail silently.
 - [Controllers](/docs/concepts/controllers) - Add more routes to your application.
 - [Services](/docs/concepts/services) - Injectable components that carry your logic.
 - [Middleware](/docs/concepts/middleware) - Intercept requests at any level.
@@ -432,6 +449,475 @@ const server = await AsenaServerFactory.create({
 ---
 
 **Need help?** Check out our [documentation](https://asena.sh) or visit our [GitHub repository](https://github.com/AsenaJs/Asena).
+
+
+---
+
+# Key Concepts
+Section: Docs
+Source: https://asena.sh/raw/key-concepts.md
+
+# Key Concepts
+
+Six ideas explain almost everything Asena does. Each section here is a short summary with a link
+to the page that covers it in depth.
+
+## The Container and the Scan
+
+Asena is an IoC container first. You never register a class by hand: a component decorator marks
+it, and the container finds it when the application boots.
+
+| Decorator | Role |
+|:----------|:-----|
+| `@Controller` | HTTP routes |
+| `@Service` | Business logic, the default for anything injectable |
+| `@Middleware` | Request middleware, and validators with `{ validator: true }` |
+| `@Config` | Server hooks: `onError`, `onNotFound`, `globalMiddlewares`, `transport` |
+| `@WebSocket` | A WebSocket namespace |
+| `@MessageController` | Broker message handlers |
+| `@Schedule` | Cron jobs |
+| `@PostProcessor` | Hooks every component on its way out of the container |
+
+Where the container looks is decided once, in this order:
+
+1. the `components` list passed to `AsenaServerFactory.create()`, when it is not empty
+2. the component list `asena build` writes into the production bundle
+3. a scan of the `sourceFolder` set in `asena-config.ts`
+
+Components shipped inside a package are never scanned. A package hands them in through the
+`imports` option, which adds to whichever source above was chosen.
+
+Learn more: [Dependency Injection](/docs/concepts/dependency-injection#registering-components-from-packages)
+
+## Field Injection
+
+Dependencies are declared on fields with `@Inject`. Constructors take no parameters and stay yours.
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class CartService {
+  @Inject(PriceService)
+  private prices: PriceService;
+
+  total(skus: string[]) {
+    return skus.reduce((sum, sku) => sum + this.prices.price(sku), 0);
+  }
+}
+```
+
+- `@Inject(Class)` resolves by class; `@Inject('Name')` resolves by registered name.
+- `@Strategy('InterfaceName')` injects every `@Implements('InterfaceName')` component, always as an array.
+- `@Value('ENV_KEY')` injects configuration from `process.env`.
+- Injected fields are filled **after** the constructor returns. Setup that needs them goes in an
+  `@OnStart` method.
+
+Learn more: [Dependency Injection](/docs/concepts/dependency-injection)
+
+## Scopes
+
+| Scope | Instances | Lifecycle hooks |
+|:------|:----------|:----------------|
+| `Scope.SINGLETON` (default) | One for the whole application | `@OnStart` and `@OnStop` |
+| `Scope.PROTOTYPE` | A new one every time the component is injected or resolved | `@OnStart` at construction; `@OnStop` never runs |
+
+There is no request scope. A prototype is created per **injection point**, not per request, so a
+prototype injected into a singleton controller lives as long as the controller. Data that belongs
+to one request lives on the [context](#the-request-context).
+
+Learn more: [Service Scopes](/docs/concepts/dependency-injection#service-scopes)
+
+## Bootstrap Order
+
+Booting is two calls, and they do different things:
+
+- `await AsenaServerFactory.create()` builds the container: core services first, then your
+  components, in dependency order. Singletons are constructed and their fields injected here.
+- `await server.start()` runs every `@OnStart` hook, applies `@Config`, connects transports,
+  registers routes with the adapter and only then binds the port.
+
+A component's dependencies always start before it, and stop after it. A throwing `@OnStart` aborts
+the boot.
+
+Learn more: [Component Lifecycle](/docs/concepts/lifecycle#where-the-hooks-sit)
+
+## Adapters
+
+The core package knows nothing about HTTP servers. It reads your decorators and hands routes,
+middleware and error hooks to an **adapter**, which runs them on `Bun.serve()`.
+
+| Import from | What |
+|:------------|:-----|
+| `@asenajs/asena/*` | Decorators, `HttpException`, the server factory, test utilities |
+| `@asenajs/ergenecore` or `@asenajs/hono-adapter` | `Context`, `MiddlewareService`, `ValidationService`, `ConfigService`, built-in middleware |
+
+Switching adapters changes those imports and the factory call. Controllers, services and
+middleware stay the same.
+
+Learn more: [Adapters Overview](/docs/adapters/overview)
+
+## The Request Context
+
+Every handler and middleware receives a `Context`: one object per request that reads the request,
+writes the response and carries state between middleware and the handler.
+
+```typescript
+import { Middleware } from '@asenajs/asena/decorators';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
+@Middleware()
+export class RequestIdMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>) {
+    context.setValue('requestId', crypto.randomUUID());
+    await next();
+  }
+}
+```
+
+A handler then reads it back with `context.getValue<string>('requestId')`.
+
+A route can also declare a **context contract**: a `Context` subclass built with
+`Context.define()` whose schemas validate the request before the handler runs and type
+`context.input`.
+
+Learn more: [Context](/docs/concepts/context) · [Route Context Contracts](/docs/concepts/validation#route-context-contracts)
+
+## Next
+
+- [Best Practices](/docs/best-practices) - project layout, layering and the common traps
+- [Coming from NestJS](/docs/migrate/from-nestjs) - the same ideas mapped to NestJS
+
+
+---
+
+# Best Practices
+Section: Docs
+Source: https://asena.sh/raw/best-practices.md
+
+# Best Practices
+
+How to structure an Asena application so it stays easy to change, and the handful of mistakes
+that fail silently. Each section links to the page with the full detail.
+
+## Organize by Feature
+
+Group a domain's controller, service, repository and contracts in one folder. A change to orders
+then stays in `orders/`.
+
+```
+src/
+├── orders/
+│   ├── OrderController.ts
+│   ├── OrderService.ts
+│   ├── OrderRepository.ts
+│   └── CancelOrderContext.ts
+├── invoices/
+│   ├── InvoiceController.ts
+│   └── InvoiceService.ts
+├── shared/
+│   └── AuthMiddleware.ts
+├── AppConfig.ts
+├── logger.ts
+└── index.ts
+```
+
+The component scan walks the whole `sourceFolder`, so the layout is a convention, not a
+requirement. `asena generate` writes into type-based folders (`src/controllers/`,
+`src/services/`); either layout works, as long as one project uses one of them.
+
+## Keep Controllers Thin
+
+A controller reads the request, calls one service method and shapes the response. Business rules
+belong in the service, where every caller gets them and a unit test can reach them.
+
+::: code-group
+
+```typescript [Wrong]
+@Controller('/orders')
+export class OrderController {
+  @Inject(OrderRepository)
+  private orders: OrderRepository;
+
+  @Post('/:id/cancel')
+  async cancel(context: Context) {
+    const order = await this.orders.findById(context.getParam('id'));
+
+    if (!order) return context.send({ message: 'Order not found' }, 404);
+    if (order.status === 'paid') return context.send({ message: 'A paid order cannot be cancelled' }, 409);
+
+    return context.send(await this.orders.update(order.id, { status: 'cancelled' }));
+  }
+}
+```
+
+```typescript [Right]
+@Controller('/orders')
+export class OrderController {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  @Post('/:id/cancel')
+  async cancel(context: CancelOrderContext) {
+    return context.send(await this.orderService.cancel(context.input.params.id));
+  }
+}
+
+@Service()
+export class OrderService {
+  @Inject(OrderRepository)
+  private orders: OrderRepository;
+
+  async cancel(id: string) {
+    const order = await this.orders.findById(id);
+
+    if (!order) throw new HttpException(404, { message: 'Order not found' });
+    if (order.status === 'paid') throw new HttpException(409, { message: 'A paid order cannot be cancelled' });
+
+    return this.orders.update(id, { status: 'cancelled' });
+  }
+}
+```
+
+:::
+
+`HttpException` comes from `@asenajs/asena/adapter` and answers with its status on both adapters,
+so a service can reject a request without touching `Context`.
+
+Learn more: [Controllers](/docs/concepts/controllers) · [Services](/docs/concepts/services) · [Error Handling](/docs/guides/error-handling)
+
+## A Repository Belongs to One Service
+
+Inject a repository only into its own domain's service. Another domain asks that service, never
+the repository: the owning service is where the rules about that data live.
+
+::: code-group
+
+```typescript [Wrong]
+@Service()
+export class InvoiceService {
+  @Inject(OrderRepository) // another domain's repository
+  private orders: OrderRepository;
+
+  async totalFor(customerId: string) {
+    const orders = await this.orders.findByCustomer(customerId);
+
+    return orders.filter((o) => o.status === 'paid').reduce((sum, o) => sum + o.total, 0);
+  }
+}
+```
+
+```typescript [Right]
+@Service()
+export class InvoiceService {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  async totalFor(customerId: string) {
+    return this.orderService.paidTotalFor(customerId);
+  }
+}
+```
+
+:::
+
+When two services would need each other, move the shared logic into a third service, or let one
+react to the other through an [in-process event](/docs/concepts/event-system).
+
+Learn more: [Drizzle ORM repositories](/docs/packages/drizzle)
+
+## Validate with Route Contracts
+
+Declare what a route accepts as a context contract. The request is validated before the handler
+runs, the handler gets typed values, and the OpenAPI package documents the same schema.
+
+::: code-group
+
+```typescript [Wrong]
+@Post('/:id/cancel')
+async cancel(context: Context) {
+  const id = context.getParam('id');
+  const body = await context.getBody<{ reason?: unknown }>();
+
+  if (!/^[0-9a-f-]{36}$/.test(id)) return context.send({ message: 'Invalid id' }, 400);
+  if (body.reason !== undefined && typeof body.reason !== 'string') {
+    return context.send({ message: 'Invalid reason' }, 400);
+  }
+  // ...
+}
+```
+
+```typescript [Right]
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+export class CancelOrderContext extends Context.define({
+  params: z.object({ id: z.uuid() }),
+  body: z.object({ reason: z.string().max(200).optional() }),
+}) {}
+
+// in the controller
+@Post('/:id/cancel')
+async cancel(context: CancelOrderContext) {
+  return context.send(await this.orderService.cancel(context.input.params.id));
+}
+```
+
+:::
+
+Contracts check the **shape** of a request. Whether the request makes sense, such as cancelling an
+order that is already paid, is the service's decision.
+
+Learn more: [Route Context Contracts](/docs/concepts/validation#route-context-contracts)
+
+## Test at the Right Level
+
+| What you are testing | Tool | Boots |
+|:---------------------|:-----|:------|
+| One service's logic | `mockComponent` | Nothing; every injected field is a mock |
+| Routing, middleware, validation | `createWebTest` | Controllers for real, everything else mocked |
+| The wired application | `createTestApp` | The container, the adapter and a real HTTP server |
+
+```typescript
+import { describe, expect, it } from 'bun:test';
+import { createWebTest, mockComponent, silentLogger } from '@asenajs/asena/test';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+
+describe('OrderService', () => {
+  it('refuses to cancel a paid order', async () => {
+    const { instance, mocks } = mockComponent(OrderService);
+
+    mocks.orders.findById.mockResolvedValue({ id: 'o1', customerId: 'c1', status: 'paid', total: 10 });
+
+    await expect(instance.cancel('o1')).rejects.toMatchObject({ status: 409 });
+    expect(mocks.orders.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrderController', () => {
+  it('rejects a malformed id before the service runs', async () => {
+    const { app, mocks } = await createWebTest({
+      adapter: createErgenecoreAdapter({ logger: silentLogger }),
+      controllers: [OrderController],
+    });
+
+    await app
+      .post('/orders/not-a-uuid/cancel', { body: '{}', headers: { 'content-type': 'application/json' } })
+      .expectStatus(400);
+    expect(mocks.OrderService.cancel).not.toHaveBeenCalled();
+
+    await app.stop();
+  });
+});
+```
+
+Most tests belong at the first two levels. Keep `createTestApp` for the paths where the wiring
+itself is what could break.
+
+Learn more: [Testing Overview](/docs/testing/overview)
+
+## Common Traps
+
+These mistakes do not raise an error where they happen, which is what makes them expensive.
+
+### Decorator flags missing from `tsconfig.json`
+
+Bun reads the decorator mode from `tsconfig.json`. Without `experimentalDecorators` it applies
+standard decorators: class decorators still run, but method decorators lose their metadata, so the
+server boots and every route answers `404`. Without `emitDecoratorMetadata`, a route context
+contract cannot find the handler's context class, and the route runs unvalidated.
+
+::: code-group
+
+```json [Wrong]
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext"
+  }
+}
+```
+
+```json [Right]
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+:::
+
+Projects created with `asena create` already have both flags.
+
+### Two copies of `@asenajs/asena`
+
+Decorators write metadata through the copy of `@asenajs/asena` they were imported from, and the
+server reads it through its own. When `node_modules` holds two copies, the two never meet:
+injected fields stay `undefined`, `@OnStart` hooks do not run, and nothing logs an error. The usual
+cause is a package or a stale lockfile pinning its own version.
+
+```bash
+# More than one line here is the bug
+bun pm ls --all | grep @asenajs/asena@
+
+# Reinstall so every package shares one copy
+rm -rf node_modules bun.lock && bun install
+```
+
+The same applies to `hono` and `zod`: both adapters list them as peer dependencies so the
+application owns exactly one copy. Match HTTP exceptions with `isHttpException()` rather than
+`instanceof`, which also breaks across copies.
+
+### Using an injected field in the constructor
+
+Fields are injected after the constructor returns. Reading one there throws a `TypeError` while
+the container builds the component, and the boot fails.
+
+::: code-group
+
+```typescript [Wrong]
+@Service()
+export class PriceCache {
+  @Inject(PriceService)
+  private prices: PriceService;
+
+  private warm: number;
+
+  constructor() {
+    this.warm = this.prices.price('seed'); // this.prices is undefined here
+  }
+}
+```
+
+```typescript [Right]
+@Service()
+export class PriceCache {
+  @Inject(PriceService)
+  private prices: PriceService;
+
+  private warm = 0;
+
+  @OnStart()
+  async init() {
+    this.warm = this.prices.price('seed');
+  }
+}
+```
+
+:::
+
+### Components declared below `create()`
+
+A component declared in the entry file must come **before** `AsenaServerFactory.create()`.
+Anything below it has not been evaluated when components are collected; Asena logs a warning
+naming it.
+
+Learn more: [Get Started](/docs/get-started#_5-create-entry-point)
 
 
 ---
@@ -1726,6 +2212,550 @@ Our vision for Asena is to become the **go-to framework for Bun-based web applic
 - [CLI Overview](/docs/cli/overview) - Learn about Asena CLI tools
 - [GitHub Repository](https://github.com/AsenaJs/Asena) - Contribute to the project
 - [Examples](/docs/examples) - See real-world usage examples
+
+
+---
+
+# Coming from NestJS
+Section: Migrate
+Source: https://asena.sh/raw/migrate/from-nestjs.md
+
+# Coming from NestJS
+
+Asena uses many of the same decorator names as NestJS, but the wiring underneath is different:
+there are no modules, dependencies go on fields instead of constructors, and the HTTP server is
+an adapter on Bun. This page maps each NestJS concept to its Asena counterpart, and says plainly
+where there is none.
+
+## At a Glance
+
+| NestJS | Asena |
+|:-------|:------|
+| `@Module({ controllers, providers, imports })` | Nothing to declare: the container scans `sourceFolder` |
+| `@Injectable()` | `@Service()` |
+| Constructor injection | `@Inject(Class)` on a field |
+| `@Controller('users')`, `@Get(':id')` | `@Controller('/users')`, `@Get('/:id')` |
+| `@Param()`, `@Body()`, `@Query()` | `context.getParam()`, `context.getBody()`, or a route context contract |
+| Guards | Middleware |
+| `ValidationPipe` + DTO classes | Route context contracts |
+| Interceptors | Middleware with code after `await next()`; `@PostProcessor` |
+| Exception filters | `onError` on the `@Config` class |
+| `HttpException` | `HttpException` from `@asenajs/asena/adapter` |
+| `@nestjs/config` | `@Value('ENV_KEY')` |
+| `onModuleInit` / `onApplicationShutdown` | `@OnStart` / `@OnStop` |
+| `Test.createTestingModule()` | `mockComponent`, `createWebTest`, `createTestApp` |
+| `@WebSocketGateway` | `@WebSocket` + `AsenaWebSocketService` |
+| `@MessagePattern`, `@EventPattern`, `ClientProxy` | The same two decorators on a `@MessageController`, and `ulak` |
+| Node.js, Express or Fastify | Bun only, with the Ergenecore or Hono adapter |
+
+## Modules and Providers
+
+NestJS builds the dependency graph from modules: every provider is listed in a module, and a
+module exports what other modules may import. Asena has no module layer. A decorated class is
+found by the component scan and can be injected anywhere.
+
+::: code-group
+
+```typescript [NestJS]
+@Module({
+  imports: [DatabaseModule],
+  controllers: [UserController],
+  providers: [UserService, UserRepository],
+  exports: [UserService],
+})
+export class UserModule {}
+
+// main.ts
+const app = await NestFactory.create(AppModule);
+await app.listen(3000);
+```
+
+```typescript [Asena]
+// src/index.ts - no module, no providers array
+import { AsenaServerFactory } from '@asenajs/asena';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { logger } from './logger';
+
+const server = await AsenaServerFactory.create({
+  adapter: createErgenecoreAdapter(),
+  logger,
+  port: 3000,
+});
+
+await server.start();
+```
+
+:::
+
+**No direct equivalent:** module encapsulation. Every component is visible to every other
+component; Asena relies on [layering conventions](/docs/best-practices) rather than module
+boundaries. Dynamic modules (`forRoot()`, `forRootAsync()`) do not exist either. Official
+packages are configured by extending one of their classes instead, and components shipped in a
+package are handed in through the [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) option.
+
+## Dependency Injection
+
+::: code-group
+
+```typescript [NestJS]
+@Injectable()
+export class UserService {
+  constructor(private readonly users: UserRepository) {}
+
+  async findById(id: string) {
+    const user = await this.users.findById(id);
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return user;
+  }
+}
+```
+
+```typescript [Asena]
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { HttpException } from '@asenajs/asena/adapter';
+
+@Service()
+export class UserService {
+  @Inject(UserRepository)
+  private users: UserRepository;
+
+  async findById(id: string) {
+    const user = await this.users.findById(id);
+
+    if (!user) throw new HttpException(404, { message: 'User not found' });
+
+    return user;
+  }
+}
+```
+
+:::
+
+- Fields are injected after the constructor runs. Code that needs them goes in an `@OnStart`
+  method, not the constructor.
+- `@Inject('Name')` injects by registered name, the closest thing to a string token.
+- `@Strategy('Name')` injects every implementation of an interface as an array, which covers
+  most multi-provider setups.
+- `Scope.SINGLETON` (default) and `Scope.PROTOTYPE` exist.
+
+**No direct equivalent:** custom providers. There is no `useValue`, `useFactory` or `useClass`;
+the container only holds decorated classes. Build the value inside a service and inject the
+service. There is also no `Scope.REQUEST`. A prototype is created per injection point, not per
+request; per-request data goes on the context with `context.setValue()`.
+
+Learn more: [Dependency Injection](/docs/concepts/dependency-injection)
+
+## Controllers and Routes
+
+NestJS hands route data to parameter decorators. Asena passes one `Context`, and a route context
+contract replaces `@Body()` with a validated, typed `context.input`.
+
+::: code-group
+
+```typescript [NestJS]
+@Controller('users')
+export class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.userService.findById(id);
+  }
+
+  @Post()
+  @HttpCode(201)
+  create(@Body() dto: CreateUserDto) {
+    return this.userService.create(dto);
+  }
+}
+```
+
+```typescript [Asena]
+import { Controller } from '@asenajs/asena/decorators';
+import { Get, Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({ name: z.string().min(1) }),
+}) {}
+
+@Controller('/users')
+export class UserController {
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Get('/:id')
+  async findOne(context: Context) {
+    return context.send(await this.userService.findById(context.getParam('id')));
+  }
+
+  @Post('/')
+  async create(context: CreateUserContext) {
+    return context.send(await this.userService.create(context.input.body), 201);
+  }
+}
+```
+
+:::
+
+Learn more: [Controllers](/docs/concepts/controllers) · [Context](/docs/concepts/context)
+
+## Guards, Pipes and Interceptors
+
+NestJS has a separate building block for each step of a request. Asena has middleware and
+validation, which run in this order:
+
+**Diagram: Request pipeline**
+
+A matched route:
+
+1. **Global middleware** - `globalMiddlewares()` on `@Config`, filtered by include/exclude patterns.
+2. **Controller middleware** - `@Controller({ middlewares })`, scoped to the controller path.
+3. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
+4. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
+5. **Handler** - The controller method, which answers with `context.send()`.
+
+Off the main path:
+
+- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- A middleware returns `false`: `403 Forbidden`; nothing after it runs.
+- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
+
+### Guards → Middleware
+
+A guard becomes a middleware that throws, or returns `false` for a plain `403`. Attach it to a
+controller, a route, or globally.
+
+::: code-group
+
+```typescript [NestJS]
+@Injectable()
+export class AuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest();
+
+    if (!request.headers.authorization) throw new UnauthorizedException();
+
+    return true;
+  }
+}
+
+@Controller('admin')
+@UseGuards(AuthGuard)
+export class AdminController {}
+```
+
+```typescript [Asena]
+import { Controller, Middleware } from '@asenajs/asena/decorators';
+import { HttpException } from '@asenajs/asena/adapter';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
+@Middleware()
+export class AuthMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>) {
+    const token = context.headers['authorization'];
+
+    if (!token) throw new HttpException(401, { message: 'Unauthorized' });
+
+    context.setValue('userId', token.slice('Bearer '.length));
+    await next();
+  }
+}
+
+@Controller({ path: '/admin', middlewares: [AuthMiddleware] })
+export class AdminController {}
+```
+
+:::
+
+**No direct equivalent:** `Reflector` and custom metadata such as `@Roles('admin')`. Pass the
+rule to the middleware another way, for example one middleware class per role.
+
+### Pipes → Route context contracts
+
+`ValidationPipe` with class-validator DTOs becomes a contract with Zod or any Standard Schema
+library. Coercion and transforms (`z.coerce.number()`, `.transform()`) do the job of
+`ParseIntPipe` and friends. See the `CreateUserContext` above.
+
+Learn more: [Route Context Contracts](/docs/concepts/validation#route-context-contracts)
+
+### Interceptors → Middleware and PostProcessors
+
+Code after `await next()` runs once the handler has finished, which covers timing, logging and
+tracing:
+
+```typescript
+import { Middleware } from '@asenajs/asena/decorators';
+import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+
+@Middleware()
+export class TimingMiddleware extends MiddlewareService {
+  async handle(context: Context, next: () => Promise<void>) {
+    const start = performance.now();
+
+    await next();
+    console.log(`${context.req.method} ${context.req.url} took ${(performance.now() - start).toFixed(1)}ms`);
+  }
+}
+```
+
+For behaviour around service methods rather than requests, a
+[`@PostProcessor`](/docs/concepts/post-processor) can wrap every component as it leaves the
+container.
+
+**No direct equivalent:** mapping the handler's result in an interceptor
+(`map(data => ({ data }))`). Shape the response in the handler or the service.
+
+## Exception Filters → `onError`
+
+One `onError` method on the `@Config` class sees every error a route throws: `HttpException`s,
+validation failures and unexpected errors.
+
+::: code-group
+
+```typescript [NestJS]
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const response = host.switchToHttp().getResponse();
+    const status = exception instanceof HttpException ? exception.getStatus() : 500;
+
+    response.status(status).json({ statusCode: status });
+  }
+}
+
+app.useGlobalFilters(new AllExceptionsFilter());
+```
+
+```typescript [Asena]
+import { Config } from '@asenajs/asena/decorators';
+import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
+import { ConfigService, type Context } from '@asenajs/ergenecore';
+
+@Config()
+export class AppConfig extends ConfigService {
+  globalMiddlewares() {
+    return [TimingMiddleware];
+  }
+
+  onError(error: Error, context: Context) {
+    if (isValidationError(error)) return context.send({ message: 'Invalid request' }, 400);
+    if (isHttpException(error)) return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+
+    return context.send({ message: 'Internal server error' }, 500);
+  }
+}
+```
+
+:::
+
+There is one error hook per application rather than filters per controller or route. Unmatched
+routes go to a separate `onNotFound` hook.
+
+Learn more: [Error Handling](/docs/guides/error-handling)
+
+## Configuration
+
+::: code-group
+
+```typescript [NestJS]
+@Injectable()
+export class MailService {
+  private readonly host: string;
+  private readonly port: number;
+
+  constructor(config: ConfigService) {
+    this.host = config.getOrThrow<string>('SMTP_HOST');
+    this.port = config.get<number>('SMTP_PORT', 587);
+  }
+}
+```
+
+```typescript [Asena]
+import { Service } from '@asenajs/asena/decorators';
+import { Value } from '@asenajs/asena/decorators/ioc';
+
+@Service()
+export class MailService {
+  @Value('SMTP_HOST') // required: boot fails when unset
+  private host: string;
+
+  @Value('SMTP_PORT', { parse: Number, default: 587 })
+  private port: number;
+}
+```
+
+:::
+
+Bun loads `.env` files on its own, so there is no config module to import.
+
+**No direct equivalent:** schema validation of the whole environment at boot, or typed
+namespaces like `registerAs()`. Parse what you need in a service of your own.
+
+Learn more: [Configuration](/docs/guides/configuration) · [`@Value`](/docs/concepts/dependency-injection#value-configuration-injection)
+
+## Lifecycle Hooks
+
+| NestJS | Asena |
+|:-------|:------|
+| `onModuleInit`, `onApplicationBootstrap` | `@OnStart()` on any method |
+| `onModuleDestroy`, `beforeApplicationShutdown`, `onApplicationShutdown` | `@OnStop()` on any method |
+| `app.enableShutdownHooks()` | On by default: `server.start()` installs the signal handlers |
+
+Learn more: [Component Lifecycle](/docs/concepts/lifecycle)
+
+## Testing
+
+`Test.createTestingModule()` with `overrideProvider()` maps onto three levels:
+
+| NestJS | Asena |
+|:-------|:------|
+| A testing module with every dependency overridden by hand | `mockComponent(Class)` mocks every injected field automatically |
+| A testing module with controllers and mocked services, plus supertest | `createWebTest({ controllers })` |
+| `createNestApplication()` with `overrideProvider()` | `createTestApp({ components, overrides })` |
+
+```typescript
+import { expect, test } from 'bun:test';
+import { mockComponent } from '@asenajs/asena/test';
+
+test('throws 404 for a missing user', async () => {
+  const { instance, mocks } = mockComponent(UserService);
+
+  mocks.users.findById.mockResolvedValue(null);
+
+  await expect(instance.findById('x')).rejects.toMatchObject({ status: 404 });
+});
+```
+
+Tests use Bun's own runner; there is no Jest setup.
+
+Learn more: [Testing Overview](/docs/testing/overview)
+
+## WebSockets
+
+::: code-group
+
+```typescript [NestJS]
+@WebSocketGateway({ namespace: 'chat' })
+export class ChatGateway {
+  @WebSocketServer()
+  server: Server;
+
+  @SubscribeMessage('message')
+  handleMessage(@MessageBody() message: string) {
+    this.server.emit('message', message);
+  }
+}
+```
+
+```typescript [Asena]
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+
+@WebSocket({ path: '/chat' })
+export class ChatSocket extends AsenaWebSocketService<void> {
+  protected async onOpen(ws: Socket<void>) {
+    ws.subscribe('lobby');
+  }
+
+  protected async onMessage(ws: Socket<void>, message: string) {
+    ws.publish('lobby', message);
+  }
+}
+```
+
+:::
+
+Asena WebSockets are native Bun WebSockets, not Socket.IO. There are no named events: a
+namespace receives every message in `onMessage`, and rooms are Bun's publish/subscribe topics.
+`publish()` skips the sender. Scaling across instances uses a
+[WebSocket transport](/docs/concepts/websocket#multi-pod-websocket) such as Redis.
+
+**No direct equivalent:** `@SubscribeMessage` routing by event name, and Socket.IO
+acknowledgements. Dispatch on a field of the message yourself.
+
+Learn more: [WebSocket](/docs/concepts/websocket)
+
+## Microservices
+
+The decorator names are the same. A `@MessageController` prefix applies to both kinds of
+handler, and the client side is `ulak` instead of `ClientProxy`.
+
+::: code-group
+
+```typescript [NestJS]
+@Controller()
+export class OrderController {
+  @MessagePattern('order.create')
+  create(@Payload() data: CreateOrderDto) {
+    return this.orderService.create(data);
+  }
+
+  @EventPattern('order.created')
+  async onCreated(@Payload() event: OrderEvent) {
+    await this.orderService.index(event);
+  }
+}
+
+// caller
+const order = await firstValueFrom(this.client.send('order.create', dto));
+```
+
+```typescript [Asena]
+import { MessageController, Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { MessagePattern, EventPattern } from '@asenajs/asena/microservice';
+import { ulak, type Ulak } from '@asenajs/asena/messaging';
+
+@MessageController('order')
+export class OrderHandler {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  @MessagePattern('create') // order.create
+  async create(data: CreateOrderDto) {
+    return this.orderService.create(data);
+  }
+
+  @EventPattern('created') // order.created
+  async onCreated(event: OrderEvent) {
+    await this.orderService.index(event);
+  }
+}
+
+// caller
+@Service()
+export class CheckoutService {
+  @Inject(ulak.messages('order'))
+  private orders: Ulak.Messages<'order'>;
+
+  async checkout(dto: CreateOrderDto) {
+    return this.orders.send<{ id: string }>('create', dto);
+  }
+}
+```
+
+:::
+
+`send()` returns a promise rather than an Observable. The transport is set once in the `@Config`
+class's `transport()` method.
+
+**No direct equivalent:** the TCP, NATS, MQTT, gRPC and RabbitMQ transports. Asena ships
+[Redis Streams](/docs/packages/redis) and [Kafka](/docs/packages/kafka) transports, plus an
+in-memory one for tests, and the transport SPI is public if you need another.
+
+Learn more: [Microservices](/docs/concepts/microservices)
+
+## Next
+
+- [Key Concepts](/docs/key-concepts) - the container, scopes and bootstrap in one page
+- [Best Practices](/docs/best-practices) - layout, layering and the silent traps
+- [Benchmarks](/docs/benchmarks) - Asena and NestJS on identical workloads
 
 
 ---
@@ -3273,7 +4303,7 @@ describe('UserService', () => {
 - [Ulak - WebSocket Messaging System](/docs/concepts/ulak) - Break circular dependencies with WebSocket
 - [WebSocket](/docs/concepts/websocket) - Namespaces and socket handling
 - [Drizzle ORM](/docs/packages/drizzle) - Repository pattern for the data layer
-- [Testing Guide](/docs/guides/testing) - Testing services in isolation
+- [Testing Guide](/docs/testing/overview) - Testing services in isolation
 
 
 ---
@@ -4497,6 +5527,26 @@ export class ShiftReporter {
 
 ## Where the hooks sit
 
+Booting is split across two calls. `create()` builds the container, `start()` brings it to life:
+
+**Diagram: Bootstrap phases**
+
+`await AsenaServerFactory.create()`:
+
+1. **Container** - The container registers itself. (`CONTAINER_INIT`)
+2. **Logger** - The logger you passed in is registered. (`LOGGER_INIT`)
+3. **IoC engine** - The engine that scans and wires components. (`IOC_ENGINE_INIT`)
+4. **Adapter** - The adapter instance is registered. Headless mode has none. (`HTTP_ADAPTER_INIT`)
+5. **Framework services** - Ulak, the event system, the cron runner, the lifecycle service and the services that prepare middleware, configs, validators and WebSockets. (`PREPARE_SERVICES_INIT`)
+6. **Your components** - Found by scan, `components` list or build output, plus `imports`. Registered in dependency order: singletons are constructed, `@Inject` fields wired, post-processors applied. (`USER_COMPONENTS_SCAN`)
+7. **AsenaServer** - The server is resolved and receives port, health and shutdown options. (`USER_COMPONENTS_INIT`)
+
+`await server.start()`:
+
+8. **`@OnStart` hooks** - Registration order, dependencies first. A throw aborts the boot.
+9. **Application setup** - `@Config` applied, microservice transports connected, events and schedules registered, routes and WebSocket namespaces handed to the adapter. (`APPLICATION_SETUP`)
+10. **Serving** - The adapter binds the socket, cron jobs start, the health endpoint and signal handlers are installed. (`SERVER_READY`)
+
 ### Start sequence
 
 1. Components are constructed, `@Inject` and `@Strategy` fields are wired, `@PostProcessor`s run
@@ -5391,6 +6441,25 @@ in **array position**, interleaved with unfiltered entries - putting a pattern-b
 first makes it run first. Controller-level middleware always follows the whole global list,
 because the config is applied before controllers are registered.
 :::
+
+Validation runs after the whole middleware chain, right before the handler. The same order holds
+on both adapters:
+
+**Diagram: Request pipeline**
+
+A matched route:
+
+1. **Global middleware** - `globalMiddlewares()` on `@Config`, filtered by include/exclude patterns.
+2. **Controller middleware** - `@Controller({ middlewares })`, scoped to the controller path.
+3. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
+4. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
+5. **Handler** - The controller method, which answers with `context.send()`.
+
+Off the main path:
+
+- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- A middleware returns `false`: `403 Forbidden`; nothing after it runs.
+- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
 
 **Example:**
 
@@ -6712,16 +7781,16 @@ Asena provides built-in validation support using [Zod](https://zod.dev). Validat
 
 A route declares its validation in one of two ways:
 
-- **A validator class** - a `ValidationService` subclass passed as the route's `validator` option. Its methods return Zod schemas.
-- **A [route context contract](#route-context-contracts)** - a context subclass built with `Context.define()`, taken as the handler's first parameter. Its schemas can come from any [Standard Schema v1](https://standardschema.dev) library, and the handler reads typed, validated values from `context.input`.
+- **A [route context contract](#route-context-contracts)** (recommended) - a context subclass built with `Context.define()`, taken as the handler's first parameter. Its schemas can come from any [Standard Schema v1](https://standardschema.dev) library, and the handler reads typed, validated values from `context.input`.
+- **A [validator class](#validator-classes)** - a `ValidationService` subclass passed as the route's `validator` option. Its methods return Zod schemas.
 
-- [Quick Start](#quick-start) - A validator class wired to a route.
-- [What getBody() Returns](#what-getbody-returns) - The schema's output, not the raw client JSON.
+- [Quick Start](#quick-start) - A contract on a route, typed end to end.
+- [Route Context Contracts](#route-context-contracts) - `Context.define()` and typed `context.input`.
+- [Validator Classes](#validator-classes) - A `ValidationService` wired with the `validator` option.
 - [ValidationService API](#validationservice-api) - `json()`, `query()`, `param()` and header validation.
 - [Validation Hooks](#validation-hooks) - Custom logic that runs after validation.
 - [Error Responses](#validation-error-responses) - The 400 Bad Request shape Asena returns.
 - [Zod Schemas](#zod-schema-definition) - Defining the schemas the validators return.
-- [Route Context Contracts](#route-context-contracts) - `Context.define()` and typed `context.input`.
 - [Schema Factory Caching](#schema-factory-caching) - The `validatorCache` route option.
 
 ::: info Adapter Support
@@ -6757,6 +7826,70 @@ resolved by hoisting out of the adapter's own dependencies, which was never some
 - **Automatic Error Handling**: 400 Bad Request responses automatically
 
 ## Quick Start
+
+Define the contract with `Context.define()` and take it as the handler's first parameter:
+
+::: code-group
+```typescript [ergenecore]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/ergenecore';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+    age: z.number().min(18).max(120),
+  }),
+}) {}
+
+@Controller('/users')
+export class UserController {
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = context.input.body; // { name: string; email: string; age: number }
+
+    return context.send({ created: true, user }, 201);
+  }
+}
+```
+
+```typescript [hono]
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Context } from '@asenajs/hono-adapter';
+import { z } from 'zod';
+
+class CreateUserContext extends Context.define({
+  body: z.object({
+    name: z.string().min(3).max(50),
+    email: z.email(),
+    age: z.number().min(18).max(120),
+  }),
+}) {}
+
+@Controller('/users')
+export class UserController {
+  @Post('/')
+  async create(context: CreateUserContext) {
+    const user = context.input.body; // { name: string; email: string; age: number }
+
+    return context.send({ created: true, user }, 201);
+  }
+}
+```
+:::
+
+The request is validated before the handler runs. A body that fails the schema gets a **400** and
+never reaches `create`. See [Route Context Contracts](#route-context-contracts) for every target,
+the execution order and the error shape.
+
+## Validator Classes
+
+A validator class keeps the schemas on a `ValidationService` component instead of the context.
+Use it when a route needs [validation hooks](#validation-hooks), schemas built from injected
+services, or [schema factory caching](#schema-factory-caching).
 
 ### 1. Create a Validator
 
@@ -7306,7 +8439,15 @@ works the same way, and both synchronous and `async` validation are supported. A
 depend on a schema library for contracts.
 
 `Context.define()` rejects a key outside this list, a value that is not a Standard Schema, and a map
-that declares both `body` and `form`.
+that declares both `body` and `form`. A misspelled target is already a compile error:
+
+```typescript
+class CreateUserContext extends Context.define({
+  bdoy: z.object({ name: z.string() }),
+}) {}
+
+// error: Object literal may only specify known properties, and 'bdoy' does not exist in type 'ExactRequestSchemas<…>'. ts(2353)
+```
 
 Targets are validated in the order `body`/`form`, `query`, `params`, `headers`. Validation stops at
 the first target that fails.
@@ -7316,6 +8457,36 @@ the first target that fails.
 `context.input` holds the schema **output** for each declared target, with defaults, transforms
 and coercions applied. Only declared targets exist on it - `context.input.params` on a contract
 without `params` is a compile error.
+
+Hover the highlighted names to see what each schema produces:
+
+```typescript
+class OrderContext extends Context.define({
+  params: z.object({ id: z.coerce.number().int() }),
+  query: z.object({
+    since: z.iso.date().transform((s) => new Date(s)),
+    tags: z.string().transform((s) => s.split(',')).optional(),
+  }),
+  headers: z.object({ 'x-tenant': z.enum(['eu', 'us']) }),
+}) {}
+
+@Controller('/orders')
+export class OrderController {
+  @Get('/:id')
+  async find(context: OrderContext) {
+    const { id } = context.input.params
+    const since = context.input.query.since
+    const tags = context.input.query.tags
+    const tenant = context.input.headers['x-tenant']
+  }
+}
+
+// const id: number
+// (property) params: { id: number; }
+// const since: Date
+// const tags: string[] | undefined
+// const tenant: "eu" | "us"
+```
 
 | Accessor | Returns |
 |:---------|:--------|
@@ -8529,6 +9700,28 @@ export class ChatSocket extends AsenaWebSocketService<UserData> {
     console.log(`User connected: ${ws.data.values.username}`);
   }
 }
+```
+
+The class's type parameter reaches every socket the service holds, including `this.sockets`, which
+you never annotate. Hover the highlighted names:
+
+```typescript
+interface ChatUser {
+  username: string
+}
+
+@WebSocket({ path: '/chat', name: 'ChatSocket' })
+export class ChatSocket extends AsenaWebSocketService<ChatUser> {
+  protected async onOpen(ws: Socket<ChatUser>) {
+    for (const peer of this.sockets.values()) {
+      peer.send(ws.data.values.username + ' joined')
+    }
+  }
+}
+
+// const peer: Socket<ChatUser>
+// (property) AsenaWebSocketService<ChatUser>.sockets: Map<string, Socket<ChatUser>>
+// (property) ChatUser.username: string
 ```
 
 ## Built-in Room Management
@@ -12893,25 +14086,41 @@ An adapter is a bridge between Asena's core framework and the underlying HTTP se
 - Static file serving
 - Context wrapping
 
+**Diagram: Adapter architecture**
+
+Layers, top to bottom:
+
+1. Your application
+   - **Controllers · Services · Middleware · `@Config`** - Decorators come from `@asenajs/asena`. `Context`, `MiddlewareService`, `ValidationService` and `ConfigService` come from the adapter.
+2. `@asenajs/asena`
+   - **IoC container** - Scan, injection, scopes, lifecycle hooks.
+   - **AsenaServer** - Reads route, middleware and config metadata and hands it to the adapter.
+   - **`AsenaAdapter` contract** - `registerRoute`, `use`, `registerWebsocketRoute`, `onError`, `start`, `stop`.
+3. Adapter
+   - **`@asenajs/ergenecore`** - Native Bun routing, zero runtime dependencies.
+   - **`@asenajs/hono-adapter`** - Routes through a Hono app; Hono middleware works.
+4. Runtime
+   - **`Bun.serve()`** - HTTP and WebSocket server. Both adapters run on Bun only.
+
 ## Available Adapters
 
 Asena currently provides two official adapters:
 
-- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 202k req/s (plaintext · measured on the published benchmark)
-- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 190k req/s (plaintext · measured on the published benchmark)
+- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 152k req/s (plaintext · measured on the published benchmark)
+- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 142k req/s (plaintext · measured on the published benchmark)
 
 Identical application code runs on both — only the adapter import changes. See [Benchmarks](/docs/benchmarks) for the full comparison across eleven scenarios.
 
 ## Performance Comparison
 
-Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections:
+Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections:
 
 | Adapter            | Runtime | Plaintext | JSON serialization | DB read by id |
 |:-------------------|:--------|----------:|-------------------:|--------------:|
-| **Ergenecore**     | Bun     | **202,066** | **195,494**      | **78,023**    |
-| **Hono adapter**   | Bun     | 190,030   | 178,857            | 76,780        |
-| NestJS · Express   | Bun     | 131,281   | 119,195            | 29,178        |
-| NestJS · Express   | Node    | 80,988    | 82,459             | 27,883        |
+| **Ergenecore**     | Bun     | **151,923** | **148,415**      | **64,995**    |
+| **Hono adapter**   | Bun     | 141,822   | 132,708            | 62,664        |
+| NestJS · Express   | Bun     | 65,750    | 63,540             | 15,148        |
+| NestJS · Express   | Node    | 57,408    | 57,824             | 15,461        |
 
 ::: tip
 Full methodology — hardware, load generator, isolation and the byte-level conformance gate — is documented on the [Benchmarks](/docs/benchmarks) page.
@@ -13175,12 +14384,12 @@ Ergenecore is the **fastest** Asena adapter:
 
 | Adapter            | Runtime | Plaintext   | JSON serialization |
 |:-------------------|:--------|------------:|-------------------:|
-| **Ergenecore**     | Bun     | **202,066** | **195,494**        |
-| Hono adapter       | Bun     | 190,030     | 178,857            |
-| NestJS · Express   | Bun     | 131,281     | 119,195            |
+| **Ergenecore**     | Bun     | **151,923** | **148,415**        |
+| Hono adapter       | Bun     | 141,822     | 132,708            |
+| NestJS · Express   | Bun     | 65,750      | 63,540             |
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
@@ -13870,13 +15079,13 @@ Hono Adapter delivers excellent performance powered by Bun and Hono:
 
 | Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
 |:-------------------|:--------|------------:|-------------------:|------------------:|
-| Ergenecore         | Bun     | 202,066     | 195,494            | 119,095           |
-| **Hono adapter**   | Bun     | **190,030** | **178,857**        | **126,251**       |
+| Ergenecore         | Bun     | 151,923     | 148,415            | 86,710            |
+| **Hono adapter**   | Bun     | **141,822** | **132,708**        | **86,840**        |
 
-The Hono adapter pulls ahead on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
+The two are level on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, `wrk` at 400 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
@@ -14641,7 +15850,7 @@ Use the `components` parameter to register only the controllers needed for testi
 :::
 
 ::: info
-For testing strategies, see [Testing Guide](/docs/guides/testing).
+For testing strategies, see [Testing Guide](/docs/testing/overview).
 :::
 
 ## Best Practices
@@ -14746,7 +15955,7 @@ export class MyHonoMiddleware extends AsenaMiddlewareService {
 - [Context API](/docs/concepts/context) - Request/response handling
 - [Middleware](/docs/concepts/middleware) - Custom middleware patterns
 - [Validation](/docs/concepts/validation) - Request validation with Zod
-- [Testing Guide](/docs/guides/testing) - Testing strategies
+- [Testing Guide](/docs/testing/overview) - Testing strategies
 - [Hono Documentation](https://hono.dev/) - Official Hono docs
 
 
@@ -15433,6 +16642,25 @@ export class UserService {
     return this.userRepository.paginate(page, limit);
   }
 }
+```
+
+Return types come from the table schema, and column names are checked. Hover the highlighted
+names:
+
+```typescript
+@Service()
+export class UserService {
+  @Inject(UserRepository)
+  private users: UserRepository
+
+  async find(id: string) {
+    const user = await this.users.findById(id)
+    const inactive = await this.users.findBy('isActiv', false)
+  }
+}
+
+// const user: { id: string; name: string; email: string; isActive: boolean | null; createdAt: Date | null; } | null
+// error: Argument of type '"isActiv"' is not assignable to parameter of type '"id" | "name" | "email" | "isActive" | "createdAt"'. ts(2345)
 ```
 
 ## @Database Decorator API
@@ -16288,7 +17516,7 @@ export class UserRepository extends BaseRepository<typeof users> {
 - [Component Lifecycle](/docs/concepts/lifecycle) - When the pool is opened and released
 - [Inheritance](/docs/concepts/inheritance) - Sharing repository methods through a base class
 - [Configuration](/docs/guides/configuration) - Server configuration
-- [Testing](/docs/guides/testing) - Testing code that uses repositories
+- [Testing](/docs/testing/overview) - Testing code that uses repositories
 - [Drizzle ORM Documentation](https://orm.drizzle.team/) - The underlying ORM
 
 

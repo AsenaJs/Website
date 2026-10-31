@@ -151,6 +151,11 @@ export class ChatSocket extends AsenaWebSocketService<UserData> {
 }
 ```
 
+The class's type parameter reaches every socket the service holds, including `this.sockets`, which
+you never annotate. Hover the highlighted names:
+
+<HoverCode id="websocket-data" />
+
 ## Built-in Room Management
 
 ::: tip Asena's Built-in Features

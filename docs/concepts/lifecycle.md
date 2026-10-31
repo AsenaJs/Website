@@ -166,6 +166,10 @@ export class ShiftReporter {
 
 ## Where the hooks sit
 
+Booting is split across two calls. `create()` builds the container, `start()` brings it to life:
+
+<DocDiagram id="bootstrap" />
+
 ### Start sequence
 
 1. Components are constructed, `@Inject` and `@Strategy` fields are wired, `@PostProcessor`s run

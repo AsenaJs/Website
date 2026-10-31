@@ -10,6 +10,8 @@
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { SNIPPETS } from '../.vitepress/theme/components/hover-snippets';
+import { DIAGRAMS } from '../.vitepress/theme/components/diagrams';
 
 const ROOT = resolve(import.meta.dir, '..');
 const DOCS_DIR = join(ROOT, 'docs');
@@ -17,7 +19,7 @@ const SITE = 'https://asena.sh';
 
 const HEADER = `# Asena
 
-> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection, achieving 200k-300k requests/sec.
+> High-performance IoC web framework built on Bun runtime with decorator-based dependency injection.
 
 - Documentation: ${SITE}
 - GitHub: https://github.com/AsenaJs/Asena
@@ -80,6 +82,57 @@ function cardLine(inner: string, href?: string): string {
   return tail ? `- ${label} - ${tail}` : `- ${label}`;
 }
 
+/** A hover snippet becomes plain code, with each tooltip appended as a comment. */
+function hoverCodeBlock(id: string, docsPath: string): string {
+  const snippet = SNIPPETS[id];
+
+  if (!snippet) throw new Error(`${docsPath}: unknown HoverCode id "${id}"`);
+
+  const code = snippet.files.map((f) => f.code.replace(/⟦\w+\|([^⟧]+)⟧/g, '$1')).join('\n\n');
+  const notes = Object.values(snippet.tips).map(
+    (tip) => `// ${tip.error ? 'error: ' : ''}${tip.text.replace(/\s*\n\s*/g, ' ')}`,
+  );
+
+  return ['```typescript', code, ...(notes.length ? ['', ...notes] : []), '```'].join('\n');
+}
+
+/** A diagram becomes the ordered steps it draws: numbered for a flow, top-to-bottom for layers. */
+function diagramText(id: string, docsPath: string): string {
+  const diagram = DIAGRAMS[id];
+
+  if (!diagram) throw new Error(`${docsPath}: unknown DocDiagram id "${id}"`);
+
+  const cell = (c: { title: string; detail?: string }) => (c.detail ? `**${c.title}** - ${c.detail}` : `**${c.title}**`);
+  const lines = [`**Diagram: ${diagram.title}**`, ''];
+
+  if (diagram.kind === 'layers') {
+    lines.push('Layers, top to bottom:', '');
+    diagram.sections.forEach((section, i) => {
+      lines.push(`${i + 1}. ${section.label}`);
+      section.steps.flatMap((s) => s.cells).forEach((c) => lines.push(`   - ${cell(c)}`));
+    });
+  } else {
+    let n = 0;
+
+    for (const section of diagram.sections) {
+      lines.push(`${section.label}:`, '');
+      for (const step of section.steps) {
+        const tag = step.tag && !/^\d+$/.test(step.tag) ? ` (\`${step.tag}\`)` : '';
+        lines.push(`${++n}. ${step.cells.map(cell).join('; ')}${tag}`);
+      }
+      lines.push('');
+    }
+  }
+
+  if (diagram.exits?.length) {
+    if (lines.at(-1) !== '') lines.push('');
+    lines.push('Off the main path:', '');
+    diagram.exits.forEach((e) => lines.push(`- ${e.when}: ${e.then}`));
+  }
+
+  return lines.join('\n').trim();
+}
+
 /**
  * Docs pages build their card grids in raw HTML, which is layout for a human reader and
  * pure noise in a file whose only consumer is a model. Cards are flattened back to markdown
@@ -99,7 +152,9 @@ function flattenLayoutHtml(body: string, docsPath: string): string {
         .replace(/^[ \t]*<div class="info-card">([\s\S]*?<p class="ic-desc">[\s\S]*?<\/p>)\s*<\/div>/gm, (_, inner) => cardLine(inner))
         .replace(/^[ \t]*<div class="card-grid">[ \t]*\n/gm, '')
         .replace(/^[ \t]*<\/div>[ \t]*\n/gm, '')
-        .replace(/<span class="pill[^"]*">([\s\S]*?)<\/span>/g, (_, inner) => `(${inlineText(inner)})`);
+        .replace(/<span class="pill[^"]*">([\s\S]*?)<\/span>/g, (_, inner) => `(${inlineText(inner)})`)
+        .replace(/^[ \t]*<HoverCode id="([^"]+)" \/>/gm, (_, id) => hoverCodeBlock(id, docsPath))
+        .replace(/^[ \t]*<DocDiagram id="([^"]+)" \/>/gm, (_, id) => diagramText(id, docsPath));
 
       const leftover = /^[ \t]*<(?!!--)[a-zA-Z/]/m.exec(out);
 
@@ -159,7 +214,7 @@ function pageFromLink(link: string): Page | null {
     return null;
   }
 
-  const docsPath = `${link.slice('/docs/'.length)}.md`;
+  const docsPath = link === '/docs/' ? 'index.md' : `${link.slice('/docs/'.length)}.md`;
   const absPath = join(DOCS_DIR, docsPath);
 
   let parsed: ReturnType<typeof parsePage>;
