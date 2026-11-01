@@ -20,12 +20,14 @@ These features are **stable and production-ready** in the current release:
 
 ### New in v0.12
 
-`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default.
+`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The current patches are `@asenajs/asena` 0.12.3, `@asenajs/ergenecore` 5.0.2 and `@asenajs/hono-adapter` 5.0.3; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
 
 - **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
 - **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
 - **[OpenAPI from contracts](/docs/packages/openapi#route-context-contracts)** - contracts become request schemas, documented in their input shape; responses keep the output shape
-- **The auth contract** - `@asenajs/asena/auth` ships the provider interface, session shapes, the `@Protected` / `@Public` / `@Roles` markers and `getAuthSession` / `requireAuthSession`, so auth implementations share one contract. Core never calls it
+- **[The auth contract](/docs/concepts/authentication)** - `@asenajs/asena/auth` ships the provider interface, session shapes, the `@Protected` / `@Public` / `@Roles` markers and `getAuthSession` / `requireAuthSession`, so auth implementations share one contract. Core never calls it
+- **[`@asenajs/asena-auth`](/docs/packages/auth)** *(package 1.0.0)* - enforces the contract: native opaque sessions stored server-side and [Better Auth](/docs/packages/auth#better-auth-provider) behind the same marks, with a route guard that answers 401 / 403 before route middlewares and the validator run, WebSocket upgrade authentication and a test provider, on both adapters
+- **[`asena doctor` auth checks](/docs/cli/commands#asena-doctor)** *(CLI 0.12.0)* - `auth-enforcement` flags markers with no guard to enforce them, `auth-better-auth-dep` a Better Auth provider without `better-auth` installed, `auth-cookie` session cookie options browsers reject
 - **One middleware order** - global → controller → route → validator → handler on both adapters; controller middlewares attach to the controller's own routes instead of a `/prefix/*` pattern
 - **Canonical duplicate-route detection** - routes that differ only in a trailing slash fail the boot instead of one silently shadowing the other
 - **[Rate limiting keyed on the peer](/docs/adapters/ergenecore#ratelimitermiddleware)** *(adapter majors)* - `RateLimiterMiddleware` ignores client-set forwarding headers unless `trustProxy` says otherwise, and `maxBuckets` bounds its memory
@@ -104,6 +106,7 @@ These features are **stable and production-ready** in the current release:
 ### Official Packages
 
 - **[@asenajs/asena-logger](/docs/packages/logger)** - Structured logging with multiple transports (console, file, Loki)
+- **[@asenajs/asena-auth](/docs/packages/auth)** - Authentication behind core's auth contract: server-side sessions and Better Auth, `@Protected` / `@Public` / `@Roles` route guards, WebSocket upgrade authentication and a test provider
 - **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
 - **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
 - **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
@@ -119,6 +122,7 @@ Adapters and official packages version independently of the core framework. `@as
 - **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
+- **Project Diagnostics** - [`asena doctor`](/docs/cli/commands#asena-doctor) checks decorator flags, the config file, dependencies, duplicate copies, peer ranges and auth wiring; read-only, with an exit code for CI
 
 ## Planned for v1.0 <span class="pill pill-teal">Planned</span>
 
@@ -159,7 +163,7 @@ still read the consuming application's environment at the right moment.
 - Official plugin registry
 
 **Use Cases:**
-- Authentication plugins (OAuth, JWT, SAML)
+- Authentication providers as plugins - [`@asenajs/asena-auth`](/docs/packages/auth) covers server-side sessions and Better Auth, which brings OAuth and social sign-in; JWT or SAML providers would implement the same `AsenaAuthProvider` contract
 - Database adapters (PostgreSQL, MySQL, MongoDB)
 - Monitoring and APM integrations
 
