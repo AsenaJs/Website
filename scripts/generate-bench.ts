@@ -286,7 +286,7 @@ function sectionTable(page: string, heading: string): string[][] {
  * methodology must print exactly the snapshot's figures, target by target, or the two came from different sweeps.
  */
 function assertSameSweepAsBenchmarkPage(data: Snapshot): void {
-  const page = readFileSync(BENCHMARK_PAGE, 'utf8');
+  const page = readFileSync(BENCHMARK_PAGE, 'utf8').replace(/\r\n/g, '\n');
   const mismatches: string[] = [];
   const expect = (where: string, shown: string | undefined, name: string, scenario: string) => {
     const value = data.targets[name]?.rps[scenario];
@@ -329,10 +329,17 @@ function assertSameSweepAsBenchmarkPage(data: Snapshot): void {
     expect(`asena-ergenecore-bun ${scenario}-orm`, drizzle, 'asena-ergenecore-bun', `${scenario}-orm`);
   }
 
-  const { memoryLimit, connections } = data.environment;
+  const { cpus, memoryLimit, connections } = data.environment;
+  const budget = /^\| Server budget \| \*\*(\d+) CPU, (.+?) RAM\*\*/m.exec(page);
+  const load = /^\| Load generator \|[^\n]*?\b(\d+) connections/m.exec(page);
 
-  if (!page.includes(`${memoryLimit} RAM** per server`)) mismatches.push(`methodology: no ${memoryLimit} server budget`);
-  if (!page.includes(`${connections} connections`)) mismatches.push(`methodology: no ${connections} connections`);
+  if (budget?.[1] !== String(cpus) || budget[2] !== memoryLimit) {
+    mismatches.push(`methodology budget: page ${budget ? `${budget[1]} CPU, ${budget[2]}` : 'nothing'}, snapshot ${cpus} CPU, ${memoryLimit}`);
+  }
+
+  if (load?.[1] !== String(connections)) {
+    mismatches.push(`methodology connections: page ${load?.[1] ?? 'nothing'}, snapshot ${connections}`);
+  }
 
   if (mismatches.length) {
     throw new Error(
