@@ -67,7 +67,7 @@ bun add @asenajs/asena-auth better-auth
 
 **Requirements:**
 - [Bun](https://bun.sh) v1.4 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.3 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.2 or higher
 - [@asenajs/ergenecore](/docs/adapters/ergenecore) v5.0.2 or higher, or [@asenajs/hono-adapter](/docs/adapters/hono) v5.0.3 or higher
 - [better-auth](https://www.better-auth.com) v1.2 or higher, below v2 - optional peer dependency, only for the Better Auth provider
 
