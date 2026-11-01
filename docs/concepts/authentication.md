@@ -25,8 +25,8 @@ when the provider behind them changes.
 | `AUTH_PROVIDER_KEY` | Constant | `'AsenaAuthProvider'`, the interface key providers register under |
 | `AUTH_SESSION_CONTEXT_KEY` | Constant | `'authSession'`, the context key the session travels under |
 
-`RolesResolver`, `GuardMark`, `collectGuardMetadata` and `effectiveGuardMark` are exported for
-enforcers; an application does not need them.
+The rest - `RolesResolver`, `GuardMark`, the guard metadata keys and the `collectGuardMetadata` /
+`effectiveGuardMark` helpers - is there for enforcers; an application does not need it.
 
 ## The Marks
 
@@ -163,46 +163,13 @@ interface AsenaAuthProvider<TUser extends AuthUser = AuthUser> {
 ```
 
 `getSession` returns `null` when the request carries no valid credentials; the enforcer answers
-that with a 401. `getRoles` is what `@Roles` is checked against. A class implementing the interface
-and registered under `AUTH_PROVIDER_KEY` joins asena-auth's providers next to its own - here, API
-keys for machine clients:
+that with a 401. `getRoles` is what `@Roles` is checked against.
 
-```typescript
-// src/auth/ApiKeyAuth.ts
-import { AUTH_PROVIDER_KEY } from '@asenajs/asena/auth';
-import type { AsenaAuthProvider, AuthSession } from '@asenajs/asena/auth';
-import { Service } from '@asenajs/asena/decorators';
-import { Implements, Inject } from '@asenajs/asena/decorators/ioc';
-import { ApiClientService } from '../services/ApiClientService';
-
-@Service('ApiKeyAuth')
-@Implements(AUTH_PROVIDER_KEY)
-export class ApiKeyAuth implements AsenaAuthProvider {
-  @Inject(ApiClientService)
-  private clients: ApiClientService;
-
-  async getSession(request: Request): Promise<AuthSession | null> {
-    const client = await this.clients.findByKey(request.headers.get('x-api-key'));
-
-    if (!client) {
-      return null;
-    }
-
-    return {
-      user: { id: client.id, roles: client.scopes },
-      session: { id: client.keyId, userId: client.id, createdAt: client.createdAt, expiresAt: client.expiresAt },
-    };
-  }
-
-  getRoles(session: AuthSession): string[] {
-    return session.user.roles ?? [];
-  }
-}
-```
-
-`@Protected({ provider: 'ApiKeyAuth' })` and `@Roles(...)` then work against it. How several
-providers share one application, and which one a route without a provider name uses, is on the
-package page under [Multiple Providers](/docs/packages/auth#multiple-providers).
+A component that implements the interface and registers under `AUTH_PROVIDER_KEY` - for example
+`@Service('ApiKeyAuth')` with `@Implements(AUTH_PROVIDER_KEY)` - joins asena-auth's providers next
+to its own, and `@Protected({ provider: 'ApiKeyAuth' })` routes to it. The package page walks
+through such a provider for API keys, and through how several providers share one application,
+under [Multiple Providers](/docs/packages/auth#multiple-providers).
 
 ## Related
 
