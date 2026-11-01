@@ -253,6 +253,38 @@ carry one — so reach for `error.body` only after you have an `HttpException` y
 yourself. `getResponse` is optional for the same reason, hence the `?.` and the fallback.
 :::
 
+### Authentication Errors
+
+The [asena-auth](/docs/packages/auth#route-guards) guard rejects with a core `HttpException`, so
+`isHttpException()` matches it and it reaches `onError` like any other exception:
+
+| Situation | Status | Body | Header |
+|:----------|:-------|:-----|:-------|
+| No session on a `@Protected` / `@Roles` route | 401 | `Unauthorized` | `WWW-Authenticate: Bearer` |
+| A session without any of the route's roles | 403 | `Forbidden` | - |
+| `requireAuthSession(context)` without a session | 401 | `Authentication required` | - |
+
+The challenge header travels in the exception's response, so a handler that answers with
+`error.getResponse()` keeps it. A handler that builds its own envelope from `error.message` and
+`error.status` drops it unless it copies the header across:
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    const challenge = error.getResponse?.().headers.get('WWW-Authenticate');
+
+    return context.send(
+      { error: error.message },
+      { status: error.status, headers: challenge ? { 'WWW-Authenticate': challenge } : {} },
+    );
+  }
+
+  return context.send({ error: 'Internal Server Error' }, 500);
+}
+```
+
 ---
 
 ## Global Error Handler

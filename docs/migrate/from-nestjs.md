@@ -21,6 +21,8 @@ where there is none.
 | `@Controller('users')`, `@Get(':id')` | `@Controller('/users')`, `@Get('/:id')` |
 | `@Param()`, `@Body()`, `@Query()` | `context.getParam()`, `context.getBody()`, or a route context contract |
 | Guards | Middleware |
+| `@UseGuards(AuthGuard)`, a `RolesGuard` with `@Roles()` | `@Protected()` / `@Roles()`, enforced by `@asenajs/asena-auth` |
+| Passport strategies | asena-auth providers: server-side sessions, Better Auth, or your own `AsenaAuthProvider` |
 | `ValidationPipe` + DTO classes | Route context contracts |
 | Interceptors | Middleware with code after `await next()`; `@PostProcessor` |
 | Exception filters | `onError` on the `@Config` class |
@@ -191,8 +193,8 @@ Learn more: [Controllers](/docs/concepts/controllers) · [Context](/docs/concept
 
 ## Guards, Pipes and Interceptors
 
-NestJS has a separate building block for each step of a request. Asena has middleware and
-validation, which run in this order:
+NestJS has a separate building block for each step of a request. Asena has middleware, an auth
+guard and validation, which run in this order:
 
 <DocDiagram id="request-pipeline" />
 
@@ -243,8 +245,81 @@ export class AdminController {}
 
 :::
 
-**No direct equivalent:** `Reflector` and custom metadata such as `@Roles('admin')`. Pass the
-rule to the middleware another way, for example one middleware class per role.
+**No direct equivalent:** `Reflector` and custom metadata in general. Pass a rule to a middleware
+another way, for example one middleware class per rule. Authentication and roles are the exception,
+covered next.
+
+### Auth Guards and Passport → `@Protected` / `@Roles`
+
+The usual NestJS setup - an auth guard, a `RolesGuard` reading a custom `@Roles()` through
+`Reflector`, and an `IS_PUBLIC_KEY` escape hatch - is built in. Core ships the marks; the guard
+that enforces them and the providers come from [`@asenajs/asena-auth`](/docs/packages/auth).
+
+::: code-group
+
+```typescript [NestJS]
+@Controller('projects')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class ProjectController {
+  @Get()
+  list() {
+    return { projects: [] };
+  }
+
+  @Delete(':id')
+  @Roles('admin')
+  remove(@Param('id') id: string) {
+    return { deleted: id };
+  }
+
+  @Get('featured')
+  @Public()
+  featured() {
+    return { projects: [] };
+  }
+}
+```
+
+```typescript [Asena]
+import { Protected, Public, Roles } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Delete, Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/projects')
+export class ProjectController {
+  @Get('/')
+  list(context: Context) {
+    return context.send({ projects: [] });
+  }
+
+  @Roles('admin')
+  @Delete('/:id')
+  remove(context: Context) {
+    return context.send({ deleted: context.getParam('id') });
+  }
+
+  @Public()
+  @Get('/featured')
+  featured(context: Context) {
+    return context.send({ projects: [] });
+  }
+}
+```
+
+:::
+
+- The guard runs after the controller middleware and before route middleware and validation, much
+  as NestJS guards run before pipes. Register it once with `imports: [...authComponents]`.
+- `req.user` becomes `requireAuthSession(context).user`.
+- A Passport strategy becomes a provider: `@Auth` for server-side sessions,
+  [`@BetterAuth`](/docs/packages/auth#better-auth-provider) for Better Auth (email and password,
+  OAuth and social sign-in), or your own class implementing `AsenaAuthProvider` - see
+  [Multiple Providers](/docs/packages/auth#multiple-providers). asena-auth ships no JWT provider; a
+  stateless JWT check is a provider you write.
+
+Learn more: [Authentication](/docs/concepts/authentication) · [Asena Auth](/docs/packages/auth)
 
 ### Pipes → Route context contracts
 

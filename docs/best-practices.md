@@ -281,6 +281,39 @@ The same applies to `hono` and `zod`: both adapters list them as peer dependenci
 application owns exactly one copy. Match HTTP exceptions with `isHttpException()` rather than
 `instanceof`, which also breaks across copies.
 
+### `@Protected` without its guard
+
+`@Protected` and `@Roles` come from core and are only marks. The guard that enforces them ships in
+[`@asenajs/asena-auth`](/docs/packages/auth) and reaches the container through `imports`. Without
+it, every marked route is served to anyone, and nothing fails at the route.
+
+::: code-group
+
+```typescript [Wrong]
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+});
+```
+
+```typescript [Right]
+import { authComponents } from '@asenajs/asena-auth';
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...authComponents],
+});
+```
+
+:::
+
+[`asena doctor`](/docs/cli/commands#asena-doctor) fails `auth-enforcement` when `Protected` or
+`Roles` is imported from `@asenajs/asena/auth` and neither `authComponents` nor `AuthGuard` is
+imported from `@asenajs/asena-auth`.
+
+Learn more: [Authentication](/docs/concepts/authentication)
+
 ### Using an injected field in the constructor
 
 Fields are injected after the constructor returns. Reading one there throws a `TypeError` while
