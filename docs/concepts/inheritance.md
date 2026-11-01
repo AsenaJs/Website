@@ -53,6 +53,7 @@ Everything declared on a method or a field is collected from the whole prototype
 | `@Override` | ✅ | Marks accumulate across the chain; a subclass cannot un-mark an inherited one |
 | `@Hidden` on a method ([openapi](/docs/packages/openapi)) | ✅ | A hidden base-class route stays out of the spec |
 | `@Transaction` ([drizzle](/docs/packages/drizzle)) | ✅ | A base class's transactional methods run inside a transaction |
+| `@Protected` / `@Public` / `@Roles` ([auth](/docs/concepts/authentication)) | ✅ | The nearest declaration wins, per class and per method name - see [below](#auth-marks-override-instead-of-adding-up) |
 | Controller-level `middlewares` | ✅ | See below — a subclass may add, never silently drop |
 | Plain methods, getters, statics | ✅ | Normal JavaScript inheritance |
 
@@ -123,6 +124,37 @@ export class AdminV2 extends AdminBase {}
 To publish a base class's routes *without* its guards, move the routes to an undecorated base class and let each concrete controller declare its own `middlewares`.
 
 Repositories behave the same way — `@Repository` and `@Database` from [`@asenajs/asena-drizzle`](/docs/packages/drizzle) keep everything the decorated class inherited, including getters and statics.
+
+## Auth marks override instead of adding up
+
+The [auth marks](/docs/concepts/authentication) behave the other way. Walking the chain ancestors
+first, the class mark and each method's mark resolve to the nearest declaration, so a subclass
+replaces what it inherited, including opening it:
+
+```typescript
+@Protected()
+abstract class ReportRoutes {
+  @Get('/')
+  public list(context: Context) {
+    return context.send({ reports: [] });
+  }
+}
+
+@Controller('/reports')
+export class ReportController extends ReportRoutes {}
+
+@Public()
+@Controller('/public/reports')
+export class PublicReportController extends ReportRoutes {}
+```
+
+`GET /reports` answers 401 without a session; `GET /public/reports` is open. A method mark on the
+subclass replaces the inherited one for that method name in the same way.
+
+The difference is deliberate. Middlewares are steps, and a step dropped without a trace is the
+danger. A mark is one decision per route, and the subclass that changes it says so in its own
+source with `@Public()` or another mark. The marks are enforced by
+[`@asenajs/asena-auth`](/docs/packages/auth#route-guards); core only records them.
 
 ## How overrides resolve
 
@@ -262,3 +294,4 @@ export class OrderController extends CrudControllerBase<Order> {
 - [Microservices](/docs/concepts/microservices) — `@MessageController` prefixes and transports
 - [Event System](/docs/concepts/event-system) — in-process `@On` handlers
 - [Drizzle](/docs/packages/drizzle) — `@Repository` and `@Database` inheritance
+- [Authentication](/docs/concepts/authentication) — the `@Protected` / `@Public` / `@Roles` marks

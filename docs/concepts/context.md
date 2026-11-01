@@ -624,6 +624,19 @@ You can still use generic types for dynamic keys: `context.getValue<string>('dyn
 Create a declaration file (e.g., `src/types/ContextState.ts`) and make sure it's included in your TypeScript compilation. The module path must be exactly `'@asenajs/asena/adapter'`.
 :::
 
+### The `authSession` Slot
+
+Core's `AsenaVariables` already declares one key: `authSession`, where an auth provider or guard
+stores the session it resolved. Leave it to them, and read it through the helpers from
+`@asenajs/asena/auth`:
+
+- `getAuthSession(context)` returns the session, `null` when the request was resolved as anonymous,
+  or `undefined` when nothing resolved it.
+- `requireAuthSession(context)` returns the session or throws a 401 `HttpException`.
+
+With [`@asenajs/asena-auth`](/docs/packages/auth), the guard fills the slot on protected routes, and
+`AuthSessionMiddleware`, registered globally, fills it on any route. See [Authentication](/docs/concepts/authentication#reading-the-session).
+
 ## WebSocket Support
 
 Context provides WebSocket-specific methods for upgrade handling.

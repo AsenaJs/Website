@@ -322,6 +322,11 @@ Now that you have a working Asena application:
     <div class="ic-title">Validation</div>
     <p class="ic-desc">Zod-based request validation on routes.</p>
   </a>
+  <a class="info-card" href="/docs/packages/auth">
+    <span class="ic-kicker">Security</span>
+    <div class="ic-title">Authentication</div>
+    <p class="ic-desc">Sessions and route guards with asena-auth.</p>
+  </a>
   <a class="info-card" href="/docs/concepts/scheduled-tasks">
     <span class="ic-kicker">Background Jobs</span>
     <div class="ic-title">Scheduled Tasks</div>

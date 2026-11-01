@@ -90,8 +90,8 @@ dependencies and serves its routes. Start with the first section, or jump to wha
   </a>
 </div>
 
-See the sidebar for the rest: static files, Ulak, frontend controllers, post-processors and
-inheritance.
+See the sidebar for the rest: authentication, static files, Ulak, frontend controllers,
+post-processors and inheritance.
 
 ## Migrate
 
@@ -130,6 +130,11 @@ inheritance.
     <span class="ic-kicker">Database</span>
     <div class="ic-title">Drizzle ORM</div>
     <p class="ic-desc">Repositories and declarative transactions.</p>
+  </a>
+  <a class="info-card" href="/docs/packages/auth">
+    <span class="ic-kicker">Security</span>
+    <div class="ic-title">Auth</div>
+    <p class="ic-desc">Server-side sessions, Better Auth and route guards.</p>
   </a>
   <a class="info-card" href="/docs/packages/openapi">
     <span class="ic-kicker">API Docs</span>

@@ -220,6 +220,12 @@ want the rejection to reach `onError` and be shaped there with the rest of your 
 
 ### Authentication Middleware
 
+::: tip For real authentication, use asena-auth
+[`@asenajs/asena-auth`](/docs/packages/auth) provides sessions, `@Protected` / `@Roles` marks and a
+guard that runs before route middlewares and validators. The middleware below and the role check
+after it show how a middleware rejects a request; they are not a complete authentication scheme.
+:::
+
 ::: code-group
 
 ```typescript [Ergenecore]
@@ -550,11 +556,17 @@ globalMiddlewares()   ← array order, pattern-based entries included
   ↓
 Controller Middleware
   ↓
+Auth Guard            ← @Protected / @Roles routes, when asena-auth is imported
+  ↓
 Route Middleware
+  ↓
+Validator or Context.define contract
   ↓
 Route Handler
   ↓
 Route Middleware
+  ↓
+Auth Guard
   ↓
 Controller Middleware
   ↓
@@ -569,8 +581,10 @@ first makes it run first. Controller-level middleware always follows the whole g
 because the config is applied before controllers are registered.
 :::
 
-Validation runs after the whole middleware chain, right before the handler. The same order holds
-on both adapters:
+The auth guard is the [`@asenajs/asena-auth`](/docs/packages/auth#route-guards) middleware placed in
+front of a protected route's own middlewares. An anonymous request stops there with a 401, so the
+route middlewares and the validator never see it. Validation runs after the route middlewares,
+right before the handler. The same order holds on both adapters:
 
 <DocDiagram id="request-pipeline" />
 
@@ -725,6 +739,7 @@ public globalMiddlewares() {
 
 - [Controllers](/docs/concepts/controllers) - Attaching middleware to routes
 - [Validation](/docs/concepts/validation) - Request validation with Zod
+- [Authentication](/docs/concepts/authentication) - The `@Protected` / `@Roles` marks and their guard
 - [Context API](/docs/concepts/context) - Working with Context inside middleware
 - [Configuration](/docs/guides/configuration) - Registering global middleware
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features

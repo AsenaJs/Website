@@ -19,10 +19,10 @@ Practical examples showing how to build real applications with Asena. Each examp
     <div class="ic-title">WebSocket Chat</div>
     <p class="ic-desc">Rooms, publishing and broadcasting.</p>
   </a>
-  <a class="info-card" href="#authentication-with-middleware">
+  <a class="info-card" href="#authentication">
     <span class="ic-kicker">Auth</span>
-    <div class="ic-title">JWT Authentication</div>
-    <p class="ic-desc">Token login and protected routes via middleware.</p>
+    <div class="ic-title">Authentication</div>
+    <p class="ic-desc">Session login and role-guarded routes with asena-auth.</p>
   </a>
   <a class="info-card" href="#rate-limiting">
     <span class="ic-kicker">Protection</span>
@@ -71,8 +71,6 @@ my-api/
 │   │   └── UserService.ts
 │   ├── contracts/
 │   │   └── UserContracts.ts
-│   ├── middlewares/
-│   │   └── AuthMiddleware.ts
 │   ├── repositories/
 │   │   └── UserRepository.ts
 │   ├── database.ts
@@ -461,168 +459,202 @@ For full documentation, see [WebSocket](/docs/concepts/websocket).
 
 ---
 
-## Authentication with Middleware
+## Authentication
 
-Implementing JWT authentication with middleware.
+Registration, session login and role-guarded routes with
+[`@asenajs/asena-auth`](/docs/packages/auth): server-side sessions, a cookie for browsers and a
+Bearer token for everything else.
 
-### Typed Context State
-
-Declare what middleware puts on the context once, and `getValue()` / `setValue()` are type-checked
-everywhere:
-
-```typescript
-// src/types/ContextState.ts
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: 'user' | 'admin';
-}
-
-declare module '@asenajs/asena/adapter' {
-  interface AsenaVariables {
-    user: AuthUser;
-  }
-}
+```bash
+bun add @asenajs/asena-auth
 ```
 
-### Auth Service
+### Auth Provider
+
+Sessions live in an in-process store by default; see
+[Custom Session Store](/docs/packages/auth#custom-session-store) for one shared between instances.
 
 ```typescript
-// src/services/AuthService.ts
+// src/auth/AppAuth.ts
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+
+@Auth({ sessionTtl: 3600 })
+export class AppAuth extends AsenaAuthService {}
+```
+
+### User Service
+
+The provider hashes and verifies passwords with `Bun.password`. `UserRepository` is yours: any
+repository with `create` and `findByEmail` over a table holding `email`, `passwordHash` and `roles`,
+with `roles` defaulting to `['user']`.
+
+```typescript
+// src/services/UserService.ts
 import { Service } from '@asenajs/asena/decorators';
-import { HttpException } from '@asenajs/asena/adapter';
-import type { AuthUser } from '../types/ContextState';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { AppAuth } from '../auth/AppAuth';
+import { UserRepository } from '../repositories/UserRepository';
 
 @Service()
-export class AuthService {
-  async login(email: string, password: string): Promise<string> {
-    // Replace with a real credential check and JWT signing
-    if (email === 'user@example.com' && password === 'password') {
-      return 'valid-token';
-    }
+export class UserService {
+  @Inject(AppAuth)
+  private auth: AppAuth;
 
-    throw new HttpException(401, { error: 'Invalid credentials' });
+  @Inject(UserRepository)
+  private users: UserRepository;
+
+  async register(email: string, password: string) {
+    return this.users.create({ email, passwordHash: await this.auth.hashPassword(password) });
   }
 
-  async verifyToken(token: string): Promise<AuthUser> {
-    // Replace with real JWT verification
-    if (token === 'valid-token') {
-      return { id: '123', email: 'user@example.com', role: 'user' };
-    }
+  async verifyCredentials(email: string, password: string) {
+    const user = await this.users.findByEmail(email);
 
-    throw new HttpException(401, { error: 'Invalid token' });
+    return user && (await this.auth.verifyPassword(password, user.passwordHash)) ? user : null;
   }
 }
 ```
 
-### Auth Middleware
+### Auth Controller
 
-```typescript
-// src/middlewares/AuthMiddleware.ts
-import { Middleware } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HttpException } from '@asenajs/asena/adapter';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
-import { AuthService } from '../services/AuthService';
-
-@Middleware()
-export class AuthMiddleware extends MiddlewareService {
-  @Inject(AuthService)
-  private authService: AuthService;
-
-  async handle(context: Context, next: () => Promise<void>) {
-    const header = context.req.headers.get('authorization');
-
-    if (!header?.startsWith('Bearer ')) {
-      throw new HttpException(401, { error: 'No token provided' });
-    }
-
-    context.setValue('user', await this.authService.verifyToken(header.slice(7)));
-
-    await next();
-  }
-}
-```
-
-A thrown `HttpException` reaches your [`onError`](/docs/guides/error-handling) first; when nothing
-answers it there, its own status and body become the response.
-
-### Protected Controller
-
-```typescript
-// src/controllers/ProfileController.ts
-import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
-
-@Controller({ path: '/profile', middlewares: [AuthMiddleware] })
-export class ProfileController {
-  @Get('/')
-  async getProfile(context: Context) {
-    return context.send({ user: context.getValue('user') });
-  }
-
-  @Get('/settings')
-  async getSettings(context: Context) {
-    const user = context.getValue('user'); // AuthUser
-
-    return context.send({ userId: user.id, settings: {} });
-  }
-}
-```
-
-### Login Controller
-
-The login body is a [route context contract](/docs/concepts/validation#route-context-contracts):
-a malformed body gets a 400 before `login` runs, and `context.input.body` is typed from the schema.
+The body is a [route context contract](/docs/concepts/validation#route-context-contracts): a
+malformed body gets a 400 before the handler runs. `createSession` stores a session and returns
+its opaque token; `applySessionCookie` writes it as the `asena_session` cookie for browsers, and
+the token in the body is for clients that send `Authorization: Bearer <token>`.
 
 ```typescript
 // src/controllers/AuthController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
+import { applySessionCookie } from '@asenajs/asena-auth';
 import { Context } from '@asenajs/ergenecore';
 import { z } from 'zod';
-import { AuthService } from '../services/AuthService';
+import { AppAuth } from '../auth/AppAuth';
+import { UserService } from '../services/UserService';
 
-class LoginContext extends Context.define({
+class CredentialsContext extends Context.define({
   body: z.object({
     email: z.email(),
-    password: z.string().min(1),
+    password: z.string().min(8),
   }),
 }) {}
 
 @Controller('/auth')
 export class AuthController {
-  @Inject(AuthService)
-  private authService: AuthService;
+  @Inject(AppAuth)
+  private auth: AppAuth;
+
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Post('/register')
+  async register(context: CredentialsContext) {
+    const { email, password } = context.input.body;
+    const user = await this.userService.register(email, password);
+
+    return context.send({ id: user.id }, 201);
+  }
 
   @Post('/login')
-  async login(context: LoginContext) {
+  async login(context: CredentialsContext) {
     const { email, password } = context.input.body;
+    const user = await this.userService.verifyCredentials(email, password);
 
-    return context.send({ token: await this.authService.login(email, password) });
+    if (!user) {
+      return context.send({ error: 'Invalid email or password' }, 401);
+    }
+
+    const { token } = await this.auth.createSession({ id: user.id, roles: user.roles });
+
+    await applySessionCookie(context, this.auth, token);
+
+    return context.send({ token });
   }
 }
+```
+
+### Protected Controller
+
+`@Protected()` on the class guards every route; `@Roles('admin')` on a method narrows that route
+to sessions holding the role.
+
+```typescript
+// src/controllers/ProfileController.ts
+import { Protected, Roles, requireAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/profile')
+export class ProfileController {
+  @Get('/')
+  async getProfile(context: Context) {
+    const { user } = requireAuthSession(context);
+
+    return context.send({ id: user.id, roles: user.roles });
+  }
+
+  @Roles('admin')
+  @Get('/audit')
+  async getAudit(context: Context) {
+    return context.send({ entries: [] });
+  }
+}
+```
+
+### Entry Point
+
+The guard ships inside the package, so it reaches the container through
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages). Without it,
+`@Protected` is only a mark and the routes are served open.
+
+```typescript
+// src/index.ts
+import { AsenaServerFactory } from '@asenajs/asena';
+import { authComponents } from '@asenajs/asena-auth';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { logger } from './logger';
+
+const adapter = createErgenecoreAdapter();
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000,
+  imports: [...authComponents],
+});
+
+await server.start();
 ```
 
 ### Usage
 
 ```bash
-# Login
-curl -X POST http://localhost:3000/auth/login \
+# Register, then log in: the token comes back in the body and as the asena_session cookie
+curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password"}'
+  -d '{"email":"ada@example.com","password":"correct-horse"}'
 
-# Response: {"token":"valid-token"}
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","password":"correct-horse"}'
 
-# Access protected route
-curl http://localhost:3000/profile \
-  -H "Authorization: Bearer valid-token"
+# No session: 401 with WWW-Authenticate: Bearer
+curl -i http://localhost:3000/profile
 
-# Response: {"user":{"id":"123","email":"user@example.com","role":"user"}}
+# With the token
+curl http://localhost:3000/profile -H "Authorization: Bearer $TOKEN"
+# {"id":"u1","roles":["user"]}
+
+# A session without the admin role: 403
+curl -i http://localhost:3000/profile/audit -H "Authorization: Bearer $TOKEN"
 ```
+
+::: info
+For providers, session management, Better Auth and testing, see [Asena Auth](/docs/packages/auth).
+:::
 
 ---
 
@@ -632,6 +664,7 @@ Using built-in rate limiter middleware.
 
 ```typescript
 // src/middlewares/ApiRateLimiter.ts
+import { getAuthSession } from '@asenajs/asena/auth';
 import { Middleware } from '@asenajs/asena/decorators';
 import { RateLimiterMiddleware } from '@asenajs/ergenecore';
 
@@ -641,23 +674,24 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
     super({
       capacity: 100,        // 100 requests
       refillRate: 100 / 60, // per minute
-      // Per user once AuthMiddleware has run, otherwise per client IP
-      keyGenerator: (ctx) => ctx.getValue('user')?.id ?? ctx.getRequestIp() ?? 'unknown',
+      // Per user on a protected route, otherwise per client IP
+      keyGenerator: (ctx) => getAuthSession(ctx)?.user.id ?? ctx.getRequestIp() ?? 'unknown',
       trustProxy: true,     // one reverse proxy in front: read the client from X-Forwarded-For
-      skip: (ctx) => ctx.getValue('user')?.role === 'admin',
+      skip: (ctx) => getAuthSession(ctx)?.user.roles?.includes('admin') ?? false,
       cost: (ctx) => (new URL(ctx.req.url).pathname.endsWith('/export') ? 10 : 1),
     });
   }
 }
 
 // src/controllers/ReportController.ts
+import { Protected } from '@asenajs/asena/auth';
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import { ApiRateLimiter } from '../middlewares/ApiRateLimiter';
 
-@Controller({ path: '/reports', middlewares: [AuthMiddleware] })
+@Protected()
+@Controller('/reports')
 export class ReportController {
   @Get({ path: '/', middlewares: [ApiRateLimiter] })
   async list(context: Context) {
@@ -671,8 +705,8 @@ export class ReportController {
 }
 ```
 
-Controller middleware runs before route middleware, so `user` is already set when the limiter
-reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
+The [asena-auth](#authentication) guard runs before route middleware, so the session is already
+on the context when the limiter reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
 client could otherwise pick its own bucket by sending the header.
 
 ---

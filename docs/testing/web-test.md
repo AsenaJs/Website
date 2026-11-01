@@ -161,6 +161,53 @@ const { mocks } = await createWebTest({
 expect(mocks.UserService).toBe(double);
 ```
 
+## Protected routes
+
+A controller marked [`@Protected` / `@Roles`](/docs/concepts/authentication) needs the
+[asena-auth](/docs/packages/auth) guard in the slice, or the marks are not enforced.
+`createWebTest` has no `imports`, so the package's components go into `components`, next to a
+`TestAuthProvider` from `@asenajs/asena-auth/testing` that turns a request header into a session:
+
+```typescript
+import { describe, test } from 'bun:test';
+import { createWebTest } from '@asenajs/asena/test';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { authComponents } from '@asenajs/asena-auth';
+import { TestAuth, TestAuthProvider } from '@asenajs/asena-auth/testing';
+import { ProjectController } from '../src/controllers/ProjectController';
+
+@TestAuth({
+  users: {
+    ada: { id: 'u1', roles: ['admin'] },
+    bob: { id: 'u2', roles: ['user'] },
+  },
+})
+class AppTestAuth extends TestAuthProvider {}
+
+describe('ProjectController', () => {
+  test('guards by role', async () => {
+    const { app } = await createWebTest({
+      adapter: createErgenecoreAdapter(),
+      controllers: [ProjectController],
+      components: [...authComponents, AppTestAuth],
+    });
+
+    try {
+      await app.get('/projects').expectStatus(401);
+      await app.get('/projects', { headers: { 'x-test-user': 'bob' } }).expectStatus(200);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'bob' } }).expectStatus(403);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'ada' } }).expectStatus(200);
+    } finally {
+      await app.stop();
+    }
+  });
+});
+```
+
+The `x-test-user` header names a key of `users`; a missing header or an unknown key is no session.
+See [Testing](/docs/packages/auth#testing) on the package page for the other options and for
+testing against a real provider.
+
 ## Known behaviours
 
 - **`@OnStart` runs against mocks.** A real component whose dependency was auto-mocked will see async mock methods resolve `null` during its [start hook](/docs/concepts/lifecycle). This matches `@WebMvcTest` semantics.

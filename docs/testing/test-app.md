@@ -106,6 +106,24 @@ await using app = await createTestApp({
 See [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) for the
 full contract.
 
+[asena-auth](/docs/packages/auth)'s guard arrives the same way. With a real provider in
+`components`, a test creates a session through it and sends the token:
+
+```typescript
+await using app = await createTestApp({
+  adapter: createErgenecoreAdapter(),
+  components: [AppAuth, MeController],
+  imports: [...authComponents],
+});
+const auth = await app.resolve<AppAuth>('AppAuth');
+const { token } = await auth.createSession({ id: 'u1', roles: ['user'] });
+
+await app.get('/me', { headers: { authorization: `Bearer ${token}` } }).expectStatus(200);
+```
+
+A test that does not need a real provider can use the header-driven `TestAuthProvider` instead -
+see [Protected routes](/docs/testing/web-test#protected-routes).
+
 ### `port`
 
 Defaults to `0`, which asks Bun for a free ephemeral port. Read the bound port back from `app.port`:

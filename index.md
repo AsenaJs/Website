@@ -13,7 +13,7 @@ title: Asena
 
 <p class="lp-hero-text">The IoC web framework for Bun</p>
 
-<p class="lp-hero-tagline">Spring-style component discovery and field injection, in TypeScript — running at native Bun speed. Controllers, services, validation, OpenAPI, tracing and microservices all come out of one container.</p>
+<p class="lp-hero-tagline">Spring-style component discovery and field injection, in TypeScript — running at native Bun speed. Controllers, services, validation, authentication, OpenAPI, tracing and microservices all come out of one container.</p>
 
 <CopyCmd cmd="bun install -g @asenajs/asena-cli && asena create my-app" />
 
@@ -194,6 +194,41 @@ export class UserController {
   ui: 'scalar', // or 'swagger' — served at /api/openapi/ui
 })
 export class AppOpenApi extends OpenApiPostProcessor {}
+```
+
+</div>
+
+</div>
+</div>
+
+<div class="lp-feat" data-reveal>
+<div class="lp-cols">
+
+<div class="lp-cols-text">
+<span class="lp-eyebrow">Authentication</span>
+<h2 class="lp-h2">An anonymous request never reaches your validator</h2>
+<p class="lp-lead">Mark a controller or a route with <code>@Protected</code> or <code>@Roles</code>. The guard answers 401 or 403 before the route's middlewares, its validation and the handler run — with server-side sessions or Better Auth behind the same marks, on either adapter.</p>
+<div class="lp-pills"><a class="lp-pill" href="/docs/packages/auth">asena-auth</a><span class="lp-pill">Sessions</span><span class="lp-pill">Better Auth</span><span class="lp-pill">Roles</span></div>
+<a class="lp-more" href="/docs/concepts/authentication">How the marks are enforced →</a>
+</div>
+
+<div class="lp-code">
+
+```typescript
+@Protected()
+@Controller('/projects')
+export class ProjectController {
+  @Get('/')
+  list(context: Context) {
+    return context.send({ projects: [] });
+  }
+
+  @Roles('admin')
+  @Delete('/:id')
+  remove(context: Context) {
+    return context.send({ deleted: context.getParam('id') });
+  }
+}
 ```
 
 </div>

@@ -395,7 +395,7 @@ sendPrivateMessage(targetSocketId: string, message: string) {
 
 ## WebSocket Middleware
 
-Just like controllers, WebSocket services support middleware! This is the **recommended way** to handle authentication, logging, and rate limiting.
+Just like controllers, WebSocket services support middleware. It runs on the upgrade request, before the socket opens, which makes it the place for authentication, origin checks, logging and rate limiting. For authentication, [`@asenajs/asena-auth`](/docs/packages/auth) ships a ready middleware - see [Authenticating Sockets](#authenticating-sockets).
 
 ### Creating WebSocket Middleware
 
@@ -531,6 +531,69 @@ const ws = new WebSocket('ws://localhost:3000/private', {
   }
 });
 ```
+
+### Authenticating Sockets
+
+`@Protected` and `@Roles` apply to `@Controller` routes only; on a `@WebSocket` namespace they are
+ignored and the boot logs a warning. A namespace authenticates with
+[`@asenajs/asena-auth`](/docs/packages/auth)'s `AuthWebSocketMiddleware`, which resolves the session
+on the upgrade request and stores it in `ws.data.values.authSession`. The package reaches the
+container through `imports: [...authComponents]`.
+
+List a `WebSocketOriginMiddleware` subclass from your adapter before it, to accept handshakes only
+from your own pages:
+
+```typescript
+// src/middlewares/ChatOrigin.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { WebSocketOriginMiddleware } from '@asenajs/ergenecore';
+
+@Middleware()
+export class ChatOrigin extends WebSocketOriginMiddleware {
+  constructor() {
+    super({ allowedOrigins: ['https://app.example.com'] });
+  }
+}
+```
+
+```typescript
+// src/sockets/ChatSocket.ts
+import type { AuthSession } from '@asenajs/asena/auth';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+import { AuthWebSocketMiddleware } from '@asenajs/asena-auth';
+import { ChatOrigin } from '../middlewares/ChatOrigin';
+
+interface ChatData {
+  authSession: AuthSession;
+}
+
+@WebSocket({ path: '/chat', name: 'ChatSocket', middlewares: [ChatOrigin, AuthWebSocketMiddleware] })
+export class ChatSocket extends AsenaWebSocketService<ChatData> {
+  protected async onOpen(ws: Socket<ChatData>): Promise<void> {
+    ws.send(`Welcome, ${ws.data.values.authSession.user.id}`);
+  }
+}
+```
+
+A browser cannot set headers on a WebSocket, so it sends its token as the subprotocol pair
+`bearer, <token>`:
+
+```typescript
+const socket = new WebSocket('wss://api.example.com/chat', ['bearer', token]);
+```
+
+- Without a session the upgrade is answered 401 with `WWW-Authenticate: Bearer`, and the socket
+  never opens.
+- A page on the same origin can rely on the session cookie instead. Server-side clients send
+  `Authorization: Bearer <token>`.
+- The origin check comes first because a browser attaches cookies to a cross-site handshake.
+  asena-auth already refuses a cross-site upgrade that carries only the cookie;
+  `WebSocketOriginMiddleware` narrows the accepted pages to the origins you list.
+- `WebSocketOriginMiddleware` rejects a handshake without an `Origin` header. Browsers always send
+  one; pass `allowMissingOrigin: true` when server-side clients connect too.
+
+See [Bearer Tokens and WebSocket](/docs/packages/auth#bearer-tokens-and-websocket) for the details.
 
 ## Using WebSocket in Services
 
