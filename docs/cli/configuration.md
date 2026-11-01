@@ -40,7 +40,7 @@ interface AsenaConfig {
 type BuildOptions = Partial<
   Pick<
     Bun.BuildConfig,
-    'outdir' | 'sourcemap' | 'minify' | 'external' | 'format' | 'drop'
+    'outdir' | 'sourcemap' | 'minify' | 'external' | 'format' | 'drop' | 'splitting'
   >
 >;
 ```
@@ -195,6 +195,7 @@ The `entrypoints` and `target` properties are managed internally by Asena CLI an
 - `external` - Dependencies to exclude from bundling
 - `format` - Output module format (ESM/CJS)
 - `drop` - Remove function calls from bundle (e.g., `console`, `debugger`)
+- `splitting` - Emit dynamically imported code as separate chunks
 
 ## Build Options Reference
 
@@ -319,6 +320,38 @@ export default defineConfig({
   },
 });
 ```
+
+### splitting
+
+**Type:** `boolean`
+**Default:** `false`
+
+By default the build writes a single `index.asena.js`. Code reached only through `await import()`
+goes into that file too: it is not run until the import happens, but it is still loaded and parsed
+at startup. With `splitting: true`, each dynamically imported module becomes its own chunk file
+next to `index.asena.js`, and the process loads it only when the import runs.
+
+```typescript
+export default defineConfig({
+  buildOptions: {
+    outdir: 'dist',
+    splitting: true,
+  },
+});
+```
+
+Packages that load optional parts on demand benefit most. `@asenajs/asena-drizzle` imports only the
+driver for the configured `type`, so a `bun-sql` application never loads the PostgreSQL or MySQL
+driver code. In a minimal `bun-sql` application, enabling `splitting` shrank `index.asena.js`
+from 1.67 MB to 91 KB, startup from 51 ms to 45 ms and resident memory from 44.7 MB to 42.8 MB.
+The total size of `dist/` stays the same; the code is only divided.
+
+::: warning Deploy the whole output directory
+With `splitting` enabled, `dist/` holds `index.asena.js` and `chunk-*.js` files that it imports
+at runtime. A deployment that copies only `index.asena.js`, such as a Dockerfile with
+`COPY dist/index.asena.js`, fails with a module-not-found error the first time a chunk is needed.
+Copy the whole directory.
+:::
 
 ### minify
 

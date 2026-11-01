@@ -49,6 +49,10 @@ bun dist/index.asena.js
   `asena doctor` checks for this.
 :::
 
+For a smaller entry file and a faster startup, enable
+[`buildOptions.splitting`](/docs/cli/configuration#splitting). The build then writes chunk files
+next to `index.asena.js`, so ship the whole `dist/` directory rather than the single file.
+
 ## Graceful Shutdown and Probes
 
 Two things a deployment needs are already available:
