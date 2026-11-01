@@ -136,6 +136,7 @@ export default defineConfig({
                 text: "Official Packages",
                 items: [
                     {text: "Logger", link: "/docs/packages/logger"},
+                    {text: "Auth", link: "/docs/packages/auth"},
                     {text: "Drizzle ORM", link: "/docs/packages/drizzle"},
                     {text: "OpenAPI", link: "/docs/packages/openapi"},
                     {text: "OpenTelemetry", link: "/docs/packages/opentelemetry"},
