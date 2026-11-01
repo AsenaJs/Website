@@ -163,7 +163,8 @@ function render(data: Snapshot, file: string, text: string): string {
   let rendered = 0;
   const out = text.replace(BENCH_REGION, (_, name: string, rawArgs: string, content: string) => {
     rendered++;
-    const block = content.startsWith('\n');
+    const block = /^\r?\n/.test(content);
+    const eol = content.startsWith('\r\n') ? '\r\n' : '\n';
     const renderer = (block ? BLOCK : INLINE)[name];
 
     if (!renderer) throw new Error(`${file}: no ${block ? 'block' : 'inline'} renderer "${name}"`);
@@ -176,7 +177,7 @@ function render(data: Snapshot, file: string, text: string): string {
       throw new Error(`${file}: bench:${name}${rawArgs}: ${(error as Error).message}`);
     }
 
-    return `<!-- bench:${name}${rawArgs} -->${block ? `\n\n${body}\n\n` : body}<!-- /bench:${name} -->`;
+    return `<!-- bench:${name}${rawArgs} -->${block ? `\n\n${body}\n\n`.replace(/\n/g, eol) : body}<!-- /bench:${name} -->`;
   });
   const opened = text.match(BENCH_OPENER)?.length ?? 0;
 
@@ -247,14 +248,96 @@ function snapshotFromReport(reportPath: string): Snapshot {
   };
 }
 
-/** docs/benchmarks.md is generated in the benchmark repo; it prints every target's plaintext figure. */
+const PAGE_APPS: Record<string, string> = {
+  'Asena Ergenecore': 'asena-ergenecore',
+  'Asena Hono': 'asena-hono',
+  'NestJS Express': 'nest-express',
+  'NestJS Fastify': 'nest-fastify',
+  Elysia: 'elysia',
+  Hono: 'hono',
+  Fastify: 'fastify',
+  Express: 'express',
+};
+
+const PAGE_COLUMNS: Record<string, string> = {
+  Plaintext: 's1a',
+  'JSON serialization': 's1b',
+  'Query string parsing': 's2a',
+  'Path parameters': 's2b',
+  'Full API endpoint': 's3',
+  'Request validation': 's5',
+  'DB read by id': 's6a',
+  'Static 4 KB': 's4a',
+};
+
+const PAGE_ORM_ROWS: Record<string, string> = { 'read by id': 's6a', 'paged list': 's6b', insert: 's6c' };
+
+function sectionTable(page: string, heading: string): string[][] {
+  const section = page.split(/^## /m).find((s) => s.startsWith(`${heading}\n`));
+  const rows = (section ?? '').split('\n').filter((line) => line.startsWith('|'));
+
+  if (rows.length < 3) throw new Error(`docs/benchmarks.md has no "${heading}" table`);
+
+  return rows.map((line) => line.slice(1, -1).split('|').map((cell) => cell.replace(/\s+/g, ' ').trim()));
+}
+
+/**
+ * docs/benchmarks.md is generated in the benchmark repo. Its full-results table, its ORM table and its
+ * methodology must print exactly the snapshot's figures, target by target, or the two came from different sweeps.
+ */
 function assertSameSweepAsBenchmarkPage(data: Snapshot): void {
   const page = readFileSync(BENCHMARK_PAGE, 'utf8');
-  const missing = Object.keys(data.targets).filter((name) => !page.includes(n(rps(data, name, 's1a'))));
+  const mismatches: string[] = [];
+  const expect = (where: string, shown: string | undefined, name: string, scenario: string) => {
+    const value = data.targets[name]?.rps[scenario];
+    const wanted = value === undefined ? 'nothing' : n(value);
 
-  if (missing.length) {
+    if (shown !== wanted) mismatches.push(`${where}: page ${shown ?? 'nothing'}, snapshot ${wanted}`);
+  };
+
+  const [head, , ...results] = sectionTable(page, 'Full results');
+  const seen = new Set<string>();
+
+  for (const row of results) {
+    const app = PAGE_APPS[row[0]!];
+    const name = `${app}-${row[1]!.toLowerCase()}`;
+
+    if (!app) throw new Error(`docs/benchmarks.md full results: unknown framework "${row[0]}"`);
+
+    seen.add(name);
+    head!.slice(2).forEach((column, i) => {
+      const scenario = PAGE_COLUMNS[column];
+
+      if (!scenario) throw new Error(`docs/benchmarks.md full results: unknown column "${column}"`);
+
+      expect(`${name} ${scenario}`, row[i + 2], name, scenario);
+    });
+  }
+
+  for (const name of Object.keys(data.targets)) {
+    if (!seen.has(name)) mismatches.push(`${name}: in the snapshot, not on the page`);
+  }
+
+  const [, , ...orm] = sectionTable(page, 'What an ORM costs');
+
+  for (const [operation, raw, drizzle] of orm) {
+    const scenario = PAGE_ORM_ROWS[operation!];
+
+    if (!scenario) throw new Error(`docs/benchmarks.md ORM table: unknown operation "${operation}"`);
+
+    expect(`asena-ergenecore-bun ${scenario}`, raw, 'asena-ergenecore-bun', scenario);
+    expect(`asena-ergenecore-bun ${scenario}-orm`, drizzle, 'asena-ergenecore-bun', `${scenario}-orm`);
+  }
+
+  const { memoryLimit, connections } = data.environment;
+
+  if (!page.includes(`${memoryLimit} RAM** per server`)) mismatches.push(`methodology: no ${memoryLimit} server budget`);
+  if (!page.includes(`${connections} connections`)) mismatches.push(`methodology: no ${connections} connections`);
+
+  if (mismatches.length) {
     throw new Error(
-      `data/benchmarks.json and docs/benchmarks.md come from different sweeps (plaintext differs for ${missing.join(', ')}).\n` +
+      `data/benchmarks.json and docs/benchmarks.md come from different sweeps:\n    ${mismatches.slice(0, 8).join('\n    ')}` +
+        `${mismatches.length > 8 ? `\n    … ${mismatches.length - 8} more` : ''}\n` +
         '  Both must come from the same results/report.json of an AsenaJs/benchmark checkout:\n' +
         '    bun tools/website-page.ts <this Website checkout>          (in the benchmark checkout)\n' +
         '    bun scripts/generate-bench.ts --report <benchmark checkout>/results/report.json',

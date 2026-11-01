@@ -23,7 +23,7 @@ Ergenecore is a high-performance adapter that:
 
 ### Performance
 
-Ergenecore is the **fastest** Asena adapter:
+Ergenecore leads the Asena adapters on plaintext and JSON serialization:
 
 <!-- bench:table s1a,s1b asena-ergenecore-bun,asena-hono-bun,nest-express-bun bold=asena-ergenecore-bun -->
 
