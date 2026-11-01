@@ -126,14 +126,15 @@ export class UserController {
 
 <div class="lp-cols-text">
 <span class="lp-eyebrow">Benchmarks</span>
-<div class="lp-bench-num">2.59<span>×</span></div>
+<div class="lp-bench-num"><!-- bench:ratio asena-ergenecore-bun s1a nest-express-node s1a -->2.59<!-- /bench:ratio --><span>×</span></div>
 <h2 class="lp-h2">Faster than NestJS, with nothing tuned</h2>
-<p class="lp-lead">Byte-for-byte identical workloads on the same machine, one CPU and 2 GB per server, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
+<p class="lp-lead">Byte-for-byte identical workloads on the same machine, <!-- bench:cpus -->one CPU<!-- /bench:cpus --> and <!-- bench:memory -->2 GB<!-- /bench:memory --> per server, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
 <a class="lp-more" href="/docs/benchmarks">Full methodology →</a>
 <a class="lp-more" href="https://github.com/AsenaJs/benchmark">Run it yourself →</a>
 </div>
 
 <div class="lp-bars">
+<!-- bench:landing-bars asena-ergenecore-bun nest-express-node s1a,s5,s6a-orm,s3 -->
 
 <div class="lp-bar-row">
 <div class="lp-bar-head"><b>Plaintext</b><span>2.59× faster</span></div>
@@ -159,6 +160,7 @@ export class UserController {
 <div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:24.4%"></span></div><span class="lp-bar-val"><b>51,650</b> NestJS</span></div>
 </div>
 
+<!-- /bench:landing-bars -->
 </div>
 
 </div>

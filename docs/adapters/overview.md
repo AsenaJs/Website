@@ -29,14 +29,14 @@ Asena currently provides two official adapters:
     <span class="ic-kicker">Native Bun</span>
     <div class="ic-title">Ergenecore</div>
     <p class="ic-desc">Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices.</p>
-    <span class="ic-stat">152k req/s</span>
+    <span class="ic-stat"><!-- bench:krps asena-ergenecore-bun s1a -->212k<!-- /bench:krps --> req/s</span>
     <span class="ic-stat-label">plaintext · measured on the published benchmark</span>
   </a>
   <a class="info-card" href="/docs/adapters/hono">
     <span class="ic-kicker">Hono Ecosystem</span>
     <div class="ic-title">Hono Adapter</div>
     <p class="ic-desc"><code>hono</code> and <code>zod</code> as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun.</p>
-    <span class="ic-stat">142k req/s</span>
+    <span class="ic-stat"><!-- bench:krps asena-hono-bun s1a -->191k<!-- /bench:krps --> req/s</span>
     <span class="ic-stat-label">plaintext · measured on the published benchmark</span>
   </a>
 </div>
@@ -45,14 +45,18 @@ Identical application code runs on both — only the adapter import changes. See
 
 ## Performance Comparison
 
-Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections:
+Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, <!-- bench:cpus -->one CPU<!-- /bench:cpus --> and <!-- bench:memory -->2 GB<!-- /bench:memory --> per server, `wrk` at <!-- bench:connections -->128<!-- /bench:connections --> connections. The database column reads through each stack's ORM: Drizzle for Asena, TypeORM for NestJS.
 
-| Adapter            | Runtime | Plaintext | JSON serialization | DB read by id |
-|:-------------------|:--------|----------:|-------------------:|--------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**      | **64,995**    |
-| **Hono adapter**   | Bun     | 141,822   | 132,708            | 62,664        |
-| NestJS · Express   | Bun     | 65,750    | 63,540             | 15,148        |
-| NestJS · Express   | Node    | 57,408    | 57,824             | 15,461        |
+<!-- bench:table s1a,s1b,s6a-orm asena-ergenecore-bun,asena-hono-bun,nest-express-bun,nest-express-node bold=asena-ergenecore-bun -->
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Database · read by id, ORM |
+|:-----------------|:--------|------------:|-------------------:|---------------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |                 **46,422** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |                     45,683 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |                     26,737 |
+| NestJS · Express | Node    |      81,623 |             80,660 |                     26,636 |
+
+<!-- /bench:table -->
 
 ::: tip
 Full methodology — hardware, load generator, isolation and the byte-level conformance gate — is documented on the [Benchmarks](/docs/benchmarks) page.
