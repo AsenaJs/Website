@@ -497,6 +497,13 @@ The exit code is `1` when any check failed and `0` otherwise, so it drops straig
 | `direct-dependencies` | `@asenajs/asena` and `reflect-metadata` are direct dependencies, plus `hono` / `zod` when the matching adapter is installed — they are [peer dependencies](/docs/adapters/overview) your project owns |
 | `duplicate-packages` | `@asenajs/asena`, `hono` and `zod` each resolve to a single version under `node_modules` (including the `.bun` store) |
 | `peer-ranges` | Every installed `@asenajs/*` package's peer range for `@asenajs/asena` is satisfied by the installed core version |
+| `auth-enforcement` | When `Protected` or `Roles` is imported from `@asenajs/asena/auth`, `authComponents` or `AuthGuard` is imported from `@asenajs/asena-auth` — without the [guard](/docs/packages/auth#route-guards) the marks are metadata only and those routes are served open |
+| `auth-better-auth-dep` | When the Better Auth provider of `@asenajs/asena-auth` is used (`@BetterAuth`, `BetterAuthService` or `BetterAuthController`), `better-auth` is in `package.json` and installed |
+| `auth-cookie` | The literal `cookie` options of each `@Auth` provider form a cookie browsers accept: a `__Host-` name has no `domain`, a `path` of `'/'` and no `secure: false`; a `__Secure-` name has no `secure: false`; `sameSite: 'none'` comes without `secure: false` |
+
+The three `auth-*` checks read your source files as text, skipping `node_modules`, `dist` and
+comments, and pass when they do not apply. `auth-cookie` evaluates literal values only; an option
+computed at runtime is not checked.
 
 ### Output
 
@@ -505,8 +512,12 @@ The exit code is `1` when any check failed and `0` otherwise, so it drops straig
 ✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
   hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
 ✓ direct-dependencies — all required packages are direct dependencies
-✓ duplicate-packages — @asenajs/asena@0.11.0, hono@4.12.9, zod@4.4.3
-✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.11.0
+✓ duplicate-packages — @asenajs/asena@0.12.3, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.12.3
+✗ auth-enforcement — @Protected/@Roles imported at src/controllers/MeController.ts:1 and @asenajs/asena-auth is a dependency, but neither authComponents nor AuthGuard is imported from it - the markers are metadata only and those routes are served open
+  hint: add `imports: [...authComponents]` (from @asenajs/asena-auth) to AsenaServerFactory.create
+✓ auth-better-auth-dep — Better Auth provider of @asenajs/asena-auth not used
+✓ auth-cookie — no browser-rejected combination in the literal @Auth cookie options
 ```
 
 A failing check prints an indented `hint:` line with the fix. A check that cannot run at all — no
