@@ -485,7 +485,8 @@ export class AppAuth extends AsenaAuthService {}
 ### User Service
 
 The provider hashes and verifies passwords with `Bun.password`. `UserRepository` is yours: any
-repository with `create` and `findByEmail` over a table holding `email`, `passwordHash` and `roles`.
+repository with `create` and `findByEmail` over a table holding `email`, `passwordHash` and `roles`,
+with `roles` defaulting to `['user']`.
 
 ```typescript
 // src/services/UserService.ts
