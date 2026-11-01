@@ -23,16 +23,20 @@ Ergenecore is a high-performance adapter that:
 
 ### Performance
 
-Ergenecore is the **fastest** Asena adapter:
+Ergenecore leads the Asena adapters on plaintext and JSON serialization:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization |
-|:-------------------|:--------|------------:|-------------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**        |
-| Hono adapter       | Bun     | 141,822     | 132,708            |
-| NestJS · Express   | Bun     | 65,750      | 63,540             |
+<!-- bench:table s1a,s1b asena-ergenecore-bun,asena-hono-bun,nest-express-bun bold=asena-ergenecore-bun -->
+
+| Adapter          | Runtime |   Plaintext | JSON serialization |
+|:-----------------|:--------|------------:|-------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |
+
+<!-- /bench:table -->
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, <!-- bench:cpus -->one CPU<!-- /bench:cpus --> and <!-- bench:memory -->2 GB<!-- /bench:memory --> per server, `wrk` at <!-- bench:connections -->128<!-- /bench:connections --> connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
