@@ -666,6 +666,16 @@
   color: var(--vp-c-brand-2);
 }
 
+.lp .lp-more + .lp-more {
+  margin-left: 20px;
+}
+
+.lp .lp-bench-foot a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .lp .lp-stack {
   display: flex;
   flex-direction: column;
