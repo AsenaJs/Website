@@ -12,6 +12,10 @@ returns **byte-for-byte identical responses** to byte-for-byte identical request
 mechanically on the exact builds that were measured. Without that, a benchmark compares
 implementations, not frameworks.
 
+The harness, every app and every raw result are public in
+[AsenaJs/benchmark](https://github.com/AsenaJs/benchmark): clone it and run the same sweep on
+your own machine.
+
 ::: info Read the charts honestly: Elysia and Hono are right there
 Elysia and Hono are minimal routers, and on a minimal application they are excellent
 choices. On most charts the top three — Elysia, Hono and Asena · Ergenecore — sit within a
