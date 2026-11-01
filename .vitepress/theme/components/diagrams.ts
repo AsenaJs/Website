@@ -74,9 +74,10 @@ export const DIAGRAMS: Record<string, Diagram> = {
         steps: [
           { tag: '1', cells: [{ title: 'Global middleware', detail: '`globalMiddlewares()` on `@Config`, filtered by include/exclude patterns.' }] },
           { tag: '2', cells: [{ title: 'Controller middleware', detail: '`@Controller({ middlewares })`, scoped to the controller path.' }] },
-          { tag: '3', cells: [{ title: 'Route middleware', detail: '`@Get({ middlewares })` and the other method decorators.' }] },
-          { tag: '4', cells: [{ title: 'Validation', detail: 'The route context contract, or the `validator` class. A failure throws a `ValidationError`.' }] },
-          { tag: '5', cells: [{ title: 'Handler', detail: 'The controller method, which answers with `context.send()`.' }] },
+          { tag: '3', cells: [{ title: 'Auth guard', detail: 'Only on `@Protected` / `@Roles` routes, when `@asenajs/asena-auth` is imported. No session is a 401 with `WWW-Authenticate: Bearer`; a missing role is a 403.' }] },
+          { tag: '4', cells: [{ title: 'Route middleware', detail: '`@Get({ middlewares })` and the other method decorators.' }] },
+          { tag: '5', cells: [{ title: 'Validation', detail: 'The route context contract, or the `validator` class. A failure throws a `ValidationError`.' }] },
+          { tag: '6', cells: [{ title: 'Handler', detail: 'The controller method, which answers with `context.send()`.' }] },
         ],
       },
     ],

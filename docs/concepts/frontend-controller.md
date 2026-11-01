@@ -84,7 +84,7 @@ public dashboard() {
 ::: warning Middleware Bypass
 Frontend Controller routes bypass the entire middleware chain. This means:
 - No CORS middleware
-- No authentication middleware
+- No authentication: the [asena-auth](/docs/packages/auth) guard does not apply, and `@Protected` / `@Roles` on a frontend controller are ignored with a boot warning
 - No rate limiting
 - No logging middleware
 
@@ -275,12 +275,12 @@ export class PublicPages {
 ```
 
 ::: tip SPA Authentication
-For single-page applications, handle authentication on the client side. The SPA can call your authenticated API endpoints (`@Controller` with auth middleware) while the initial HTML page is served without middleware.
+For single-page applications, serve the page publicly and authenticate on the client side. The SPA calls your [`@Protected`](/docs/concepts/authentication) API controllers with the session cookie or a Bearer token, while the initial HTML page is served without middleware. A page whose HTML itself must stay private belongs on a `@Protected` `@Controller` instead.
 :::
 
 ## Related
 
 - [Controllers](/docs/concepts/controllers) - HTTP route handling for your API routes
 - [Static File Serving](/docs/concepts/static-files) - Serving static assets
-- [Middleware](/docs/concepts/middleware) - Protecting page routes
+- [Authentication](/docs/concepts/authentication) - Protecting the API routes a page calls
 - [Configuration](/docs/guides/configuration) - Server configuration

@@ -737,8 +737,12 @@ the handler.
 ### Execution Order
 
 ```
-global middleware → controller middleware → route middleware → contract validation → handler
+global middleware → controller middleware → auth guard → route middleware → contract validation → handler
 ```
+
+The auth guard exists only on routes marked `@Protected` / `@Roles`, when
+[`@asenajs/asena-auth`](/docs/packages/auth#route-guards) is imported. It answers before validation,
+so an anonymous client sending an invalid body gets a 401, not a 400.
 
 This order is the same on both adapters. A middleware that reads the body does not consume it:
 validation still receives the full body. When validation fails or a middleware answers the request
@@ -811,19 +815,21 @@ export class ProductController {
 ### Combining with Middleware
 
 ```typescript
+@Protected()
 @Post({
   path: '/',
-  middlewares: [AuthMiddleware, RateLimitMiddleware],
+  middlewares: [RateLimitMiddleware],
   validator: CreateUserValidator
 })
 async create(context: Context) {
-  // AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
+  // auth guard -> RateLimitMiddleware -> CreateUserValidator -> handler
 }
 ```
 
-Both adapters run the route's middleware chain first and validate after it, so a middleware that
-calls `context.setValue('user', …)` has already run when the validator reads the request. Global
-middleware is top-level and always runs before both.
+Both adapters run the guard and the route's middleware chain first and validate after them, so the
+session the guard resolved, and anything a middleware stored with `context.setValue()`, are on the
+context when the validator reads the request. Global and controller middleware run before all of
+them.
 
 ## Zod Schema Definition
 

@@ -113,6 +113,7 @@ export default defineConfig({
                     {text: "Middleware", link: "/docs/concepts/middleware"},
                     {text: "Context", link: "/docs/concepts/context"},
                     {text: "Validation", link: "/docs/concepts/validation"},
+                    {text: "Authentication", link: "/docs/concepts/authentication"},
                     {text: "Static File Serving", link: "/docs/concepts/static-files"},
                     {text: "WebSocket", link: "/docs/concepts/websocket"},
                     {text: "Event System", link: "/docs/concepts/event-system"},
