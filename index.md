@@ -126,43 +126,44 @@ export class UserController {
 
 <div class="lp-cols-text">
 <span class="lp-eyebrow">Benchmarks</span>
-<div class="lp-bench-num">2.65<span>×</span></div>
+<div class="lp-bench-num">2.59<span>×</span></div>
 <h2 class="lp-h2">Faster than NestJS, with nothing tuned</h2>
-<p class="lp-lead">Byte-for-byte identical workloads on the same machine, one CPU per server, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
+<p class="lp-lead">Byte-for-byte identical workloads on the same machine, one CPU and 2 GB per server, measured with wrk. Asena on Ergenecore over Bun against NestJS on Express over Node.</p>
 <a class="lp-more" href="/docs/benchmarks">Full methodology →</a>
+<a class="lp-more" href="https://github.com/AsenaJs/benchmark">Run it yourself →</a>
 </div>
 
 <div class="lp-bars">
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Plaintext</b><span>2.65× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:100%"></span></div><span class="lp-bar-val"><b>151,923</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:37.8%"></span></div><span class="lp-bar-val"><b>57,408</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Plaintext</b><span>2.59× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:100%"></span></div><span class="lp-bar-val"><b>211,630</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:38.6%"></span></div><span class="lp-bar-val"><b>81,623</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Request validation</b><span>4.23× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:54.4%"></span></div><span class="lp-bar-val"><b>82,584</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:12.9%"></span></div><span class="lp-bar-val"><b>19,546</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Request validation</b><span>3.87× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:63.8%"></span></div><span class="lp-bar-val"><b>135,012</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:16.5%"></span></div><span class="lp-bar-val"><b>34,847</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Database · read by id</b><span>4.20× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:42.8%"></span></div><span class="lp-bar-val"><b>64,995</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:10.2%"></span></div><span class="lp-bar-val"><b>15,461</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Database · read by id, ORM</b><span>1.74× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:21.9%"></span></div><span class="lp-bar-val"><b>46,422</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:12.6%"></span></div><span class="lp-bar-val"><b>26,636</b> NestJS</span></div>
 </div>
 
 <div class="lp-bar-row">
-<div class="lp-bar-head"><b>Full API endpoint</b><span>2.70× faster</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:57.1%"></span></div><span class="lp-bar-val"><b>86,710</b> Asena</span></div>
-<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:21.1%"></span></div><span class="lp-bar-val"><b>32,119</b> NestJS</span></div>
+<div class="lp-bar-head"><b>Full API endpoint</b><span>2.59× faster</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-asena" style="width:63.1%"></span></div><span class="lp-bar-val"><b>133,533</b> Asena</span></div>
+<div class="lp-bar"><div class="lp-bar-track"><span class="lp-bar-fill is-rival" style="width:24.4%"></span></div><span class="lp-bar-val"><b>51,650</b> NestJS</span></div>
 </div>
 
 </div>
 
 </div>
 
-<p class="lp-bench-foot">Requests per second, higher is better. Numbers for NestJS on Fastify, NestJS on Bun and every other scenario are published alongside the harness.</p>
+<p class="lp-bench-foot"><span>Requests per second, higher is better. Numbers for NestJS on Fastify, NestJS on Bun and every other scenario, plus the harness and raw results, are in <a href="https://github.com/AsenaJs/benchmark">AsenaJs/benchmark</a>.</span></p>
 
 </div>
 
