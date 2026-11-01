@@ -2,6 +2,7 @@ import {defineConfig} from "vitepress";
 import {existsSync, readFileSync} from "fs";
 import {fileURLToPath} from "url";
 import {resolve, sep} from "path";
+import {stripBenchMarkers} from "../scripts/bench-markers";
 
 const docsDir = fileURLToPath(new URL('../docs', import.meta.url));
 
@@ -19,7 +20,7 @@ export default defineConfig({
                         if (!file.startsWith(docsDir + sep) || !file.endsWith('.md') || !existsSync(file)) return next();
 
                         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-                        res.end(readFileSync(file));
+                        res.end(stripBenchMarkers(readFileSync(file, 'utf8')));
                     });
                 },
             },
@@ -37,7 +38,7 @@ export default defineConfig({
 
     async buildEnd(siteConfig) {
         const {resolve, join} = await import('path');
-        const {cpSync, mkdirSync, readdirSync, statSync} = await import('fs');
+        const {mkdirSync, readdirSync, statSync, writeFileSync} = await import('fs');
 
         const srcDir = resolve(siteConfig.srcDir, 'docs');
         const outDir = resolve(siteConfig.outDir, 'raw');
@@ -50,7 +51,7 @@ export default defineConfig({
                 if (statSync(srcPath).isDirectory()) {
                     copyMdFiles(srcPath, destPath);
                 } else if (entry.endsWith('.md')) {
-                    cpSync(srcPath, destPath);
+                    writeFileSync(destPath, stripBenchMarkers(readFileSync(srcPath, 'utf8')));
                 }
             }
         }
