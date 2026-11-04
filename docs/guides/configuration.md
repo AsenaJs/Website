@@ -1,12 +1,12 @@
 ---
 title: Configuration
-description: Configure the server with @Config - global middleware, error handling, environment variables, and microservice transports
+description: Configure the server with @Config - server options, global middleware, environment variables, and microservice transports
 outline: deep
 ---
 
 # @Config - Application Configuration
 
-The `@Config` decorator provides a centralized way to configure your Asena application, including server options, error handling, and global middleware. It allows you to customize both Bun's native server settings and Asena-specific features in a type-safe manner.
+The `@Config` decorator provides a centralized way to configure your Asena application, including server options, global middleware and transports. It allows you to customize both Bun's native server settings and Asena-specific features in a type-safe manner.
 
 <div class="card-grid">
   <a class="info-card" href="#quick-start">
@@ -19,34 +19,29 @@ The `@Config` decorator provides a centralized way to configure your Asena appli
     <div class="ic-title">serveOptions()</div>
     <p class="ic-desc">Bun's native server settings, type-safe.</p>
   </a>
-  <a class="info-card" href="#onerror-method">
-    <span class="ic-kicker">03</span>
-    <div class="ic-title">onError()</div>
-    <p class="ic-desc">One global handler for everything that throws.</p>
-  </a>
-  <a class="info-card" href="#onnotfound-method">
-    <span class="ic-kicker">04</span>
-    <div class="ic-title">onNotFound()</div>
-    <p class="ic-desc">Your own answer for unmatched routes.</p>
-  </a>
   <a class="info-card" href="#globalmiddlewares-method">
-    <span class="ic-kicker">05</span>
+    <span class="ic-kicker">03</span>
     <div class="ic-title">globalMiddlewares()</div>
     <p class="ic-desc">Middleware applied to every route at once.</p>
   </a>
   <a class="info-card" href="#transport-method">
-    <span class="ic-kicker">06</span>
+    <span class="ic-kicker">04</span>
     <div class="ic-title">transport()</div>
     <p class="ic-desc">Wiring Redis or Kafka transports into the server.</p>
   </a>
 </div>
+
+::: tip Error handling is not configured here
+Errors and unmatched routes are handled by an `@ExceptionHandler` class with `@Catch` and
+`@NotFound()` methods. See [Error Handling](/docs/guides/error-handling).
+:::
 
 ## Quick Start
 
 ::: code-group
 
 ```typescript [Ergenecore]
-import type { ConfigService, Context } from '@asenajs/ergenecore';
+import type { ConfigService } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 import { Config } from '@asenajs/asena/decorators';
 
@@ -63,20 +58,12 @@ export class AppConfig implements ConfigService {
         idleTimeout: 120,
       },
     };
-  }
-
-  public onError(error: Error, _context: Context) {
-    console.error('Application error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 }
 ```
 
 ```typescript [Hono]
-import type { ConfigService, Context } from '@asenajs/hono-adapter';
+import type { ConfigService } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 import { Config } from '@asenajs/asena/decorators';
 
@@ -93,14 +80,6 @@ export class AppConfig implements ConfigService {
         idleTimeout: 120,
       },
     };
-  }
-
-  public onError(error: Error, _context: Context) {
-    console.error('Application error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 }
 ```
@@ -140,12 +119,12 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
   serveOptions?(): AsenaServeOptions;
 
   /**
-   * Custom error handler for unhandled errors
+   * @deprecated Removed in 1.0. Use an `@ExceptionHandler` class with `@Catch()` methods.
    */
   onError?(error: Error, context: C): Response | Promise<Response>;
 
   /**
-   * Answers a request that matched no route
+   * @deprecated Removed in 1.0. Use a `@NotFound()` method in an `@ExceptionHandler` class.
    */
   onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>;
 
@@ -192,7 +171,7 @@ type AsenaServerOptions = Omit<ServeOptions, 'fetch' | 'routes' | 'websocket' | 
 | `fetch` | HTTP Adapter (e.g., HonoAdapter) | Core request handler |
 | `routes` | AsenaJS decorators (@Get, @Post, etc.) | Route definitions |
 | `websocket` | AsenaWebsocketAdapter | WebSocket handler |
-| `error` | AsenaConfig.onError() | Error handling |
+| `error` | The HTTP adapter and `@ExceptionHandler` | Error handling |
 
 **✅ Available Options:**
 
@@ -431,206 +410,28 @@ public serveOptions(): AsenaServeOptions {
 - `true` / `false` - Enable/disable with defaults
 - `WebSocketCompressor` - Custom compressor configuration
 
-## onError() Method
+## onError() and onNotFound()
 
-Custom error handler for application-wide error handling. This method is called whenever an unhandled error occurs during request processing.
+::: warning Deprecated, removed in 1.0
+Use `@Catch` and `@NotFound()` methods in an `@ExceptionHandler` class instead. See
+[Error Handling](/docs/guides/error-handling).
+:::
 
 ```typescript
 onError?(error: Error, context: C): Response | Promise<Response>
-```
-
-**Parameters:**
-- `error` - The error that occurred
-- `context` - The Asena context for the current request
-
-**Returns:** `Response` or `Promise<Response>`
-
-::: warning Branch on `isHttpException()` before answering 500
-The examples below answer every error with a 500, to keep the focus on logging and DI. A real
-handler needs one branch above that, or every deliberate `401`, `403` and `404` your application
-throws — and every one raised by an auth middleware — arrives at the client as a 500:
-
-```typescript
-import { isHttpException } from '@asenajs/asena/adapter';
-
-public onError(error: Error, context: Context) {
-  if (isHttpException(error)) {
-    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-  }
-
-  // ... the 500 handling shown below
-}
-```
-
-See [Error Handling](/docs/guides/error-handling#global-error-handler) for why this is a guard
-rather than an `instanceof` check, and why the body comes from `getResponse()`.
-:::
-
-### Basic Error Handler
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  public onError(error: Error, context: AsenaContext<any, any>) {
-    console.error('Application error:', error);
-
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-### Production Error Handler
-
-Hide sensitive error details in production.
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  public onError(error: Error, context: AsenaContext<any, any>) {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-
-    // Log full error details
-    console.error('[ERROR]', {
-      message: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    // Return appropriate response
-    if (isDevelopment) {
-      return new Response(
-        JSON.stringify({
-          error: error.message,
-          stack: error.stack,
-          url: context.req.url,
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({ error: 'Internal Server Error' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-### Error Handler with Dependency Injection
-
-Integrate with dependency injection for advanced error handling.
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
-  @Inject(ErrorReportingService)
-  private errorReporter!: ErrorReportingService;
-
-  public async onError(error: Error, context: AsenaContext<any, any>) {
-    // Log to logging service
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    // Report to external service (Sentry, etc.)
-    await this.errorReporter.report(error);
-
-    // Return user-friendly error
-    return new Response(
-      JSON.stringify({
-        error: 'Something went wrong. Please try again later.',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-## onNotFound() Method
-
-Answers a request that matched no route. Separate from `onError` on purpose: nothing threw, the
-router simply had nowhere to send the request, so neither handler has to ask which case it is
-looking at.
-
-```typescript
 onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>
 ```
 
-**Parameters:**
-- `context` - The request context
-- `request` - `{ path, method }`, normalised by the adapter
+Both hooks still run, as the last link before the adapter's default answer:
 
-**Returns:** `Response` or `Promise<Response>`
-
-### Basic Usage
-
-```typescript
-import { Config } from '@asenajs/asena/decorators';
-import type { NotFoundRequest } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
-
-@Config()
-export class AppConfig extends ConfigService {
-
-  public onNotFound(context: Context, request: NotFoundRequest) {
-    return context.send({
-      type: 'about:blank',
-      title: 'Not Found',
-      status: 404,
-      instance: request.path
-    }, 404);
-  }
-
-}
+```
+@Catch      →  onError     →  adapter default
+@NotFound() →  onNotFound  →  adapter 404
 ```
 
-`request.path` carries the path only - no origin, no query string - and `request.method` is the
-upper-case verb. Both adapters produce identical values, so the same body works under either.
-
-### Defaults
-
-With no `onNotFound` declared, both adapters answer `{"error":"Not Found"}` with status `404` and
-`Content-Type: application/json`.
-
-Global middlewares run **before** `onNotFound` on both adapters, so a 404 still carries CORS
-headers and anything else you apply to every request.
-
-If the hook throws, the adapter logs it and falls back to the default 404 rather than taking the
-server down. It is deliberately **not** routed to `onError`.
-
-::: warning Not for domain 404s
-When the route exists but the record does not, throw instead - that reaches `onError` like any
-other application decision:
-
-```typescript
-import { HttpException } from '@asenajs/asena/adapter';
-
-if (!user) {
-  throw new HttpException(404, { code: 'USER_NOT_FOUND' });
-}
-```
-:::
-
+`onError` is called only after every `@Catch` declined, and `onNotFound` only when no
+`@NotFound()` answered. Returning nothing declines to the adapter default. Each hook logs a
+deprecation warning at boot.
 
 ## globalMiddlewares() Method
 
@@ -892,23 +693,12 @@ A real-world configuration example combining all features:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Config, Service } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { ConfigService, Context } from '@asenajs/ergenecore';
+import { Config } from '@asenajs/asena/decorators';
+import type { ConfigService } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-
-@Service()
-class LoggerService {
-  public error(message: string, meta: any) {
-    console.error(`[ERROR] ${message}`, meta);
-  }
-}
 
 @Config()
 export class AppConfig implements ConfigService {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
   public serveOptions(): AsenaServeOptions {
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -934,25 +724,6 @@ export class AppConfig implements ConfigService {
         publishToSelf: false,
       },
     };
-  }
-
-  public async onError(error: Error, context: Context) {
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    if (isProduction) {
-      return context.send({ error: 'Internal Server Error' }, 500);
-    }
-
-    return context.send({
-      error: error.message,
-      stack: error.stack,
-    }, 500);
   }
 
   public globalMiddlewares() {
@@ -977,23 +748,12 @@ export class AppConfig implements ConfigService {
 ```
 
 ```typescript [Hono]
-import { Config, Service } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { ConfigService, Context } from '@asenajs/hono-adapter';
+import { Config } from '@asenajs/asena/decorators';
+import type { ConfigService } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-
-@Service()
-class LoggerService {
-  public error(message: string, meta: any) {
-    console.error(`[ERROR] ${message}`, meta);
-  }
-}
 
 @Config()
 export class AppConfig implements ConfigService {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
   public serveOptions(): AsenaServeOptions {
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -1019,25 +779,6 @@ export class AppConfig implements ConfigService {
         publishToSelf: false,
       },
     };
-  }
-
-  public async onError(error: Error, context: Context) {
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    if (isProduction) {
-      return context.send({ error: 'Internal Server Error' }, 500);
-    }
-
-    return context.send({
-      error: error.message,
-      stack: error.stack,
-    }, 500);
   }
 
   public globalMiddlewares() {
@@ -1076,9 +817,9 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 5. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
 6. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
-   - `onError()` is registered as error handler
-   - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
+   - `@ExceptionHandler` classes are read and the exception chain is handed to the adapter, with a
+     deprecated `onError()` / `onNotFound()` as its last link
    - `transport()` is called and the WebSocket / microservice transports are wired
 7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
 
@@ -1195,17 +936,9 @@ widen the type at the call site.
    }
    ```
 
-5. **Log Errors Properly**
-   ```typescript
-   public onError(error: Error, context: AsenaContext<any, any>) {
-     console.error('[ERROR]', {
-       message: error.message,
-       stack: error.stack,
-       url: context.req.url,
-     });
-     // Return response...
-   }
-   ```
+5. **Handle Errors Outside the Config**
+   - Errors and unmatched routes belong in an `@ExceptionHandler` class, not in `@Config`.
+     See [Error Handling](/docs/guides/error-handling)
 
 ### ❌ Don'ts
 
