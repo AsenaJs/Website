@@ -57,8 +57,9 @@ Both adapters accept the same three ways to answer a request from middleware:
 
 - **`return context.send(...)`** - returning a `Response` short-circuits the chain
 - **`return false`** - short-circuits with `403 Forbidden`
-- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your `onError`
-  handler. The same class on both adapters, so a middleware that guards a route is portable
+- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your
+  [`@Catch` handlers](/docs/guides/error-handling), and answered from its own status when none
+  matches. The same class on both adapters, so a middleware that guards a route is portable
 
 The one thing that is *not* portable is **omitting `next()`**. See
 [Stopping Middleware Chain](#stopping-middleware-chain).
@@ -215,7 +216,7 @@ In the examples below the Ergenecore tab answers with `context.send(...)` and th
 line is where `MiddlewareService` and `Context` are imported from.
 
 Return a `Response` when the middleware is the right place to phrase the answer. Throw when you
-want the rejection to reach `onError` and be shaped there with the rest of your API's errors.
+want the rejection to reach `@Catch` and be shaped there with the rest of your API's errors.
 :::
 
 ### Authentication Middleware
@@ -682,7 +683,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Returning a Response also works here; throwing routes through onError instead
+      // Returning a Response also works here; throwing routes through @Catch instead
       throw new HttpException(503, 'Service under maintenance');
     }
 

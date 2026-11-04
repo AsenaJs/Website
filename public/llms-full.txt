@@ -473,7 +473,8 @@ it, and the container finds it when the application boots.
 | `@Controller` | HTTP routes |
 | `@Service` | Business logic, the default for anything injectable |
 | `@Middleware` | Request middleware, and validators with `{ validator: true }` |
-| `@Config` | Server hooks: `onError`, `onNotFound`, `globalMiddlewares`, `transport` |
+| `@Config` | Server hooks: `serveOptions`, `globalMiddlewares`, `transport` |
+| `@ExceptionHandler` | `@Catch` and `@NotFound()` methods that answer errors and unmatched routes |
 | `@WebSocket` | A WebSocket namespace |
 | `@MessageController` | Broker message handlers |
 | `@Schedule` | Cron jobs |
@@ -1961,7 +1962,7 @@ For full documentation, see [Frontend Controller](/docs/concepts/frontend-contro
 - [Middleware](/docs/concepts/middleware) - Request interception
 - [Validation](/docs/concepts/validation) - Route context contracts and validators
 - [Context](/docs/concepts/context) - Request, response and typed context state
-- [Error Handling](/docs/guides/error-handling) - `HttpException` and `onError`
+- [Error Handling](/docs/guides/error-handling) - `@ExceptionHandler`, `@Catch` and `HttpException`
 - [WebSocket](/docs/concepts/websocket) - Real-time communication
 - [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling
 - [Frontend Controller](/docs/concepts/frontend-controller) - HTML page serving
@@ -2620,9 +2621,9 @@ A matched route:
 
 Off the main path:
 
-- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- Any step throws: The matching `@Catch` in an `@ExceptionHandler`, or the adapter default when none answers.
 - A middleware returns `false`: `403 Forbidden`; nothing after it runs.
-- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
+- No route matches: Global middleware runs, then `@NotFound()`. Never `@Catch`.
 
 ### Guards → Middleware
 
@@ -3636,11 +3637,9 @@ export class UserController {
 ```
 
 ::: warning Validation Errors
-If validation fails and your application defines **no** `onError` handler, the adapter
-answers with its own `400 Bad Request` envelope.
-
-As soon as you define `ConfigService.onError`, the failure is routed there instead as a
-`ValidationError` - match it with `isValidationError()`. See
+A failed contract throws a `ContractValidationError`. When no
+[`@Catch`](/docs/guides/error-handling#validation-errors) answers it, the adapter answers with
+its own `400 Bad Request` envelope. See
 [Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
@@ -6193,8 +6192,9 @@ Both adapters accept the same three ways to answer a request from middleware:
 
 - **`return context.send(...)`** - returning a `Response` short-circuits the chain
 - **`return false`** - short-circuits with `403 Forbidden`
-- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your `onError`
-  handler. The same class on both adapters, so a middleware that guards a route is portable
+- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your
+  [`@Catch` handlers](/docs/guides/error-handling), and answered from its own status when none
+  matches. The same class on both adapters, so a middleware that guards a route is portable
 
 The one thing that is *not* portable is **omitting `next()`**. See
 [Stopping Middleware Chain](#stopping-middleware-chain).
@@ -6351,7 +6351,7 @@ In the examples below the Ergenecore tab answers with `context.send(...)` and th
 line is where `MiddlewareService` and `Context` are imported from.
 
 Return a `Response` when the middleware is the right place to phrase the answer. Throw when you
-want the rejection to reach `onError` and be shaped there with the rest of your API's errors.
+want the rejection to reach `@Catch` and be shaped there with the rest of your API's errors.
 :::
 
 ### Authentication Middleware
@@ -6735,9 +6735,9 @@ A matched route:
 
 Off the main path:
 
-- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- Any step throws: The matching `@Catch` in an `@ExceptionHandler`, or the adapter default when none answers.
 - A middleware returns `false`: `403 Forbidden`; nothing after it runs.
-- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
+- No route matches: Global middleware runs, then `@NotFound()`. Never `@Catch`.
 
 **Example:**
 
@@ -6833,7 +6833,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Returning a Response also works here; throwing routes through onError instead
+      // Returning a Response also works here; throwing routes through @Catch instead
       throw new HttpException(503, 'Service under maintenance');
     }
 
@@ -8432,7 +8432,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Asena's Context wrapper
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -8463,7 +8463,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Hono's NATIVE context, not Asena's wrapper - see the warning below
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -8547,7 +8547,7 @@ hook: (result, context) => {
   if (result.success) return;
 
   // A Response short-circuits everything - the handler never runs and
-  // onError is never called for this request
+  // no @Catch is consulted for this request
   return context.send({ error: 'Invalid signup payload' }, 422);
 }
 ```
@@ -8569,9 +8569,9 @@ When validation fails, Asena answers with **400 Bad Request**.
 
 ### Default response
 
-A `ValidationError` is always thrown. When nothing answers it - your application defines no
-global error handler, or its handler returns nothing - **both** adapters fall back to the same
-envelope, Zod's flattened error:
+A `ValidationError` is always thrown. When nothing answers it - no `@Catch` matches it, or the
+one that matches returns nothing - **both** adapters fall back to the same envelope, Zod's
+flattened error:
 
 ```json
 {
@@ -8591,62 +8591,52 @@ envelope, Zod's flattened error:
 `header`.
 
 The failure is also logged like any other 4xx, at DEBUG (or INFO when your logger has no
-`debug`). Before 0.9.1 an application with no `onError` got this response from inside the
-validator, which never threw - so it reached neither `onError` nor the log, the one rejection
-that was invisible at every level. See
-[Error Handling](/docs/guides/error-handling#adapter-logging).
+`debug`). See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Customizing the response
 
-Define `onError` in your `@Config` class and validation failures arrive there like any
-other error, so they can share your application's response envelope:
+A `@Catch` in an [`@ExceptionHandler`](/docs/guides/error-handling) receives validation failures
+like any other error, so they can share your application's response envelope:
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { isValidationError } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { ContractValidationError, type ValidationErrorLike } from '@asenajs/asena/adapter';
+import { ValidationError, type Context } from '@asenajs/hono-adapter';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  public onError(error: Error, context: Context): Response {
-    if (isValidationError(error)) {
-      return context.send(
-        {
-          success: false,
-          message: 'Validation failed',
-          errors: error.issues // [{ path, message, code }]
-        },
-        400
-      );
-    }
+@ExceptionHandler()
+export class ValidationExceptionHandler {
+  @Catch(ValidationError, ContractValidationError)
+  public validation(error: ValidationErrorLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({ success: false, message: 'Internal Server Error' }, 500);
+    return ctx.context.send(
+      {
+        success: false,
+        message: 'Validation failed',
+        errors: error.issues // [{ path, message, code }]
+      },
+      400
+    );
   }
 }
 ```
 
-`isValidationError()` is exported from `@asenajs/asena/adapter` and works with both
-adapters. The error it narrows to also carries `target` and `cause` (the original
-`ZodError`) if you need more than `issues`.
+`ValidationError` comes from your adapter package and is what a validator class throws;
+`ContractValidationError` comes from `@asenajs/asena/adapter` and is what a
+[route context contract](#route-context-contracts) throws. Both carry `target`, `issues` and
+`cause` (the original `ZodError` for a validator class) and satisfy `isValidationError()`.
 
-::: tip Existing error handlers keep working
-The thrown error is an HTTP exception carrying status **400**, so a handler that matches with
-`isHttpException()` and replies with `error.status` keeps answering 400 - adopting this does not
-silently turn validation failures into 500s.
-
-Check `isValidationError()` **first** if you want validation failures to have their own envelope.
-A `ValidationError` is an HTTP exception too, so a generic `isHttpException()` branch placed
-above it would swallow it.
-
-The class each adapter extends is an implementation detail and they differ - Ergenecore's extends
-`HttpException`, the Hono adapter's extends hono's `HTTPException` so that pre-0.9 handlers
-written against `instanceof HTTPException` keep answering 400. Match with the guards and you do
-not have to know which.
+::: tip A generic HTTP handler still answers 400
+Both errors are HTTP exceptions carrying status **400**. Without a narrower `@Catch`, a
+`@Catch(HttpException)` receives them and answers from `error.status`, so validation failures
+never silently become 500s. A `@Catch(ValidationError)` is more specific and wins for its own
+type.
 :::
 
 ::: warning A hook that returns a Response wins
-If the validator's `hook` returns a `Response`, that response is sent as-is and `onError`
-is never reached for that request. See [Validation Hooks](#validation-hooks).
+If the validator's `hook` returns a `Response`, that response is sent as-is and no `@Catch` is
+consulted for that request. See [Validation Hooks](#validation-hooks).
 :::
 
 ## Route Context Contracts
@@ -8818,10 +8808,11 @@ itself, the handler does not run.
 | A non-empty `body` request whose content type is not `application/json` or `application/*+json` | **415** |
 | A `form` request whose content type is not `multipart/form-data` or `application/x-www-form-urlencoded` | **415** |
 
-A failing schema throws an error that `isValidationError()` recognizes, so it reaches your
-`onError` like a validator failure does. Its `target` is the contract key (`body`, `form`, `query`,
-`params`, `headers`) and its `issues` carry `path` and `message`, with each path segment
-normalized to a string or a number. Without an `onError` that answers it, the response is:
+A failing schema throws a `ContractValidationError` from `@asenajs/asena/adapter`, which
+`isValidationError()` recognizes and a `@Catch` can match by type. Its `target` is the contract key
+(`body`, `form`, `query`, `params`, `headers`) and its `issues` carry `path` and `message`, with
+each path segment normalized to a string or a number. Without a `@Catch` that answers it, the
+response is:
 
 ```json
 {
@@ -8831,7 +8822,7 @@ normalized to a string or a number. Without an `onError` that answers it, the re
 }
 ```
 
-An exception thrown from inside a schema is not a validation failure. It reaches `onError` as it
+An exception thrown from inside a schema is not a validation failure. It reaches `@Catch` as it
 was thrown.
 
 A route cannot combine a contract with the `validator` option. Doing so, or setting
@@ -11328,8 +11319,27 @@ export class TestService {
 ```
 
 ::: tip Errors are caught and logged
-Errors are automatically caught and logged. Your application continues running normally.
+Errors are automatically caught and logged with an `[EventDispatchService]` error line. Your
+application continues running normally.
 :::
+
+### Observing failures with `@Catch`
+
+A `@Catch` method in an [`@ExceptionHandler`](/docs/guides/error-handling) also receives `@On`
+failures, with `ctx.scope === 'event'`, the event name, its data and the failing method as
+`source`. It can only **observe**: the error line above is logged whatever the `@Catch` does, and
+the other handlers keep running. A value it returns has no effect and logs a warning.
+
+```typescript
+@Catch(QuotaExceededError)
+public async quota(error: QuotaExceededError, ctx: ExceptionContext) {
+  if (ctx.scope === 'event') {
+    await this.metrics.increment('event.quota_exceeded', { event: ctx.event });
+  }
+}
+```
+
+See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
 
 ---
 
@@ -12513,6 +12523,28 @@ try {
   }
 }
 ```
+
+### Handler failures and `@Catch`
+
+On the receiving side, a failure in a `@MessagePattern` or `@EventPattern` handler, or in its
+`onReceive` interceptors, reaches a matching `@Catch` in an
+[`@ExceptionHandler`](/docs/guides/error-handling) with `ctx.scope === 'microservice'`:
+
+| Handler | What the `@Catch` return value does |
+|---|---|
+| `@MessagePattern` | A value other than `undefined` becomes the reply, so the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false` (`REMOTE_ERROR`) |
+| `@EventPattern` | Nothing. The `@Catch` observes, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
+
+```typescript
+@Catch(OutOfStockError)
+public outOfStock(error: OutOfStockError, ctx: ExceptionContext) {
+  if (ctx.scope === 'microservice' && ctx.kind === 'message') {
+    return { status: 'rejected', reason: 'OUT_OF_STOCK', sku: error.sku };
+  }
+}
+```
+
+See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
 
 ---
 
@@ -16837,27 +16869,34 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 }
 ```
 
-### Error Handling in Config
+### Error Handling in an Exception Handler
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import type { Context } from '@asenajs/ergenecore';
 import { logger } from '../logger';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  onError(error: Error, context: Context): Response {
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(Error)
+  public unexpected(error: Error, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
     logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.req.url,
-      method: context.req.method
+      url: ctx.context.req.url,
+      method: ctx.context.req.method
     });
 
-    return context.send({ error: 'Internal server error' }, 500);
+    return ctx.context.send({ error: 'Internal server error' }, 500);
   }
 }
 ```
+
+A `@Catch` that answers owns the log line: the adapter writes nothing for a request it did not
+answer itself. See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Performance Profiling
 
@@ -19513,8 +19552,7 @@ Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-import { isHttpException } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/ergenecore';
 import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
@@ -19526,15 +19564,6 @@ export class AppConfig extends ConfigService {
       AppOtelMiddleware,  // traces all HTTP requests automatically
       AppCorsMiddleware,
     ];
-  }
-
-  public onError(error: Error, context: Context) {
-    if (isHttpException(error)) {
-      // Answer with the body the exception carries; `error.message` is that body
-      // already flattened to a string, so re-wrapping it double-encodes an object
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-    return context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }

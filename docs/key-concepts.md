@@ -19,7 +19,8 @@ it, and the container finds it when the application boots.
 | `@Controller` | HTTP routes |
 | `@Service` | Business logic, the default for anything injectable |
 | `@Middleware` | Request middleware, and validators with `{ validator: true }` |
-| `@Config` | Server hooks: `onError`, `onNotFound`, `globalMiddlewares`, `transport` |
+| `@Config` | Server hooks: `serveOptions`, `globalMiddlewares`, `transport` |
+| `@ExceptionHandler` | `@Catch` and `@NotFound()` methods that answer errors and unmatched routes |
 | `@WebSocket` | A WebSocket namespace |
 | `@MessageController` | Broker message handlers |
 | `@Schedule` | Cron jobs |

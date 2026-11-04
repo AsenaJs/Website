@@ -346,6 +346,28 @@ try {
 }
 ```
 
+### Handler failures and `@Catch`
+
+On the receiving side, a failure in a `@MessagePattern` or `@EventPattern` handler, or in its
+`onReceive` interceptors, reaches a matching `@Catch` in an
+[`@ExceptionHandler`](/docs/guides/error-handling) with `ctx.scope === 'microservice'`:
+
+| Handler | What the `@Catch` return value does |
+|---|---|
+| `@MessagePattern` | A value other than `undefined` becomes the reply, so the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false` (`REMOTE_ERROR`) |
+| `@EventPattern` | Nothing. The `@Catch` observes, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
+
+```typescript
+@Catch(OutOfStockError)
+public outOfStock(error: OutOfStockError, ctx: ExceptionContext) {
+  if (ctx.scope === 'microservice' && ctx.kind === 'message') {
+    return { status: 'rejected', reason: 'OUT_OF_STOCK', sku: error.sku };
+  }
+}
+```
+
+See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
+
 ---
 
 ## Writing a Custom Transport

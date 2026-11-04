@@ -631,11 +631,9 @@ export class UserController {
 ```
 
 ::: warning Validation Errors
-If validation fails and your application defines **no** `onError` handler, the adapter
-answers with its own `400 Bad Request` envelope.
-
-As soon as you define `ConfigService.onError`, the failure is routed there instead as a
-`ValidationError` - match it with `isValidationError()`. See
+A failed contract throws a `ContractValidationError`. When no
+[`@Catch`](/docs/guides/error-handling#validation-errors) answers it, the adapter answers with
+its own `400 Bad Request` envelope. See
 [Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
