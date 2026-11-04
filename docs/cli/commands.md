@@ -123,7 +123,7 @@ Quickly and consistently create project components with proper structure and imp
 
 ### Features
 
-- **Multi-Component Support** - Generate controllers, services, middlewares, configs, and websockets
+- **Multi-Component Support** - Generate controllers, services, middlewares, validators, configs, exception handlers and websockets
 - **Automatic Code Generation** - Creates template code with base structure and necessary imports
 - **Adapter-Aware** - Generates adapter-specific code based on project configuration
 - **Suffix Configuration** - Customize component naming conventions (see [Suffix Configuration](/docs/cli/suffix-configuration))
@@ -139,6 +139,7 @@ Quickly and consistently create project components with proper structure and imp
 | Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
 | Validator  | `asena generate validator`  | `asena g v`   | Generates a Zod validator   |
 | Config     | `asena generate config`     | `asena g config` | Generates a server config |
+| Exception Handler | `asena generate exception-handler` | `asena g eh` | Generates an exception handler |
 | WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
 
 ### Examples
@@ -250,19 +251,58 @@ asena generate config
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
 
-  public onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error.message);
+}
+```
 
-    return context.send({ error: error.message }, 500);
+The class is empty: add the [server options](/docs/guides/configuration) you need. Errors are
+answered by an exception handler, which has a generator of its own.
+
+#### Generate Exception Handler
+
+```bash
+asena g eh
+# or
+asena generate exception-handler
+```
+
+**Prompt:**
+```bash
+✔ Enter exception handler name: Api
+```
+
+**Generated:** `src/exceptions/ApiExceptionHandler.ts`
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { isHttpException } from '@asenajs/asena/adapter';
+import { type Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+
+  @Catch()
+  public fallback(error: unknown, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http' || isHttpException(error)) return;
+
+    console.error('Unhandled error:', error);
+
+    return ctx.context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }
 ```
+
+The generated `@Catch()` is a catch-all that answers unexpected HTTP errors with `500`. It returns
+nothing in two cases: for an HTTP exception, so validation failures and status exceptions keep the
+adapter's own envelopes, and outside HTTP (`@On`, `@MessagePattern`, `@EventPattern`), so those
+failures keep their default handling. Add `@Catch(YourError)` methods next to it for your domain
+errors. See [Error Handling](/docs/guides/error-handling).
 
 #### Generate WebSocket
 
@@ -542,6 +582,7 @@ check is the fastest way to rule it in or out.
 | `asena generate service` | `asena g s`    | Generate a service            |
 | `asena generate middleware` | `asena g m` | Generate a middleware         |
 | `asena generate config` | `asena g config` | Generate a config          |
+| `asena generate exception-handler` | `asena g eh` | Generate an exception handler |
 | `asena generate websocket` | `asena g ws` | Generate a WebSocket namespace |
 | `asena dev start`    | -               | Start development server             |
 | `asena build`        | -               | Build for production                 |

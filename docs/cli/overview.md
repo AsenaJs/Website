@@ -30,7 +30,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
   <div class="info-card">
     <span class="ic-kicker">🔧 Generation</span>
     <div class="ic-title">Code Generation</div>
-    <p class="ic-desc">Generate controllers with route handlers, services with business logic, middleware, config classes and WebSocket namespaces.</p>
+    <p class="ic-desc">Generate controllers with route handlers, services with business logic, middleware, config classes, exception handlers and WebSocket namespaces.</p>
   </div>
   <div class="info-card">
     <span class="ic-kicker">⚡ Development</span>

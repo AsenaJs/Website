@@ -43,6 +43,7 @@ If your `.asena/config.json` doesn't include a `suffixes` field, all components 
 | Service        | `Service`      |
 | Middleware     | `Middleware`   |
 | Config         | `Config`       |
+| Exception handler (`exceptionHandler`) | `ExceptionHandler` |
 | WebSocket      | `Namespace`    |
 
 ## Configuration Options
