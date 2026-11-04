@@ -354,7 +354,7 @@ On the receiving side, a failure in a `@MessagePattern` or `@EventPattern` handl
 
 | Handler | What the `@Catch` return value does |
 |---|---|
-| `@MessagePattern` | A value other than `undefined` becomes the reply, so the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false` (`REMOTE_ERROR`) |
+| `@MessagePattern` | A value other than `undefined` or a `Response` is a **successful** reply: the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false`, so `send()` rejects with `REMOTE_ERROR`. A returned `Response` is declined the same way and logs a warning |
 | `@EventPattern` | Nothing. The `@Catch` observes, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
 
 ```typescript
@@ -366,7 +366,9 @@ public outOfStock(error: OutOfStockError, ctx: ExceptionContext) {
 }
 ```
 
-See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
+The caller's `send()` resolves with `{ status: 'rejected', ... }`, so the caller has to check
+`status`. To make `send()` reject instead, return `undefined`. See
+[Error Handling - `@MessagePattern`](/docs/guides/error-handling#messagepattern-the-return-value-is-the-reply).
 
 ---
 

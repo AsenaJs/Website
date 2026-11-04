@@ -389,7 +389,7 @@ public async database(error: DatabaseUnavailableError, ctx: ExceptionContext<Con
     case 'http':
       return ctx.context.send({ error: 'Service Unavailable' }, 503);
     case 'microservice':
-      return ctx.kind === 'message' ? { ok: false, retryable: true } : undefined;
+      return ctx.kind === 'message' ? { status: 'unavailable', retryable: true } : undefined;
     case 'event':
       return;
   }
@@ -406,9 +406,28 @@ A `Response` answers the request; anything else declines, as described in
 
 ### `@MessagePattern`: the return value is the reply
 
-A value other than `undefined` becomes the reply, and the caller's `ulak.send()` resolves with it
-as if the handler had returned it. Returning `undefined`, or throwing, hands the **original**
-error to the transport, which replies `ok: false`, so the caller sees `REMOTE_ERROR`.
+What the `@Catch` method does decides what the caller of `ulak.send()` sees:
+
+| The `@Catch` method | The caller |
+|:--------------------|:-----------|
+| returns a value other than `undefined` or a `Response` | a **successful** reply: `send()` resolves with that value, as if the handler had returned it |
+| returns `undefined` | the failure: the **original** error reaches the transport, which replies `ok: false`, and `send()` rejects with `REMOTE_ERROR` |
+| throws | the same failure; the `@Catch` method's own error is logged |
+| returns a `Response` | the same failure, and a warning naming the method is logged |
+| does not exist for this type | the same failure |
+
+A returned value is delivered as it is, never inspected. `{ ok: false }` or `{ error: 'OUT_OF_STOCK' }`
+is still a successful reply, and `send()` resolves with it. Return a value only when it is an answer
+the caller is written to act on; **return `undefined` when the caller must see the failure.**
+
+A `Response` is an HTTP answer, never a message reply. It typically comes from a handler shared
+between scopes, such as a `@Catch(HttpException)` that returns `error.getResponse()` without checking
+`ctx.scope`. Delivering it would hand the caller a serialized response as success, so it is declined:
+
+```
+@Catch handler ApiExceptionHandler.http() returned a Response for @MessagePattern OrderMessageController.reserve() —
+a Response is an HTTP answer, not a message reply; it is treated as a decline and the original error reaches the transport.
+```
 
 The `@Catch` sits outside the [interceptor](/docs/concepts/microservices) chain, so an
 interceptor's `onReceive` still sees the failure before the `@Catch` turns it into a reply.
