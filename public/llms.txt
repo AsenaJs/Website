@@ -68,7 +68,7 @@
 ## Guides
 
 - [Configuration](https://asena.sh/raw/guides/configuration.md): Configure the server with @Config - global middleware, error handling, environment variables, and microservice transports
-- [Error Handling](https://asena.sh/raw/guides/error-handling.md): Comprehensive guide to error handling in Asena - throwing exceptions, global error handlers, custom errors, and best practices
+- [Error Handling](https://asena.sh/raw/guides/error-handling.md): Handle errors in one place with @ExceptionHandler - @Catch by exception type, @NotFound for unmatched routes, the same handlers across HTTP, events and microservices
 - [Deployment](https://asena.sh/raw/guides/deployment.md): Deployment guide for Asena applications
 
 ## Testing
