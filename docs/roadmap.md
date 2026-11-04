@@ -14,13 +14,16 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Next Release <span class="pill pill-teal">v0.13 · In progress</span>
+## Next Release <span class="pill pill-teal">v0.13 · In progress</span> {#v0-13}
 
-Not published yet: `@asenajs/asena` 0.13.0.
+Not published yet: `@asenajs/asena` 0.13.0. Everything below needs core 0.13.0 or newer. The official
+packages accept it as a peer from their next patch release: `@asenajs/ergenecore` 5.0.4,
+`@asenajs/hono-adapter` 5.1.1 and the patch of every other `@asenajs/*` package released with it.
 
 - **[`@ExceptionHandler`](/docs/guides/error-handling)** - error handling in one place across HTTP, `@On` events and microservice handlers. `@Catch(...types)` methods answer by type with the most specific match winning, `@NotFound()` answers unmatched routes, and duplicates fail the boot
 - **[Event scopes are observe-only](/docs/guides/error-handling#eventpattern-and-on-observe-only)** - a `@Catch` sees `@On` and `@EventPattern` failures, but the original error continues: retry and DLQ for `@EventPattern`, the default error line for `@On`. For `@MessagePattern` its return value is the reply
 - **[Ready-made status exceptions](/docs/guides/error-handling#ready-made-status-exceptions)** - `NotFoundException`, `ConflictException` and the other common statuses as `HttpException` subclasses, catchable by type
+- **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.1.1)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
 - **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
 
 ---

@@ -10,7 +10,8 @@ An `@ExceptionHandler` class is where an Asena application decides what a failur
 `@Catch(...types)` methods answer errors by type, and its `@NotFound()` method answers a request
 that matched no route. The same `@Catch` sees a failure wherever the framework dispatched the
 code that threw: an HTTP request, an `@On` event handler, or a `@MessagePattern` /
-`@EventPattern` handler. It works the same on Ergenecore and the Hono adapter.
+`@EventPattern` handler. It works the same on Ergenecore and the Hono adapter. The package versions
+it needs are listed in the [roadmap](/docs/roadmap#v0-13).
 
 <div class="card-grid">
   <a class="info-card" href="#exception-handlers">
