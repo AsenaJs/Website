@@ -2437,8 +2437,8 @@ where there is none.
 | Passport strategies | asena-auth providers: server-side sessions, Better Auth, or your own `AsenaAuthProvider` |
 | `ValidationPipe` + DTO classes | Route context contracts |
 | Interceptors | Middleware with code after `await next()`; `@PostProcessor` |
-| Exception filters | `onError` on the `@Config` class |
-| `HttpException` | `HttpException` from `@asenajs/asena/adapter` |
+| Exception filters, `@Catch()` | `@ExceptionHandler` classes with `@Catch()` methods |
+| `HttpException`, `NotFoundException` and the other built-in exceptions | The same names for the common statuses, from `@asenajs/asena/adapter` |
 | `@nestjs/config` | `@Value('ENV_KEY')` |
 | `onModuleInit` / `onApplicationShutdown` | `@OnStart` / `@OnStop` |
 | `Test.createTestingModule()` | `mockComponent`, `createWebTest`, `createTestApp` |
@@ -2513,7 +2513,7 @@ export class UserService {
 ```typescript [Asena]
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HttpException } from '@asenajs/asena/adapter';
+import { NotFoundException } from '@asenajs/asena/adapter';
 
 @Service()
 export class UserService {
@@ -2523,7 +2523,7 @@ export class UserService {
   async findById(id: string) {
     const user = await this.users.findById(id);
 
-    if (!user) throw new HttpException(404, { message: 'User not found' });
+    if (!user) throw new NotFoundException('User not found');
 
     return user;
   }
@@ -2651,7 +2651,7 @@ export class AdminController {}
 
 ```typescript [Asena]
 import { Controller, Middleware } from '@asenajs/asena/decorators';
-import { HttpException } from '@asenajs/asena/adapter';
+import { UnauthorizedException } from '@asenajs/asena/adapter';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -2659,7 +2659,7 @@ export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const token = context.headers['authorization'];
 
-    if (!token) throw new HttpException(401, { message: 'Unauthorized' });
+    if (!token) throw new UnauthorizedException();
 
     context.setValue('userId', token.slice('Bearer '.length));
     await next();
@@ -2783,51 +2783,73 @@ container.
 **No direct equivalent:** mapping the handler's result in an interceptor
 (`map(data => ({ data }))`). Shape the response in the handler or the service.
 
-## Exception Filters → `onError`
+## Exception Filters → `@ExceptionHandler`
 
-One `onError` method on the `@Config` class sees every error a route throws: `HttpException`s,
-validation failures and unexpected errors.
+An `@ExceptionHandler` class plays the part of a set of global exception filters, and `@Catch`
+keeps its NestJS name. The method receives the error and an `ExceptionContext` instead of an
+`ArgumentsHost`, and answers by returning a `Response` instead of writing to one.
 
 ::: code-group
 
 ```typescript [NestJS]
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse();
-    const status = exception instanceof HttpException ? exception.getStatus() : 500;
 
-    response.status(status).json({ statusCode: status });
+    response.status(exception.getStatus()).json({ statusCode: exception.getStatus() });
   }
 }
 
-app.useGlobalFilters(new AllExceptionsFilter());
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    host.switchToHttp().getResponse().status(500).json({ statusCode: 500 });
+  }
+}
+
+app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 ```
 
 ```typescript [Asena]
-import { Config } from '@asenajs/asena/decorators';
-import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore';
 
-@Config()
-export class AppConfig extends ConfigService {
-  globalMiddlewares() {
-    return [TimingMiddleware];
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return ctx.context.send({ statusCode: error.status }, error.status);
   }
 
-  onError(error: Error, context: Context) {
-    if (isValidationError(error)) return context.send({ message: 'Invalid request' }, 400);
-    if (isHttpException(error)) return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+  @Catch()
+  public fallback(_error: unknown, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({ message: 'Internal server error' }, 500);
+    return ctx.context.send({ statusCode: 500 }, 500);
   }
 }
 ```
 
 :::
 
-There is one error hook per application rather than filters per controller or route. Unmatched
-routes go to a separate `onNotFound` hook.
+| NestJS | Asena |
+|:-------|:------|
+| `@Catch(A, B)` on a filter class | `@Catch(A, B)` on a method; one class holds many |
+| Filter order decides which one runs | Most specific type wins; one handler per type, checked at boot |
+| `@Catch()` catch-all filter | `@Catch()`, one per application; it also receives non-`Error` throws |
+| `app.useGlobalFilters(...)` | Nothing to register: the class is a component found by the scan |
+| `host.switchToHttp()` / `switchToRpc()` | `ctx.scope`: `'http'`, `'event'` or `'microservice'` |
+| `NotFoundException` and the other built-in exceptions | The same names for the common statuses, from `@asenajs/asena/adapter`; the constructor takes `(body, options)` |
+| An unmatched route throws `NotFoundException` | An unmatched route never throws; it goes to a `@NotFound()` method |
+
+**No direct equivalent:** filters bound to one controller or route with `@UseFilters()`. Every
+`@Catch` is application-wide; narrow by error type, or by `ctx.context.routePattern` inside the
+handler.
 
 Learn more: [Error Handling](/docs/guides/error-handling)
 
