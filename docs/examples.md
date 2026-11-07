@@ -42,7 +42,7 @@ Practical examples showing how to build real applications with Asena. Each examp
   <a class="info-card" href="#redis-caching">
     <span class="ic-kicker">Caching</span>
     <div class="ic-title">Redis Caching</div>
-    <p class="ic-desc">Decorator-based cache with get-or-set.</p>
+    <p class="ic-desc">A cached service method with <code>@Cacheable</code>.</p>
   </a>
   <a class="info-card" href="#scheduled-tasks">
     <span class="ic-kicker">Background Jobs</span>
@@ -841,9 +841,9 @@ For full documentation, see [OpenAPI Package](/docs/packages/openapi).
 
 ## Redis Caching
 
-Add Redis-powered caching with decorator-based setup.
+Cache a service method's result in Redis with `@Cacheable`.
 
-### Redis Service
+### Redis Service and Activation
 
 ```typescript
 // src/redis/AppRedis.ts
@@ -853,18 +853,14 @@ import { Redis, AsenaRedisService } from '@asenajs/asena-redis';
   config: { url: 'redis://localhost:6379' },
   name: 'AppRedis',
 })
-export class AppRedis extends AsenaRedisService {
+export class AppRedis extends AsenaRedisService {}
 
-  async getOrSet(key: string, factory: () => Promise<string>, ttl?: number): Promise<string> {
-    const cached = await this.get(key);
-    if (cached) return cached;
+// src/config/AppCache.ts
+import { RedisCache, CachePostProcessor } from '@asenajs/asena-redis';
 
-    const value = await factory();
-    await this.set(key, value, ttl);
-    return value;
-  }
-
-}
+// Without this class the cache decorators do nothing
+@RedisCache({ ttl: 60 })
+export class AppCache extends CachePostProcessor {}
 ```
 
 ### Service and Controller
@@ -872,20 +868,15 @@ export class AppRedis extends AsenaRedisService {
 ```typescript
 // src/services/UserNameService.ts
 import { Service } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import { AppRedis } from '../redis/AppRedis';
+import { Cacheable } from '@asenajs/asena-redis';
 
 @Service()
 export class UserNameService {
 
-  @Inject(AppRedis)
-  private redis: AppRedis;
-
+  @Cacheable({ prefix: 'user', key: (id: string) => id })
   async getName(id: string): Promise<string> {
-    return this.redis.getOrSet(`user:${id}`, async () => {
-      // Replace with the database lookup
-      return `User-${id}`;
-    }, 60);
+    // Replace with the database lookup
+    return `User-${id}`;
   }
 
 }
@@ -924,7 +915,7 @@ curl http://localhost:3000/api/cache/user/42
 ```
 
 ::: info
-For full documentation, see [Redis Package](/docs/packages/redis).
+For full documentation, see [Caching Decorators](/docs/packages/redis#caching-decorators).
 :::
 
 ---
