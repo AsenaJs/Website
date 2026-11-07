@@ -29,6 +29,7 @@
 - [Middleware](https://asena.sh/raw/concepts/middleware.md): Global, pattern-based, controller-level and route-level middleware with @Middleware
 - [Context API](https://asena.sh/raw/concepts/context.md): Unified request/response handling across all Asena adapters
 - [Validation](https://asena.sh/raw/concepts/validation.md): Type-safe request validation with Zod integration in Asena
+- [Authentication](https://asena.sh/raw/concepts/authentication.md): The auth contract in core - the @Protected / @Public / @Roles marks, AuthSession and AuthUser, getAuthSession / requireAuthSession and the AsenaAuthProvider interface, and the package that enforces them
 - [Static File Serving](https://asena.sh/raw/concepts/static-files.md): Serve static files with @StaticServe, including lifecycle hooks and path configuration
 - [WebSocket](https://asena.sh/raw/concepts/websocket.md): Real-time bidirectional communication with namespace support
 - [Event System](https://asena.sh/raw/concepts/event-system.md): Decoupled, event-driven architecture with fire-and-forget pattern and wildcard matching
@@ -48,6 +49,7 @@
 ## Official Packages
 
 - [AsenaLogger](https://asena.sh/raw/packages/logger.md): Winston-based structured logging with AsenaLogger - log levels, transports (console, file, Loki), and profiling
+- [Asena Auth](https://asena.sh/raw/packages/auth.md): Authentication for Asena - native server-side sessions and Better Auth behind the @asenajs/asena/auth contract, with @Protected / @Public / @Roles guards enforced before validators
 - [Asena Drizzle](https://asena.sh/raw/packages/drizzle.md): Type-safe database integration with Repository pattern for Asena
 - [Asena OpenAPI](https://asena.sh/raw/packages/openapi.md): Zero-config OpenAPI 3.1 spec generation from your route context contracts and validators, with built-in Swagger UI and Scalar API Reference
 - [Asena OpenTelemetry](https://asena.sh/raw/packages/opentelemetry.md): Automatic HTTP tracing, method-level auto-tracing, metrics, and distributed tracing for Asena

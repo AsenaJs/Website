@@ -47,7 +47,7 @@ This is why Redis, Kafka, OpenTelemetry, Drizzle and Winston all live in optiona
 
 Asena is not a framework that happens to run on Bun. It is built for Bun.
 
-`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 151,923 req/s on plaintext from a single CPU in [our published benchmarks](/docs/benchmarks).
+`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 211,630 req/s on plaintext from one CPU in [our published benchmarks](/docs/benchmarks).
 
 The trade-off is deliberate: Asena will not run on Node.js. In exchange, it does not pay the abstraction tax that portability demands.
 
@@ -396,6 +396,7 @@ Now that you have a working Asena application:
 - [Services](/docs/concepts/services) - Injectable components that carry your logic.
 - [Middleware](/docs/concepts/middleware) - Intercept requests at any level.
 - [Validation](/docs/concepts/validation) - Zod-based request validation on routes.
+- [Authentication](/docs/packages/auth) - Sessions and route guards with asena-auth.
 - [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling.
 - [Frontend Controller](/docs/concepts/frontend-controller) - Serve HTML pages with native imports.
 - [OpenAPI](/docs/packages/openapi) - Auto-generate OpenAPI 3.1 specs.
@@ -873,6 +874,39 @@ The same applies to `hono` and `zod`: both adapters list them as peer dependenci
 application owns exactly one copy. Match HTTP exceptions with `isHttpException()` rather than
 `instanceof`, which also breaks across copies.
 
+### `@Protected` without its guard
+
+`@Protected` and `@Roles` come from core and are only marks. The guard that enforces them ships in
+[`@asenajs/asena-auth`](/docs/packages/auth) and reaches the container through `imports`. Without
+it, every marked route is served to anyone, and nothing fails at the route.
+
+::: code-group
+
+```typescript [Wrong]
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+});
+```
+
+```typescript [Right]
+import { authComponents } from '@asenajs/asena-auth';
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...authComponents],
+});
+```
+
+:::
+
+[`asena doctor`](/docs/cli/commands#asena-doctor) fails `auth-enforcement` when `Protected` or
+`Roles` is imported from `@asenajs/asena/auth` and neither `authComponents` nor `AuthGuard` is
+imported from `@asenajs/asena-auth`.
+
+Learn more: [Authentication](/docs/concepts/authentication)
+
 ### Using an injected field in the constructor
 
 Fields are injected after the constructor returns. Reading one there throws a `TypeError` while
@@ -932,7 +966,7 @@ Practical examples showing how to build real applications with Asena. Each examp
 
 - [Complete REST API](#complete-rest-api) - Controllers, services, validation and database in one app.
 - [WebSocket Chat](#websocket-chat-application) - Rooms, publishing and broadcasting.
-- [JWT Authentication](#authentication-with-middleware) - Token login and protected routes via middleware.
+- [Authentication](#authentication) - Session login and role-guarded routes with asena-auth.
 - [Rate Limiting](#rate-limiting) - Token-bucket limits per user or IP.
 - [CORS Configuration](#cors-configuration) - Global CORS middleware setup.
 - [OpenAPI](#openapi-auto-documentation) - Specs generated from route contracts, with Scalar or Swagger UI.
@@ -955,8 +989,6 @@ my-api/
 │   │   └── UserService.ts
 │   ├── contracts/
 │   │   └── UserContracts.ts
-│   ├── middlewares/
-│   │   └── AuthMiddleware.ts
 │   ├── repositories/
 │   │   └── UserRepository.ts
 │   ├── database.ts
@@ -1345,168 +1377,202 @@ For full documentation, see [WebSocket](/docs/concepts/websocket).
 
 ---
 
-## Authentication with Middleware
+## Authentication
 
-Implementing JWT authentication with middleware.
+Registration, session login and role-guarded routes with
+[`@asenajs/asena-auth`](/docs/packages/auth): server-side sessions, a cookie for browsers and a
+Bearer token for everything else.
 
-### Typed Context State
-
-Declare what middleware puts on the context once, and `getValue()` / `setValue()` are type-checked
-everywhere:
-
-```typescript
-// src/types/ContextState.ts
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: 'user' | 'admin';
-}
-
-declare module '@asenajs/asena/adapter' {
-  interface AsenaVariables {
-    user: AuthUser;
-  }
-}
+```bash
+bun add @asenajs/asena-auth
 ```
 
-### Auth Service
+### Auth Provider
+
+Sessions live in an in-process store by default; see
+[Custom Session Store](/docs/packages/auth#custom-session-store) for one shared between instances.
 
 ```typescript
-// src/services/AuthService.ts
+// src/auth/AppAuth.ts
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+
+@Auth({ sessionTtl: 3600 })
+export class AppAuth extends AsenaAuthService {}
+```
+
+### User Service
+
+The provider hashes and verifies passwords with `Bun.password`. `UserRepository` is yours: any
+repository with `create` and `findByEmail` over a table holding `email`, `passwordHash` and `roles`,
+with `roles` defaulting to `['user']`.
+
+```typescript
+// src/services/UserService.ts
 import { Service } from '@asenajs/asena/decorators';
-import { HttpException } from '@asenajs/asena/adapter';
-import type { AuthUser } from '../types/ContextState';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { AppAuth } from '../auth/AppAuth';
+import { UserRepository } from '../repositories/UserRepository';
 
 @Service()
-export class AuthService {
-  async login(email: string, password: string): Promise<string> {
-    // Replace with a real credential check and JWT signing
-    if (email === 'user@example.com' && password === 'password') {
-      return 'valid-token';
-    }
+export class UserService {
+  @Inject(AppAuth)
+  private auth: AppAuth;
 
-    throw new HttpException(401, { error: 'Invalid credentials' });
+  @Inject(UserRepository)
+  private users: UserRepository;
+
+  async register(email: string, password: string) {
+    return this.users.create({ email, passwordHash: await this.auth.hashPassword(password) });
   }
 
-  async verifyToken(token: string): Promise<AuthUser> {
-    // Replace with real JWT verification
-    if (token === 'valid-token') {
-      return { id: '123', email: 'user@example.com', role: 'user' };
-    }
+  async verifyCredentials(email: string, password: string) {
+    const user = await this.users.findByEmail(email);
 
-    throw new HttpException(401, { error: 'Invalid token' });
+    return user && (await this.auth.verifyPassword(password, user.passwordHash)) ? user : null;
   }
 }
 ```
 
-### Auth Middleware
+### Auth Controller
 
-```typescript
-// src/middlewares/AuthMiddleware.ts
-import { Middleware } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HttpException } from '@asenajs/asena/adapter';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
-import { AuthService } from '../services/AuthService';
-
-@Middleware()
-export class AuthMiddleware extends MiddlewareService {
-  @Inject(AuthService)
-  private authService: AuthService;
-
-  async handle(context: Context, next: () => Promise<void>) {
-    const header = context.req.headers.get('authorization');
-
-    if (!header?.startsWith('Bearer ')) {
-      throw new HttpException(401, { error: 'No token provided' });
-    }
-
-    context.setValue('user', await this.authService.verifyToken(header.slice(7)));
-
-    await next();
-  }
-}
-```
-
-A thrown `HttpException` reaches your [`onError`](/docs/guides/error-handling) first; when nothing
-answers it there, its own status and body become the response.
-
-### Protected Controller
-
-```typescript
-// src/controllers/ProfileController.ts
-import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
-
-@Controller({ path: '/profile', middlewares: [AuthMiddleware] })
-export class ProfileController {
-  @Get('/')
-  async getProfile(context: Context) {
-    return context.send({ user: context.getValue('user') });
-  }
-
-  @Get('/settings')
-  async getSettings(context: Context) {
-    const user = context.getValue('user'); // AuthUser
-
-    return context.send({ userId: user.id, settings: {} });
-  }
-}
-```
-
-### Login Controller
-
-The login body is a [route context contract](/docs/concepts/validation#route-context-contracts):
-a malformed body gets a 400 before `login` runs, and `context.input.body` is typed from the schema.
+The body is a [route context contract](/docs/concepts/validation#route-context-contracts): a
+malformed body gets a 400 before the handler runs. `createSession` stores a session and returns
+its opaque token; `applySessionCookie` writes it as the `asena_session` cookie for browsers, and
+the token in the body is for clients that send `Authorization: Bearer <token>`.
 
 ```typescript
 // src/controllers/AuthController.ts
 import { Controller } from '@asenajs/asena/decorators';
 import { Post } from '@asenajs/asena/decorators/http';
 import { Inject } from '@asenajs/asena/decorators/ioc';
+import { applySessionCookie } from '@asenajs/asena-auth';
 import { Context } from '@asenajs/ergenecore';
 import { z } from 'zod';
-import { AuthService } from '../services/AuthService';
+import { AppAuth } from '../auth/AppAuth';
+import { UserService } from '../services/UserService';
 
-class LoginContext extends Context.define({
+class CredentialsContext extends Context.define({
   body: z.object({
     email: z.email(),
-    password: z.string().min(1),
+    password: z.string().min(8),
   }),
 }) {}
 
 @Controller('/auth')
 export class AuthController {
-  @Inject(AuthService)
-  private authService: AuthService;
+  @Inject(AppAuth)
+  private auth: AppAuth;
+
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Post('/register')
+  async register(context: CredentialsContext) {
+    const { email, password } = context.input.body;
+    const user = await this.userService.register(email, password);
+
+    return context.send({ id: user.id }, 201);
+  }
 
   @Post('/login')
-  async login(context: LoginContext) {
+  async login(context: CredentialsContext) {
     const { email, password } = context.input.body;
+    const user = await this.userService.verifyCredentials(email, password);
 
-    return context.send({ token: await this.authService.login(email, password) });
+    if (!user) {
+      return context.send({ error: 'Invalid email or password' }, 401);
+    }
+
+    const { token } = await this.auth.createSession({ id: user.id, roles: user.roles });
+
+    await applySessionCookie(context, this.auth, token);
+
+    return context.send({ token });
   }
 }
+```
+
+### Protected Controller
+
+`@Protected()` on the class guards every route; `@Roles('admin')` on a method narrows that route
+to sessions holding the role.
+
+```typescript
+// src/controllers/ProfileController.ts
+import { Protected, Roles, requireAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/profile')
+export class ProfileController {
+  @Get('/')
+  async getProfile(context: Context) {
+    const { user } = requireAuthSession(context);
+
+    return context.send({ id: user.id, roles: user.roles });
+  }
+
+  @Roles('admin')
+  @Get('/audit')
+  async getAudit(context: Context) {
+    return context.send({ entries: [] });
+  }
+}
+```
+
+### Entry Point
+
+The guard ships inside the package, so it reaches the container through
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages). Without it,
+`@Protected` is only a mark and the routes are served open.
+
+```typescript
+// src/index.ts
+import { AsenaServerFactory } from '@asenajs/asena';
+import { authComponents } from '@asenajs/asena-auth';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { logger } from './logger';
+
+const adapter = createErgenecoreAdapter();
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  port: 3000,
+  imports: [...authComponents],
+});
+
+await server.start();
 ```
 
 ### Usage
 
 ```bash
-# Login
-curl -X POST http://localhost:3000/auth/login \
+# Register, then log in: the token comes back in the body and as the asena_session cookie
+curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password"}'
+  -d '{"email":"ada@example.com","password":"correct-horse"}'
 
-# Response: {"token":"valid-token"}
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","password":"correct-horse"}'
 
-# Access protected route
-curl http://localhost:3000/profile \
-  -H "Authorization: Bearer valid-token"
+# No session: 401 with WWW-Authenticate: Bearer
+curl -i http://localhost:3000/profile
 
-# Response: {"user":{"id":"123","email":"user@example.com","role":"user"}}
+# With the token
+curl http://localhost:3000/profile -H "Authorization: Bearer $TOKEN"
+# {"id":"u1","roles":["user"]}
+
+# A session without the admin role: 403
+curl -i http://localhost:3000/profile/audit -H "Authorization: Bearer $TOKEN"
 ```
+
+::: info
+For providers, session management, Better Auth and testing, see [Asena Auth](/docs/packages/auth).
+:::
 
 ---
 
@@ -1516,6 +1582,7 @@ Using built-in rate limiter middleware.
 
 ```typescript
 // src/middlewares/ApiRateLimiter.ts
+import { getAuthSession } from '@asenajs/asena/auth';
 import { Middleware } from '@asenajs/asena/decorators';
 import { RateLimiterMiddleware } from '@asenajs/ergenecore';
 
@@ -1525,23 +1592,24 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
     super({
       capacity: 100,        // 100 requests
       refillRate: 100 / 60, // per minute
-      // Per user once AuthMiddleware has run, otherwise per client IP
-      keyGenerator: (ctx) => ctx.getValue('user')?.id ?? ctx.getRequestIp() ?? 'unknown',
+      // Per user on a protected route, otherwise per client IP
+      keyGenerator: (ctx) => getAuthSession(ctx)?.user.id ?? ctx.getRequestIp() ?? 'unknown',
       trustProxy: true,     // one reverse proxy in front: read the client from X-Forwarded-For
-      skip: (ctx) => ctx.getValue('user')?.role === 'admin',
+      skip: (ctx) => getAuthSession(ctx)?.user.roles?.includes('admin') ?? false,
       cost: (ctx) => (new URL(ctx.req.url).pathname.endsWith('/export') ? 10 : 1),
     });
   }
 }
 
 // src/controllers/ReportController.ts
+import { Protected } from '@asenajs/asena/auth';
 import { Controller } from '@asenajs/asena/decorators';
 import { Get } from '@asenajs/asena/decorators/http';
 import type { Context } from '@asenajs/ergenecore';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import { ApiRateLimiter } from '../middlewares/ApiRateLimiter';
 
-@Controller({ path: '/reports', middlewares: [AuthMiddleware] })
+@Protected()
+@Controller('/reports')
 export class ReportController {
   @Get({ path: '/', middlewares: [ApiRateLimiter] })
   async list(context: Context) {
@@ -1555,8 +1623,8 @@ export class ReportController {
 }
 ```
 
-Controller middleware runs before route middleware, so `user` is already set when the limiter
-reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
+The [asena-auth](#authentication) guard runs before route middleware, so the session is already
+on the context when the limiter reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
 client could otherwise pick its own bucket by sending the header.
 
 ---
@@ -2068,12 +2136,14 @@ These features are **stable and production-ready** in the current release:
 
 ### New in v0.12
 
-`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default.
+`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The current patches are `@asenajs/asena` 0.12.3, `@asenajs/ergenecore` 5.0.2 and `@asenajs/hono-adapter` 5.0.3; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
 
 - **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
 - **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
 - **[OpenAPI from contracts](/docs/packages/openapi#route-context-contracts)** - contracts become request schemas, documented in their input shape; responses keep the output shape
-- **The auth contract** - `@asenajs/asena/auth` ships the provider interface, session shapes, the `@Protected` / `@Public` / `@Roles` markers and `getAuthSession` / `requireAuthSession`, so auth implementations share one contract. Core never calls it
+- **[The auth contract](/docs/concepts/authentication)** - `@asenajs/asena/auth` ships the provider interface, session shapes, the `@Protected` / `@Public` / `@Roles` markers and `getAuthSession` / `requireAuthSession`, so auth implementations share one contract. Core never calls it
+- **[`@asenajs/asena-auth`](/docs/packages/auth)** *(package 1.0.0)* - enforces the contract: native opaque sessions stored server-side and [Better Auth](/docs/packages/auth#better-auth-provider) behind the same marks, with a route guard that answers 401 / 403 before route middlewares and the validator run, WebSocket upgrade authentication and a test provider, on both adapters
+- **[`asena doctor` auth checks](/docs/cli/commands#asena-doctor)** *(CLI 0.12.0)* - `auth-enforcement` flags markers with no guard to enforce them, `auth-better-auth-dep` a Better Auth provider without `better-auth` installed, `auth-cookie` session cookie options browsers reject
 - **One middleware order** - global → controller → route → validator → handler on both adapters; controller middlewares attach to the controller's own routes instead of a `/prefix/*` pattern
 - **Canonical duplicate-route detection** - routes that differ only in a trailing slash fail the boot instead of one silently shadowing the other
 - **[Rate limiting keyed on the peer](/docs/adapters/ergenecore#ratelimitermiddleware)** *(adapter majors)* - `RateLimiterMiddleware` ignores client-set forwarding headers unless `trustProxy` says otherwise, and `maxBuckets` bounds its memory
@@ -2152,6 +2222,7 @@ These features are **stable and production-ready** in the current release:
 ### Official Packages
 
 - **[@asenajs/asena-logger](/docs/packages/logger)** - Structured logging with multiple transports (console, file, Loki)
+- **[@asenajs/asena-auth](/docs/packages/auth)** - Authentication behind core's auth contract: server-side sessions and Better Auth, `@Protected` / `@Public` / `@Roles` route guards, WebSocket upgrade authentication and a test provider
 - **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
 - **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
 - **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
@@ -2167,6 +2238,7 @@ Adapters and official packages version independently of the core framework. `@as
 - **Project Scaffolding** - `asena create` command for project generation
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
+- **Project Diagnostics** - [`asena doctor`](/docs/cli/commands#asena-doctor) checks decorator flags, the config file, dependencies, duplicate copies, peer ranges and auth wiring; read-only, with an exit code for CI
 
 ## Planned for v1.0 (Planned)
 
@@ -2207,7 +2279,7 @@ still read the consuming application's environment at the right moment.
 - Official plugin registry
 
 **Use Cases:**
-- Authentication plugins (OAuth, JWT, SAML)
+- Authentication providers as plugins - [`@asenajs/asena-auth`](/docs/packages/auth) covers server-side sessions and Better Auth, which brings OAuth and social sign-in; JWT or SAML providers would implement the same `AsenaAuthProvider` contract
 - Database adapters (PostgreSQL, MySQL, MongoDB)
 - Monitoring and APM integrations
 
@@ -2360,6 +2432,8 @@ where there is none.
 | `@Controller('users')`, `@Get(':id')` | `@Controller('/users')`, `@Get('/:id')` |
 | `@Param()`, `@Body()`, `@Query()` | `context.getParam()`, `context.getBody()`, or a route context contract |
 | Guards | Middleware |
+| `@UseGuards(AuthGuard)`, a `RolesGuard` with `@Roles()` | `@Protected()` / `@Roles()`, enforced by `@asenajs/asena-auth` |
+| Passport strategies | asena-auth providers: server-side sessions, Better Auth, or your own `AsenaAuthProvider` |
 | `ValidationPipe` + DTO classes | Route context contracts |
 | Interceptors | Middleware with code after `await next()`; `@PostProcessor` |
 | Exception filters | `onError` on the `@Config` class |
@@ -2530,8 +2604,8 @@ Learn more: [Controllers](/docs/concepts/controllers) · [Context](/docs/concept
 
 ## Guards, Pipes and Interceptors
 
-NestJS has a separate building block for each step of a request. Asena has middleware and
-validation, which run in this order:
+NestJS has a separate building block for each step of a request. Asena has middleware, an auth
+guard and validation, which run in this order:
 
 **Diagram: Request pipeline**
 
@@ -2539,9 +2613,10 @@ A matched route:
 
 1. **Global middleware** - `globalMiddlewares()` on `@Config`, filtered by include/exclude patterns.
 2. **Controller middleware** - `@Controller({ middlewares })`, scoped to the controller path.
-3. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
-4. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
-5. **Handler** - The controller method, which answers with `context.send()`.
+3. **Auth guard** - Only on `@Protected` / `@Roles` routes, when `@asenajs/asena-auth` is imported. No session is a 401 with `WWW-Authenticate: Bearer`; a missing role is a 403.
+4. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
+5. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
+6. **Handler** - The controller method, which answers with `context.send()`.
 
 Off the main path:
 
@@ -2596,8 +2671,81 @@ export class AdminController {}
 
 :::
 
-**No direct equivalent:** `Reflector` and custom metadata such as `@Roles('admin')`. Pass the
-rule to the middleware another way, for example one middleware class per role.
+**No direct equivalent:** `Reflector` and custom metadata in general. Pass a rule to a middleware
+another way, for example one middleware class per rule. Authentication and roles are the exception,
+covered next.
+
+### Auth Guards and Passport → `@Protected` / `@Roles`
+
+The usual NestJS setup - an auth guard, a `RolesGuard` reading a custom `@Roles()` through
+`Reflector`, and an `IS_PUBLIC_KEY` escape hatch - is built in. Core ships the marks; the guard
+that enforces them and the providers come from [`@asenajs/asena-auth`](/docs/packages/auth).
+
+::: code-group
+
+```typescript [NestJS]
+@Controller('projects')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class ProjectController {
+  @Get()
+  list() {
+    return { projects: [] };
+  }
+
+  @Delete(':id')
+  @Roles('admin')
+  remove(@Param('id') id: string) {
+    return { deleted: id };
+  }
+
+  @Get('featured')
+  @Public()
+  featured() {
+    return { projects: [] };
+  }
+}
+```
+
+```typescript [Asena]
+import { Protected, Public, Roles } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Delete, Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/projects')
+export class ProjectController {
+  @Get('/')
+  list(context: Context) {
+    return context.send({ projects: [] });
+  }
+
+  @Roles('admin')
+  @Delete('/:id')
+  remove(context: Context) {
+    return context.send({ deleted: context.getParam('id') });
+  }
+
+  @Public()
+  @Get('/featured')
+  featured(context: Context) {
+    return context.send({ projects: [] });
+  }
+}
+```
+
+:::
+
+- The guard runs after the controller middleware and before route middleware and validation, much
+  as NestJS guards run before pipes. Register it once with `imports: [...authComponents]`.
+- `req.user` becomes `requireAuthSession(context).user`.
+- A Passport strategy becomes a provider: `@Auth` for server-side sessions,
+  [`@BetterAuth`](/docs/packages/auth#better-auth-provider) for Better Auth (email and password,
+  OAuth and social sign-in), or your own class implementing `AsenaAuthProvider` - see
+  [Multiple Providers](/docs/packages/auth#multiple-providers). asena-auth ships no JWT provider; a
+  stateless JWT check is a provider you write.
+
+Learn more: [Authentication](/docs/concepts/authentication) · [Asena Auth](/docs/packages/auth)
 
 ### Pipes → Route context contracts
 
@@ -6208,6 +6356,12 @@ want the rejection to reach `onError` and be shaped there with the rest of your 
 
 ### Authentication Middleware
 
+::: tip For real authentication, use asena-auth
+[`@asenajs/asena-auth`](/docs/packages/auth) provides sessions, `@Protected` / `@Roles` marks and a
+guard that runs before route middlewares and validators. The middleware below and the role check
+after it show how a middleware rejects a request; they are not a complete authentication scheme.
+:::
+
 ::: code-group
 
 ```typescript [Ergenecore]
@@ -6538,11 +6692,17 @@ globalMiddlewares()   ← array order, pattern-based entries included
   ↓
 Controller Middleware
   ↓
+Auth Guard            ← @Protected / @Roles routes, when asena-auth is imported
+  ↓
 Route Middleware
+  ↓
+Validator or Context.define contract
   ↓
 Route Handler
   ↓
 Route Middleware
+  ↓
+Auth Guard
   ↓
 Controller Middleware
   ↓
@@ -6557,8 +6717,10 @@ first makes it run first. Controller-level middleware always follows the whole g
 because the config is applied before controllers are registered.
 :::
 
-Validation runs after the whole middleware chain, right before the handler. The same order holds
-on both adapters:
+The auth guard is the [`@asenajs/asena-auth`](/docs/packages/auth#route-guards) middleware placed in
+front of a protected route's own middlewares. An anonymous request stops there with a 401, so the
+route middlewares and the validator never see it. Validation runs after the route middlewares,
+right before the handler. The same order holds on both adapters:
 
 **Diagram: Request pipeline**
 
@@ -6566,9 +6728,10 @@ A matched route:
 
 1. **Global middleware** - `globalMiddlewares()` on `@Config`, filtered by include/exclude patterns.
 2. **Controller middleware** - `@Controller({ middlewares })`, scoped to the controller path.
-3. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
-4. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
-5. **Handler** - The controller method, which answers with `context.send()`.
+3. **Auth guard** - Only on `@Protected` / `@Roles` routes, when `@asenajs/asena-auth` is imported. No session is a 401 with `WWW-Authenticate: Bearer`; a missing role is a 403.
+4. **Route middleware** - `@Get({ middlewares })` and the other method decorators.
+5. **Validation** - The route context contract, or the `validator` class. A failure throws a `ValidationError`.
+6. **Handler** - The controller method, which answers with `context.send()`.
 
 Off the main path:
 
@@ -6727,6 +6890,7 @@ public globalMiddlewares() {
 
 - [Controllers](/docs/concepts/controllers) - Attaching middleware to routes
 - [Validation](/docs/concepts/validation) - Request validation with Zod
+- [Authentication](/docs/concepts/authentication) - The `@Protected` / `@Roles` marks and their guard
 - [Context API](/docs/concepts/context) - Working with Context inside middleware
 - [Configuration](/docs/guides/configuration) - Registering global middleware
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
@@ -7331,6 +7495,19 @@ You can still use generic types for dynamic keys: `context.getValue<string>('dyn
 ::: info Setup
 Create a declaration file (e.g., `src/types/ContextState.ts`) and make sure it's included in your TypeScript compilation. The module path must be exactly `'@asenajs/asena/adapter'`.
 :::
+
+### The `authSession` Slot
+
+Core's `AsenaVariables` already declares one key: `authSession`, where an auth provider or guard
+stores the session it resolved. Leave it to them, and read it through the helpers from
+`@asenajs/asena/auth`:
+
+- `getAuthSession(context)` returns the session, `null` when the request was resolved as anonymous,
+  or `undefined` when nothing resolved it.
+- `requireAuthSession(context)` returns the session or throws a 401 `HttpException`.
+
+With [`@asenajs/asena-auth`](/docs/packages/auth), the guard fills the slot on protected routes, and
+`AuthSessionMiddleware`, registered globally, fills it on any route. See [Authentication](/docs/concepts/authentication#reading-the-session).
 
 ## WebSocket Support
 
@@ -8621,8 +8798,12 @@ the handler.
 ### Execution Order
 
 ```
-global middleware → controller middleware → route middleware → contract validation → handler
+global middleware → controller middleware → auth guard → route middleware → contract validation → handler
 ```
+
+The auth guard exists only on routes marked `@Protected` / `@Roles`, when
+[`@asenajs/asena-auth`](/docs/packages/auth#route-guards) is imported. It answers before validation,
+so an anonymous client sending an invalid body gets a 401, not a 400.
 
 This order is the same on both adapters. A middleware that reads the body does not consume it:
 validation still receives the full body. When validation fails or a middleware answers the request
@@ -8695,19 +8876,21 @@ export class ProductController {
 ### Combining with Middleware
 
 ```typescript
+@Protected()
 @Post({
   path: '/',
-  middlewares: [AuthMiddleware, RateLimitMiddleware],
+  middlewares: [RateLimitMiddleware],
   validator: CreateUserValidator
 })
 async create(context: Context) {
-  // AuthMiddleware -> RateLimitMiddleware -> CreateUserValidator -> handler
+  // auth guard -> RateLimitMiddleware -> CreateUserValidator -> handler
 }
 ```
 
-Both adapters run the route's middleware chain first and validate after it, so a middleware that
-calls `context.setValue('user', …)` has already run when the validator reads the request. Global
-middleware is top-level and always runs before both.
+Both adapters run the guard and the route's middleware chain first and validate after them, so the
+session the guard resolved, and anything a middleware stored with `context.setValue()`, are on the
+context when the validator reads the request. Global and controller middleware run before all of
+them.
 
 ## Zod Schema Definition
 
@@ -8945,6 +9128,188 @@ every attempt. Guard on `result.success` so the same hook works under both adapt
 - [Configuration](/docs/guides/configuration) - Global error and validation setup
 - [Ergenecore Adapter](/docs/adapters/ergenecore) - Ergenecore-specific features
 - [Zod Documentation](https://zod.dev) - Complete Zod schema guide
+
+
+---
+
+# Authentication
+Section: Concepts
+Source: https://asena.sh/raw/concepts/authentication.md
+
+# Authentication
+
+`@asenajs/asena/auth` is the auth **contract**: the guard marks, the session shapes, two session
+readers and the provider interface. Core records the marks and never acts on them.
+[`@asenajs/asena-auth`](/docs/packages/auth) enforces them and ships the providers.
+
+The contract lives in core so that the pieces never have to know each other: a controller, a
+provider and the enforcer each depend on core alone, and the marks on a controller stay the same
+when the provider behind them changes.
+
+## What Core Ships
+
+| Export | Kind | Role |
+|:-------|:-----|:-----|
+| `Protected`, `Public`, `Roles` | Decorators | Mark a controller or a handler |
+| `AuthUser`, `AuthSession` | Types | What a provider resolves for a request |
+| `getAuthSession`, `requireAuthSession` | Functions | Read the session from the context |
+| `AsenaAuthProvider` | Interface | What a provider implements |
+| `AUTH_PROVIDER_KEY` | Constant | `'AsenaAuthProvider'`, the interface key providers register under |
+| `AUTH_SESSION_CONTEXT_KEY` | Constant | `'authSession'`, the context key the session travels under |
+
+The rest - `RolesResolver`, `GuardMark`, the guard metadata keys and the `collectGuardMetadata` /
+`effectiveGuardMark` helpers - is there for enforcers; an application does not need it.
+
+## The Marks
+
+```typescript
+import { Protected, Public, Roles } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Delete, Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/projects')
+export class ProjectController {
+  @Get('/')
+  list(context: Context) {
+    return context.send({ projects: [] });
+  }
+
+  @Roles('admin')
+  @Delete('/:id')
+  remove(context: Context) {
+    return context.send({ deleted: context.getParam('id') });
+  }
+
+  @Public()
+  @Get('/featured')
+  featured(context: Context) {
+    return context.send({ projects: [] });
+  }
+}
+```
+
+- `@Protected()` asks for any session. `@Protected({ provider: 'Partner' })` names the provider
+  that must resolve it.
+- `@Roles('admin', 'editor')` asks for a session holding at least one of the roles, and implies
+  `@Protected`. `@Roles()` with no role throws at decoration time.
+- `@Public()` opens a route to anonymous requests, cancelling a class or an inherited mark.
+- A method mark **replaces** the class mark for that route. Roles never flow down from a class
+  mark; the provider name does.
+- When marks stack on one target, the decorator written on top wins.
+- Marks are inherited and override per class and per method name, so a `@Public()` subclass opens
+  what its `@Protected` base guards. See [Inheritance](/docs/concepts/inheritance#auth-marks-override-instead-of-adding-up).
+
+## Core Never Enforces Them
+
+A mark is metadata. Without an enforcer in the container, a `@Protected` route is served to anyone.
+asena-auth's guard is the enforcer, and it reaches the container through
+[`imports`](/docs/concepts/dependency-injection#registering-components-from-packages):
+
+```typescript
+import { AsenaServerFactory } from '@asenajs/asena';
+import { authComponents } from '@asenajs/asena-auth';
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...authComponents],
+});
+```
+
+Two checks catch a missing guard. The boot logs a warning when asena-auth's provider registry is
+imported without the guard, and [`asena doctor`](/docs/cli/commands#asena-doctor) fails
+`auth-enforcement` when `Protected` or `Roles` is imported from `@asenajs/asena/auth` but neither
+`authComponents` nor `AuthGuard` is imported from `@asenajs/asena-auth`.
+
+The guard runs between the controller middlewares and the route's own:
+
+```text
+global middlewares → controller middlewares → auth guard → route middlewares → validator → handler
+```
+
+An anonymous request to a protected route never reaches its route middlewares, its validator or
+its handler, so an invalid body from an anonymous client is a 401, not a 400. See
+[Middleware Execution Order](/docs/concepts/middleware#middleware-execution-order).
+
+The marks only apply to `@Controller` classes. asena-auth ignores them on a `@WebSocket` namespace,
+a `@FrontendController` or a service, and the boot logs a warning. Sockets authenticate with
+asena-auth's `AuthWebSocketMiddleware` instead - see [WebSocket](/docs/concepts/websocket#authenticating-sockets).
+
+## Reading the Session
+
+```typescript
+interface AuthUser {
+  id: string;
+  roles?: string[];
+  [key: string]: unknown;
+}
+
+interface AuthSession<TUser extends AuthUser = AuthUser> {
+  user: TUser;
+  session: { id: string; userId: string; createdAt: Date; expiresAt: Date };
+}
+```
+
+`getAuthSession(context)` reads the session without deciding anything:
+
+| `getAuthSession` returns | Meaning |
+|:-------------------------|:--------|
+| an `AuthSession` | A provider resolved a session for this request |
+| `null` | The request was resolved as anonymous |
+| `undefined` | Nothing resolved it: the route is not protected and no session middleware ran |
+
+`requireAuthSession(context)` returns the session or throws a 401 `HttpException`:
+
+```typescript
+import { Protected, requireAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/me')
+export class MeController {
+  @Get('/')
+  async me(context: Context) {
+    const { user } = requireAuthSession(context);
+
+    return context.send({ id: user.id, roles: user.roles });
+  }
+}
+```
+
+The session sits on the context under `authSession`, a key core's `AsenaVariables` already
+declares - see [Context](/docs/concepts/context#the-authsession-slot).
+
+## Writing a Provider
+
+A provider turns a request into a session:
+
+```typescript
+interface AsenaAuthProvider<TUser extends AuthUser = AuthUser> {
+  getSession(request: Request): Promise<AuthSession<TUser> | null>;
+  getRoles(session: AuthSession<TUser>): string[];
+}
+```
+
+`getSession` returns `null` when the request carries no valid credentials; the enforcer answers
+that with a 401. `getRoles` is what `@Roles` is checked against.
+
+A component that implements the interface and registers under `AUTH_PROVIDER_KEY` - for example
+`@Service('ApiKeyAuth')` with `@Implements(AUTH_PROVIDER_KEY)` - joins asena-auth's providers next
+to its own, and `@Protected({ provider: 'ApiKeyAuth' })` routes to it. The package page walks
+through such a provider for API keys, and through how several providers share one application,
+under [Multiple Providers](/docs/packages/auth#multiple-providers).
+
+## Related
+
+- [Asena Auth](/docs/packages/auth) - The providers, sessions, cookies and the guard
+- [Middleware](/docs/concepts/middleware#middleware-execution-order) - Where the guard runs
+- [Inheritance](/docs/concepts/inheritance) - How the marks behave in subclasses
+- [WebSocket](/docs/concepts/websocket#authenticating-sockets) - Authenticating socket upgrades
+- [asena doctor](/docs/cli/commands#asena-doctor) - The `auth-enforcement` check
 
 
 ---
@@ -10078,7 +10443,7 @@ sendPrivateMessage(targetSocketId: string, message: string) {
 
 ## WebSocket Middleware
 
-Just like controllers, WebSocket services support middleware! This is the **recommended way** to handle authentication, logging, and rate limiting.
+Just like controllers, WebSocket services support middleware. It runs on the upgrade request, before the socket opens, which makes it the place for authentication, origin checks, logging and rate limiting. For authentication, [`@asenajs/asena-auth`](/docs/packages/auth) ships a ready middleware - see [Authenticating Sockets](#authenticating-sockets).
 
 ### Creating WebSocket Middleware
 
@@ -10214,6 +10579,69 @@ const ws = new WebSocket('ws://localhost:3000/private', {
   }
 });
 ```
+
+### Authenticating Sockets
+
+`@Protected` and `@Roles` apply to `@Controller` routes only; on a `@WebSocket` namespace they are
+ignored and the boot logs a warning. A namespace authenticates with
+[`@asenajs/asena-auth`](/docs/packages/auth)'s `AuthWebSocketMiddleware`, which resolves the session
+on the upgrade request and stores it in `ws.data.values.authSession`. The package reaches the
+container through `imports: [...authComponents]`.
+
+List a `WebSocketOriginMiddleware` subclass from your adapter before it, to accept handshakes only
+from your own pages:
+
+```typescript
+// src/middlewares/ChatOrigin.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { WebSocketOriginMiddleware } from '@asenajs/ergenecore';
+
+@Middleware()
+export class ChatOrigin extends WebSocketOriginMiddleware {
+  constructor() {
+    super({ allowedOrigins: ['https://app.example.com'] });
+  }
+}
+```
+
+```typescript
+// src/sockets/ChatSocket.ts
+import type { AuthSession } from '@asenajs/asena/auth';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+import { AuthWebSocketMiddleware } from '@asenajs/asena-auth';
+import { ChatOrigin } from '../middlewares/ChatOrigin';
+
+interface ChatData {
+  authSession: AuthSession;
+}
+
+@WebSocket({ path: '/chat', name: 'ChatSocket', middlewares: [ChatOrigin, AuthWebSocketMiddleware] })
+export class ChatSocket extends AsenaWebSocketService<ChatData> {
+  protected async onOpen(ws: Socket<ChatData>): Promise<void> {
+    ws.send(`Welcome, ${ws.data.values.authSession.user.id}`);
+  }
+}
+```
+
+A browser cannot set headers on a WebSocket, so it sends its token as the subprotocol pair
+`bearer, <token>`:
+
+```typescript
+const socket = new WebSocket('wss://api.example.com/chat', ['bearer', token]);
+```
+
+- Without a session the upgrade is answered 401 with `WWW-Authenticate: Bearer`, and the socket
+  never opens.
+- A page on the same origin can rely on the session cookie instead. Server-side clients send
+  `Authorization: Bearer <token>`.
+- The origin check comes first because a browser attaches cookies to a cross-site handshake.
+  asena-auth already refuses a cross-site upgrade that carries only the cookie;
+  `WebSocketOriginMiddleware` narrows the accepted pages to the origins you list.
+- `WebSocketOriginMiddleware` rejects a handshake without an `Origin` header. Browsers always send
+  one; pass `allowMissingOrigin: true` when server-side clients connect too.
+
+See [Bearer Tokens and WebSocket](/docs/packages/auth#bearer-tokens-and-websocket) for the details.
 
 ## Using WebSocket in Services
 
@@ -13357,7 +13785,7 @@ public dashboard() {
 ::: warning Middleware Bypass
 Frontend Controller routes bypass the entire middleware chain. This means:
 - No CORS middleware
-- No authentication middleware
+- No authentication: the [asena-auth](/docs/packages/auth) guard does not apply, and `@Protected` / `@Roles` on a frontend controller are ignored with a boot warning
 - No rate limiting
 - No logging middleware
 
@@ -13548,14 +13976,14 @@ export class PublicPages {
 ```
 
 ::: tip SPA Authentication
-For single-page applications, handle authentication on the client side. The SPA can call your authenticated API endpoints (`@Controller` with auth middleware) while the initial HTML page is served without middleware.
+For single-page applications, serve the page publicly and authenticate on the client side. The SPA calls your [`@Protected`](/docs/concepts/authentication) API controllers with the session cookie or a Bearer token, while the initial HTML page is served without middleware. A page whose HTML itself must stay private belongs on a `@Protected` `@Controller` instead.
 :::
 
 ## Related
 
 - [Controllers](/docs/concepts/controllers) - HTTP route handling for your API routes
 - [Static File Serving](/docs/concepts/static-files) - Serving static assets
-- [Middleware](/docs/concepts/middleware) - Protecting page routes
+- [Authentication](/docs/concepts/authentication) - Protecting the API routes a page calls
 - [Configuration](/docs/guides/configuration) - Server configuration
 
 
@@ -13970,6 +14398,7 @@ Everything declared on a method or a field is collected from the whole prototype
 | `@Override` | ✅ | Marks accumulate across the chain; a subclass cannot un-mark an inherited one |
 | `@Hidden` on a method ([openapi](/docs/packages/openapi)) | ✅ | A hidden base-class route stays out of the spec |
 | `@Transaction` ([drizzle](/docs/packages/drizzle)) | ✅ | A base class's transactional methods run inside a transaction |
+| `@Protected` / `@Public` / `@Roles` ([auth](/docs/concepts/authentication)) | ✅ | The nearest declaration wins, per class and per method name - see [below](#auth-marks-override-instead-of-adding-up) |
 | Controller-level `middlewares` | ✅ | See below — a subclass may add, never silently drop |
 | Plain methods, getters, statics | ✅ | Normal JavaScript inheritance |
 
@@ -14040,6 +14469,37 @@ export class AdminV2 extends AdminBase {}
 To publish a base class's routes *without* its guards, move the routes to an undecorated base class and let each concrete controller declare its own `middlewares`.
 
 Repositories behave the same way — `@Repository` and `@Database` from [`@asenajs/asena-drizzle`](/docs/packages/drizzle) keep everything the decorated class inherited, including getters and statics.
+
+## Auth marks override instead of adding up
+
+The [auth marks](/docs/concepts/authentication) behave the other way. Walking the chain ancestors
+first, the class mark and each method's mark resolve to the nearest declaration, so a subclass
+replaces what it inherited, including opening it:
+
+```typescript
+@Protected()
+abstract class ReportRoutes {
+  @Get('/')
+  public list(context: Context) {
+    return context.send({ reports: [] });
+  }
+}
+
+@Controller('/reports')
+export class ReportController extends ReportRoutes {}
+
+@Public()
+@Controller('/public/reports')
+export class PublicReportController extends ReportRoutes {}
+```
+
+`GET /reports` answers 401 without a session; `GET /public/reports` is open. A method mark on the
+subclass replaces the inherited one for that method name in the same way.
+
+The difference is deliberate. Middlewares are steps, and a step dropped without a trace is the
+danger. A mark is one decision per route, and the subclass that changes it says so in its own
+source with `@Public()` or another mark. The marks are enforced by
+[`@asenajs/asena-auth`](/docs/packages/auth#route-guards); core only records them.
 
 ## How overrides resolve
 
@@ -14179,6 +14639,7 @@ export class OrderController extends CrudControllerBase<Order> {
 - [Microservices](/docs/concepts/microservices) — `@MessageController` prefixes and transports
 - [Event System](/docs/concepts/event-system) — in-process `@On` handlers
 - [Drizzle](/docs/packages/drizzle) — `@Repository` and `@Database` inheritance
+- [Authentication](/docs/concepts/authentication) — the `@Protected` / `@Public` / `@Roles` marks
 
 
 ---
@@ -14221,21 +14682,25 @@ Layers, top to bottom:
 
 Asena currently provides two official adapters:
 
-- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 152k req/s (plaintext · measured on the published benchmark)
-- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 142k req/s (plaintext · measured on the published benchmark)
+- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 212k req/s (plaintext · measured on the published benchmark)
+- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 191k req/s (plaintext · measured on the published benchmark)
 
 Identical application code runs on both — only the adapter import changes. See [Benchmarks](/docs/benchmarks) for the full comparison across eleven scenarios.
 
 ## Performance Comparison
 
-Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections:
+Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections. The database column reads through each stack's ORM: Drizzle for Asena, TypeORM for NestJS.
 
-| Adapter            | Runtime | Plaintext | JSON serialization | DB read by id |
-|:-------------------|:--------|----------:|-------------------:|--------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**      | **64,995**    |
-| **Hono adapter**   | Bun     | 141,822   | 132,708            | 62,664        |
-| NestJS · Express   | Bun     | 65,750    | 63,540             | 15,148        |
-| NestJS · Express   | Node    | 57,408    | 57,824             | 15,461        |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Database · read by id, ORM |
+|:-----------------|:--------|------------:|-------------------:|---------------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |                 **46,422** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |                     45,683 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |                     26,737 |
+| NestJS · Express | Node    |      81,623 |             80,660 |                     26,636 |
+
+
 
 ::: tip
 Full methodology — hardware, load generator, isolation and the byte-level conformance gate — is documented on the [Benchmarks](/docs/benchmarks) page.
@@ -14495,16 +14960,20 @@ Ergenecore is a high-performance adapter that:
 
 ### Performance
 
-Ergenecore is the **fastest** Asena adapter:
+Ergenecore leads the Asena adapters on plaintext and JSON serialization:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization |
-|:-------------------|:--------|------------:|-------------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**        |
-| Hono adapter       | Bun     | 141,822     | 132,708            |
-| NestJS · Express   | Bun     | 65,750      | 63,540             |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization |
+|:-----------------|:--------|------------:|-------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |
+
+
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
@@ -14532,7 +15001,9 @@ bun add @asenajs/ergenecore zod
 ```
 
 `zod` is a **peer dependency**: the adapter defines the validation contract, your project owns the
-library and its version.
+library and its version. bun, npm 7+ and pnpm 8+ install peers automatically, but declare `zod`
+anyway so it survives a clean install; yarn 1 does not install peers at all, so `yarn add zod` is
+required there.
 
 **Requirements:**
 - Bun v1.4 or higher
@@ -14884,7 +15355,7 @@ RateLimiterMiddleware uses O(1) bucket lookup and lazy token refill for optimal 
 ::: info Its sweep timer is released on shutdown
 `RateLimiterMiddleware.destroy()` carries an [`@OnStop`](/docs/concepts/lifecycle), so `server.stop()` clears the cleanup interval and drops the bucket map. The hook is inherited, so your `@Middleware()` subclass gets it without redeclaring anything.
 
-The timer was always `unref()`'d and never held the process open — what it did do is survive a stop/start cycle *inside* one process (an ordinary test suite does twenty), leaving a timer per stopped server still sweeping a map nobody reads, and letting a restarted server inherit rate-limit state from the one before it.
+The timer is `unref()`'d and never holds the process open. Clearing it on stop matters for stop/start cycles *inside* one process (an ordinary test suite does twenty): a restarted server starts with fresh rate-limit state, and no timer keeps sweeping a stopped server's map.
 :::
 
 ## Performance & Architecture
@@ -15032,11 +15503,9 @@ body. The per-route `StaticServeService.onNotFound` still runs first when you de
 
 ### Every thrown error reaches `onError` first
 
-Including `HttpException`. The adapter used to answer an `HttpException` straight from
-`getResponse()` at several points and only consult your handler for everything else, so an
-application could reshape its own 4xx envelopes on the Hono adapter but not here. Your handler now
-sees all of them, and the adapter falls back to `getResponse()` (or a generic 500) only when there
-is no handler, when it returns nothing, or when it throws.
+Including `HttpException`, so you can reshape your own 4xx envelopes the same way on both
+adapters. The adapter falls back to `getResponse()` (or a generic 500) only when there is no
+handler, when it returns nothing, or when it throws.
 
 With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
 thrown message is deliberately not echoed to the caller — it is written to the log with its stack
@@ -15198,15 +15667,19 @@ Hono Adapter brings together the best of both worlds:
 
 Hono Adapter delivers excellent performance powered by Bun and Hono:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
-|:-------------------|:--------|------------:|-------------------:|------------------:|
-| Ergenecore         | Bun     | 151,923     | 148,415            | 86,710            |
-| **Hono adapter**   | Bun     | **141,822** | **132,708**        | **86,840**        |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Full API endpoint |
+|:-----------------|:--------|------------:|-------------------:|------------------:|
+| Ergenecore       | Bun     |     211,630 |            201,879 |           133,533 |
+| **Hono adapter** | Bun     | **191,199** |        **190,401** |       **135,480** |
+
+
 
 The two are level on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
@@ -15236,6 +15709,10 @@ bun add @asenajs/hono-adapter hono zod
 `hono` and `zod` are **peer dependencies**: this adapter defines the wrapper, your project owns
 the libraries it wraps. That is what keeps you and the adapter on one copy of `hono` — see
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions) for what a second copy does.
+
+Declare both in your own `package.json` even where peers auto-install (bun, npm 7+, pnpm 8+), so
+they survive a clean install. Yarn 1 does not install peers at all - there, `yarn add hono zod` is
+required.
 
 **Requirements:**
 - [Bun](https://bun.sh) runtime v1.4 or higher
@@ -16168,14 +16645,14 @@ import { AsenaLogger } from '@asenajs/asena-logger';
 export const logger = new AsenaLogger();
 ```
 
-The constructor also takes an optional Winston logger and an options object, which is the
-simplest way to change the level or add transports without building a Winston logger
-yourself:
+The constructor also takes an optional Winston logger and an options object (`level`,
+`format`, `transports`), which is the simplest way to change the level or the transports
+without building a Winston logger yourself:
 
 ```typescript
 export const logger = new AsenaLogger(undefined, {
   level: 'debug',
-  transports: [/* extra Winston transports */],
+  transports: [/* Winston transports - replaces the default console transport */],
 });
 ```
 
@@ -16441,6 +16918,9 @@ const winstonLogger = winston.createLogger({
 export const logger = new AsenaLogger(winstonLogger);
 ```
 
+A custom Winston instance is used as-is: AsenaLogger's own [output format](#output-format) is
+not applied to it, so give it a `format` of your own.
+
 ::: info Winston Documentation
 For detailed Winston configuration options (transports, formats, log rotation, etc.), see the [Winston Documentation](https://github.com/winstonjs/winston).
 :::
@@ -16519,6 +16999,862 @@ logger.info('User logged in', {
 - [Configuration](/docs/guides/configuration) - Server configuration
 - [Error Handling](/docs/guides/error-handling) - Logging errors from a global handler
 - [Winston Documentation](https://github.com/winstonjs/winston) - Advanced configuration
+
+
+---
+
+# Asena Auth
+Section: Official Packages
+Source: https://asena.sh/raw/packages/auth.md
+
+# Asena Auth
+
+`@asenajs/asena-auth` adds authentication to AsenaJS behind core's `@asenajs/asena/auth` contract. It ships two providers: **native opaque sessions** stored on the server, and **[Better Auth](https://www.better-auth.com)**. The contract's `@Protected` / `@Public` / `@Roles` marks become a route guard that answers 401 or 403 before the route's middlewares and its validator run. It works the same on Ergenecore and the Hono adapter.
+
+- [Quick Start](#quick-start) - A provider, a login route and a protected route.
+- [Route Guards](#route-guards) - `@Protected`, `@Public`, `@Roles` and where they run.
+- [Session Lifecycle](#session-lifecycle) - Logout, rotation and per-device revocation.
+- [Bearer and WebSocket](#bearer-tokens-and-websocket) - Header tokens and authenticated socket upgrades.
+- [Better Auth](#better-auth-provider) - Better Auth behind the same guards.
+- [Testing](#testing) - A header-driven provider for tests.
+
+## Features
+
+- **Two Providers, One Contract** - native sessions (`@Auth`) and Better Auth (`@BetterAuth`); any class implementing core's `AsenaAuthProvider` can join them
+- **Guards Before Validation** - an anonymous request never reaches route middlewares, the validator or a `Context.define` contract
+- **Server-Side Sessions** - random opaque tokens, only their SHA-256 stored, sliding expiry with an absolute cap
+- **Session Management** - logout, rotation, listing a user's sessions, revoking one device or all of them
+- **Cookie and Bearer** - an HttpOnly cookie for browsers, `Authorization: Bearer` for everything else, a cross-site check for cookie sessions
+- **WebSocket Upgrades** - rejected before the upgrade; browsers send the token as a subprotocol
+- **Fails at Boot** - ambiguous providers, unknown provider names and guard marks it cannot enforce stop the boot with a message that says what to change
+- **Test Provider** - `@asenajs/asena-auth/testing` turns a request header into a session
+- **Zero Runtime Dependencies** - tokens and password hashing use Bun's built-ins; `better-auth` is an optional peer
+
+## Installation
+
+```bash
+bun add @asenajs/asena-auth
+```
+
+For the Better Auth provider:
+
+```bash
+bun add @asenajs/asena-auth better-auth
+```
+
+**Requirements:**
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.2 or higher
+- [@asenajs/ergenecore](/docs/adapters/ergenecore) v5.0.2 or higher, or [@asenajs/hono-adapter](/docs/adapters/hono) v5.0.3 or higher
+- [better-auth](https://www.better-auth.com) v1.2 or higher, below v2 - optional peer dependency, only for the Better Auth provider
+
+## Quick Start
+
+The snippets type the context with Ergenecore's `Context`; on the Hono adapter, import `Context` from `@asenajs/hono-adapter` instead.
+
+### 1. Create the Provider
+
+Extend `AsenaAuthService` and decorate it with `@Auth`. Every duration is in seconds.
+
+```typescript
+// src/auth/AppAuth.ts
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+
+@Auth({ sessionTtl: 3600 })
+export class AppAuth extends AsenaAuthService {}
+```
+
+The provider registers under its class name, `AppAuth`. Sessions live in an in-process `MemoryAuthStore` until you pass a [`store`](#custom-session-store).
+
+### 2. Issue a Session at Login
+
+```typescript
+// src/controllers/AuthController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { applySessionCookie } from '@asenajs/asena-auth';
+import type { Context } from '@asenajs/ergenecore';
+import { AppAuth } from '../auth/AppAuth';
+import { UserService } from '../services/UserService';
+
+@Controller('/auth')
+export class AuthController {
+  @Inject(AppAuth)
+  private auth: AppAuth;
+
+  @Inject(UserService)
+  private userService: UserService;
+
+  @Post('/login')
+  async login(context: Context) {
+    const { email, password } = await context.getBody<{ email: string; password: string }>();
+    const user = await this.userService.verifyCredentials(email, password);
+
+    if (!user) {
+      return context.send({ error: 'Invalid email or password' }, 401);
+    }
+
+    const { token } = await this.auth.createSession({ id: user.id, roles: user.roles });
+
+    await applySessionCookie(context, this.auth, token);
+
+    return context.send({ token });
+  }
+}
+```
+
+`createSession(user)` stores a session and returns its opaque token. `applySessionCookie` writes the token as the `asena_session` cookie for browsers; the token in the body is for clients that send `Authorization: Bearer <token>`. `verifyCredentials` is your code - [Passwords](#passwords) shows one.
+
+The user you hand to `createSession` needs an `id` and is stored as a plain-data snapshot: keep it small, and keep functions out of it (`createSession` throws a `TypeError` on one).
+
+### 3. Register the Package Components
+
+The guard and the middlewares ship inside the package, so they reach the container through [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages):
+
+```typescript
+// src/index.ts
+import { AsenaServerFactory } from '@asenajs/asena';
+import { authComponents } from '@asenajs/asena-auth';
+
+const server = await AsenaServerFactory.create({
+  adapter,
+  logger,
+  imports: [...authComponents],
+});
+
+await server.start();
+```
+
+| Component | Role |
+|:----------|:-----|
+| `AuthGuard` | Post-processor: reads the guard marks at boot and puts the guard in front of every protected route |
+| `AuthGuardMiddleware` | The guard itself: answers 401 / 403 |
+| `AuthProviderRegistry` | Finds the providers, picks the primary, checks every protected route at boot |
+| `AuthSessionMiddleware` | Optional global middleware: [sessions on public routes](#optional-sessions-on-public-routes) |
+| `AuthWebSocketMiddleware` | Authenticates [WebSocket upgrades](#websocket) |
+
+::: warning `@Protected` is only a mark
+Without `AuthGuard` in the container nothing enforces it. When the registry is imported without the guard, the boot logs
+`[asena-auth] AuthGuard is not imported: @Protected/@Roles routes are not enforced and not validated. Add it to imports (or import authComponents).`
+:::
+
+### 4. Protect a Route
+
+```typescript
+// src/controllers/MeController.ts
+import { Protected, requireAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/me')
+export class MeController {
+  @Get('/')
+  async me(context: Context) {
+    const { user } = requireAuthSession(context);
+
+    return context.send({ id: user.id, roles: user.roles });
+  }
+}
+```
+
+```bash
+curl -i http://localhost:3000/me
+# 401, WWW-Authenticate: Bearer
+
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/me
+# 200 {"id":"u1","roles":["user"]}
+```
+
+A browser that logged in sends the `asena_session` cookie instead. When a request carries both, the Bearer token wins.
+
+## Route Guards
+
+The three marks come from core's `@asenajs/asena/auth`:
+
+```typescript
+import { Protected, Public, Roles } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Delete, Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Protected()
+@Controller('/projects')
+export class ProjectController {
+  @Get('/')
+  list(context: Context) {
+    return context.send({ projects: [] });
+  }
+
+  @Roles('admin')
+  @Delete('/:id')
+  remove(context: Context) {
+    return context.send({ deleted: context.getParam('id') });
+  }
+
+  @Public()
+  @Get('/featured')
+  featured(context: Context) {
+    return context.send({ projects: [] });
+  }
+}
+```
+
+- A class mark covers every route of the controller; a method mark **replaces** it for that route.
+- `@Roles(...)` implies `@Protected` and is any-of: a session holding at least one of the roles passes, any other session gets **403** (without `WWW-Authenticate`). `@Roles()` with no role throws at decoration time.
+- Roles of a class mark never flow down to a method that has its own mark. The provider name does: `@Roles('admin')` under `@Protected({ provider: 'Partner' })` still asks `Partner`.
+- When marks stack on one target, the decorator written on top wins.
+- Marks are inherited, and a `@Public()` subclass opens what its `@Protected` base guards - see [Inheritance](/docs/concepts/inheritance).
+- Marks only apply to `@Controller` classes. On a service or a `@WebSocket` namespace they are ignored and the boot logs a warning; sockets use [`AuthWebSocketMiddleware`](#websocket).
+
+### Roles and Typed Users
+
+The default resolver reads `user.roles` when it is an array, else splits `user.role` on commas (the Better Auth admin plugin's shape), else returns `[]`. The `roles` option replaces it - here, to let higher roles imply lower ones:
+
+```typescript
+import type { AuthUser } from '@asenajs/asena/auth';
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+
+export interface AppUser extends AuthUser {
+  email: string;
+  roles: string[];
+}
+
+const implied: Record<string, string[]> = {
+  owner: ['owner', 'admin', 'member'],
+  admin: ['admin', 'member'],
+};
+
+@Auth({
+  roles: ({ user }) => (user.roles ?? []).flatMap((role) => implied[role] ?? [role]),
+})
+export class AppAuth extends AsenaAuthService<AppUser> {}
+```
+
+The type parameter types `createSession(user)`; handlers pass it to the session readers: `requireAuthSession<AppUser>(context).user.email`.
+
+### Where the Guard Runs
+
+```text
+globalMiddlewares()            ← AuthSessionMiddleware, when you register it
+  ↓
+Controller middlewares
+  ↓
+Auth guard                     ← 401 / 403 stop here
+  ↓
+Route middlewares
+  ↓
+Validator or Context.define contract
+  ↓
+Handler
+```
+
+An anonymous request to a protected route never reaches the route's own middlewares, its validator or the handler: an invalid body from an anonymous client is a 401, not a 400. See [Middleware Execution Order](/docs/concepts/middleware#middleware-execution-order) and [Route Context Contracts](/docs/concepts/validation#route-context-contracts).
+
+## Reading the Session
+
+Core's `getAuthSession(context)` reads the session without deciding anything; `requireAuthSession(context)` returns it or throws a 401 `HttpException`.
+
+| `getAuthSession` returns | Meaning |
+|:-------------------------|:--------|
+| an `AuthSession` | A provider resolved a session for this request |
+| `null` | The request was resolved as anonymous, e.g. by `AuthSessionMiddleware` on a public route |
+| `undefined` | Nothing resolved it: the route is not protected and no session middleware ran |
+
+```typescript
+interface AuthSession<TUser extends AuthUser = AuthUser> {
+  user: TUser;
+  session: { id: string; userId: string; createdAt: Date; expiresAt: Date };
+}
+```
+
+`user` is what `createSession` stored, or what [`loadUser`](#fresh-users-with-loaduser) returned. For a native session, `session.id` is the SHA-256 of the token: safe to show the user, and what [`revokeSessionById`](#session-lifecycle) takes.
+
+## Passwords
+
+The provider hashes and verifies passwords with `Bun.password`. A `UserService` built on it:
+
+```typescript
+// src/services/UserService.ts
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { AppAuth } from '../auth/AppAuth';
+import { UserRepository } from '../repositories/UserRepository';
+
+@Service()
+export class UserService {
+  @Inject(AppAuth)
+  private auth: AppAuth;
+
+  @Inject(UserRepository)
+  private users: UserRepository;
+
+  async register(email: string, password: string) {
+    return this.users.create({ email, passwordHash: await this.auth.hashPassword(password) });
+  }
+
+  async verifyCredentials(email: string, password: string) {
+    const user = await this.users.findByEmail(email);
+
+    return user && (await this.auth.verifyPassword(password, user.passwordHash)) ? user : null;
+  }
+}
+```
+
+`hashPassword` uses bcrypt with cost 12; `hashing: { algorithm: 'argon2id' }` (or `argon2d` / `argon2i`) switches it. `verifyPassword` reads the algorithm from the hash, so stored hashes keep verifying after a switch. Both also exist as standalone functions, `hashPassword(password, options?)` and `verifyPassword(password, hash)`.
+
+## Session Lifecycle
+
+```typescript
+// src/controllers/AccountController.ts
+import { Protected, requireAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Delete, Get, Post } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { clearSessionCookie } from '@asenajs/asena-auth';
+import type { Context } from '@asenajs/ergenecore';
+import { AppAuth } from '../auth/AppAuth';
+
+@Protected()
+@Controller('/account')
+export class AccountController {
+  @Inject(AppAuth)
+  private auth: AppAuth;
+
+  @Post('/logout')
+  async logout(context: Context) {
+    await this.auth.logout(context);
+
+    return context.send({ ok: true });
+  }
+
+  @Post('/rotate')
+  async rotate(context: Context) {
+    return context.send({ token: await this.auth.rotateSession(context) });
+  }
+
+  @Get('/sessions')
+  async sessions(context: Context) {
+    const { user } = requireAuthSession(context);
+    const sessions = await this.auth.listUserSessions(user.id);
+
+    return context.send(sessions.map(({ session }) => session));
+  }
+
+  @Delete('/sessions/:id')
+  async revoke(context: Context) {
+    const { user } = requireAuthSession(context);
+    const id = context.getParam('id');
+    const own = await this.auth.listUserSessions(user.id);
+
+    if (!own.some(({ session }) => session.id === id)) {
+      return context.send({ error: 'Not found' }, 404);
+    }
+
+    await this.auth.revokeSessionById(id);
+
+    return context.send({ ok: true });
+  }
+
+  @Post('/logout-everywhere')
+  async logoutEverywhere(context: Context) {
+    await this.auth.revokeUserSessions(requireAuthSession(context).user.id);
+    await clearSessionCookie(context, this.auth);
+
+    return context.send({ ok: true });
+  }
+}
+```
+
+| Method | What it does |
+|:-------|:-------------|
+| `createSession(user)` | Stores a new session; returns `{ token, session }` |
+| `logout(ctx)` | Ends the request's session (the Bearer token, else the cookie) and clears the cookie; without a session it only clears the cookie |
+| `rotateSession(ctx, user?)` | Replaces the request's session and returns the new token; re-issues the cookie when the old token came from it. Throws when the request has no session |
+| `listUserSessions(userId)` | The user's live sessions, each with the user stored at `createSession`; needs a store with `listByUser` |
+| `revokeSessionById(id)` | Ends one session by its `session.id` - one device |
+| `revokeSession(token)` | Ends one session by its token |
+| `revokeUserSessions(userId)` | Ends every session of the user |
+| `getSession(request)` | Resolves a raw `Request` - what the guard calls |
+| `cookieName` / `cookieOptions` | The session cookie as configured |
+
+A revoked session is a 401 on its very next request: every request reads the store. A few details worth knowing:
+
+- **Rotate after a privilege change.** Rotation is a fresh authentication: `createdAt` restarts, and with it `absoluteTtl`. Without `user`, the new session keeps the stored user. The old session ends only once the new one exists, and `getAuthSession(ctx)` returns the new one for the rest of the request.
+- **An id from the client is untrusted.** `revokeSessionById` revokes whatever id it gets; check ownership first, as the snippet does.
+- **`logout` ends one session.** With a Bearer token and a different session in the cookie, the Bearer session ends and the cookie is cleared; the cookie's session expires on its own. A cross-site request cannot end a cookie session (see [CSRF](#cross-site-requests)) - it only gets the cookie cleared.
+
+## Optional Sessions on Public Routes
+
+Guards resolve the session on protected routes only. To read it on public routes too, register `AuthSessionMiddleware` globally:
+
+```typescript
+// src/config/AppConfig.ts
+import { Config } from '@asenajs/asena/decorators';
+import { AuthSessionMiddleware } from '@asenajs/asena-auth';
+import { ConfigService } from '@asenajs/ergenecore';
+
+@Config()
+export class AppConfig extends ConfigService {
+  public globalMiddlewares() {
+    return [AuthSessionMiddleware];
+  }
+}
+```
+
+```typescript
+// src/controllers/FeedController.ts
+import { getAuthSession } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import type { Context } from '@asenajs/ergenecore';
+
+@Controller('/feed')
+export class FeedController {
+  @Get('/')
+  feed(context: Context) {
+    const session = getAuthSession(context);
+
+    return context.send({ user: session?.user.id ?? null });
+  }
+}
+```
+
+- It never rejects: an anonymous request gets `null`, and guards still decide.
+- The provider is asked once per request; a guard that follows reuses what the middleware resolved.
+- It uses the primary (or only) provider. A route that names another provider asks that provider itself - a primary-provider session never opens it.
+- It also re-issues a [slid](#security-defaults) session cookie on public routes.
+
+## Bearer Tokens and WebSocket
+
+### Bearer
+
+A token is 32 random bytes (`tokenBytes`) in unpadded base64url - 43 characters, valid as a header value, a cookie value and a WebSocket subprotocol. `Authorization: Bearer <token>` (scheme case-insensitive) wins over the cookie. A Bearer session slides in the store like any other; no cookie is written for it.
+
+`bearer: false` makes the provider cookie-only. It also turns off the WebSocket subprotocol token, which arrives as that same header.
+
+### WebSocket
+
+Put `AuthWebSocketMiddleware` on the namespace. The session lands in `ws.data.values.authSession`, next to whatever earlier middlewares stored:
+
+```typescript
+// src/sockets/ChatSocket.ts
+import type { AuthSession } from '@asenajs/asena/auth';
+import { WebSocket } from '@asenajs/asena/decorators';
+import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
+import { AuthWebSocketMiddleware } from '@asenajs/asena-auth';
+
+interface ChatData {
+  authSession: AuthSession;
+}
+
+@WebSocket({ path: '/chat', name: 'ChatSocket', middlewares: [AuthWebSocketMiddleware] })
+export class ChatSocket extends AsenaWebSocketService<ChatData> {
+  protected async onOpen(ws: Socket<ChatData>): Promise<void> {
+    ws.send(`Welcome, ${ws.data.values.authSession.user.id}`);
+  }
+}
+```
+
+A browser cannot set headers on a WebSocket, so it sends the token as the subprotocol pair `bearer, <token>`:
+
+```typescript
+const socket = new WebSocket('wss://api.example.com/chat', ['bearer', token]);
+```
+
+- The socket opens with `bearer` as its negotiated protocol.
+- A page on the same origin can rely on the session cookie instead. A cross-site upgrade carrying only the cookie never opens.
+- Server-side clients can send `Authorization: Bearer <token>`.
+- Without a session the upgrade is answered 401 with `WWW-Authenticate: Bearer`, and the socket never opens.
+- A subprotocol token wins over a cookie session the global `AuthSessionMiddleware` resolved, and an invalid subprotocol token is refused even when the cookie is valid.
+
+## Better Auth Provider
+
+Better Auth handles sign-up, sign-in, OAuth and the rest; the package puts its sessions behind the same guards. Extend `BetterAuthService` and hand `@BetterAuth` your `betterAuth({...})` instance:
+
+```typescript
+// src/auth/AppBetterAuth.ts
+import { BetterAuth, BetterAuthService } from '@asenajs/asena-auth';
+import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins';
+
+@BetterAuth(() => ({
+  auth: betterAuth({
+    // database, secret, social providers: your Better Auth configuration
+    emailAndPassword: { enabled: true },
+    plugins: [bearer()],
+  }),
+}))
+export class AppBetterAuth extends BetterAuthService {}
+```
+
+Mount Better Auth's handler with a controller whose prefix equals Better Auth's `basePath` (default `/api/auth`):
+
+```typescript
+// src/controllers/AuthApiController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { BetterAuthController } from '@asenajs/asena-auth';
+import { AppBetterAuth } from '../auth/AppBetterAuth';
+
+@Controller('/api/auth')
+export class AuthApiController extends BetterAuthController {
+  @Inject(AppBetterAuth)
+  protected readonly authService!: AppBetterAuth;
+}
+```
+
+Every request below the prefix, whatever its method, reaches Better Auth with the raw `Request`, and its `Response` is returned unchanged. From there on, `@Protected`, `@Roles`, the session readers and both middlewares work as with the native provider:
+
+- The thunk is the usual form: it runs when the provider is constructed, not when the module is imported. It registers under the class name; the object form takes a `name`. The other options are `primary` and `roles`.
+- Better Auth reads its own session cookie. `Authorization: Bearer` and the WebSocket subprotocol token need its [`bearer` plugin](https://www.better-auth.com/docs/plugins/bearer); without it, only the cookie authenticates.
+- When Better Auth refreshes a session while resolving it, its `Set-Cookie` headers are forwarded on the response.
+- The default roles resolver splits the admin plugin's comma-separated `user.role`.
+- Session lifetime, cookies and CSRF protection are Better Auth's configuration; the native options (`sessionTtl`, `cookie`, `csrf`, ...) do not apply.
+- The package never imports `better-auth`; an app without the Better Auth provider does not install it.
+
+## Multiple Providers
+
+Register several providers and name the one a route needs:
+
+```typescript
+import { Protected } from '@asenajs/asena/auth';
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+import type { Context } from '@asenajs/ergenecore';
+
+@Auth({ primary: true })
+export class AppAuth extends AsenaAuthService {}
+
+@Auth({ name: 'Partner', cookie: { name: 'partner_session' } })
+export class PartnerAuth extends AsenaAuthService {}
+
+@Protected({ provider: 'Partner' })
+@Controller('/partner')
+export class PartnerController {
+  @Get('/orders')
+  orders(context: Context) {
+    return context.send({ orders: [] });
+  }
+}
+```
+
+- A provider is known by its registered name: the class name, or `name` in the object form.
+- Routes without a provider name, and both session middlewares, use the provider marked `primary: true` - or the only one, when there is one.
+- `@Protected({ provider })` asks only that provider; a session from any other provider is a 401 there.
+- Give each native provider its own cookie name; otherwise they share one cookie.
+
+### Third-Party Providers
+
+Any class implementing core's `AsenaAuthProvider` and registered under `AUTH_PROVIDER_KEY` joins the registry the same way - here, API keys for machine clients:
+
+```typescript
+// src/auth/ApiKeyAuth.ts
+import { AUTH_PROVIDER_KEY } from '@asenajs/asena/auth';
+import type { AsenaAuthProvider, AuthSession } from '@asenajs/asena/auth';
+import { Service } from '@asenajs/asena/decorators';
+import { Implements, Inject } from '@asenajs/asena/decorators/ioc';
+import { ApiClientService } from '../services/ApiClientService';
+
+@Service('ApiKeyAuth')
+@Implements(AUTH_PROVIDER_KEY)
+export class ApiKeyAuth implements AsenaAuthProvider {
+  @Inject(ApiClientService)
+  private clients: ApiClientService;
+
+  async getSession(request: Request): Promise<AuthSession | null> {
+    const client = await this.clients.findByKey(request.headers.get('x-api-key'));
+
+    if (!client) {
+      return null;
+    }
+
+    return {
+      user: { id: client.id, roles: client.scopes },
+      session: { id: client.keyId, userId: client.id, createdAt: client.createdAt, expiresAt: client.expiresAt },
+    };
+  }
+
+  getRoles(session: AuthSession): string[] {
+    return session.user.roles ?? [];
+  }
+}
+```
+
+`@Protected({ provider: 'ApiKeyAuth' })` and `@Roles(...)` then work against it.
+
+### Boot Errors
+
+The registry checks every protected route at boot. A problem stops the boot with core's `@OnStart hook 'AuthProviderRegistry.onStart()' failed`, carrying one of these as its cause:
+
+| Situation | Message |
+|:----------|:--------|
+| Several providers, none primary, a route without a provider name | `[asena-auth] Route GET /me (MeController.me) is protected without a provider name, but 2 auth providers are registered (AppAuth, Partner) and none is primary. Add primary: true to one of them or use @Protected({ provider }).` |
+| A route names a provider that does not exist | `[asena-auth] Route GET /partner/orders (PartnerController.orders) asks for auth provider 'Partner', which is not registered. Registered: AppAuth.` |
+| Two providers marked primary | `[asena-auth] More than one auth provider is primary (AppAuth, Partner). Keep primary: true on exactly one.` |
+| A protected route, no provider at all | `[asena-auth] Route GET /me (MeController.me) is protected but no auth provider is registered. Add an @Auth or @BetterAuth service.` |
+
+With several providers and none primary, `authComponents` cannot be imported whole either: its two session middlewares need one provider to use, and the boot says so:
+
+```text
+[asena-auth] AuthWebSocketMiddleware is registered, but 2 auth providers are (AppAuth, Partner) and none is primary, so it cannot pick one. Mark one provider primary: true (@Auth({ primary: true }) or @BetterAuth({ primary: true })), or import only what the app uses instead of authComponents, e.g. imports: [AuthGuard, AuthGuardMiddleware, AuthProviderRegistry], and when the app uses AuthWebSocketMiddleware, add a subclass that names its provider: @Middleware() class MyAuthWebSocketMiddleware extends AuthWebSocketMiddleware { protected providerName = 'AppAuth'; }.
+```
+
+The subclass it describes:
+
+```typescript
+// src/middlewares/PartnerSessionMiddleware.ts
+import { Middleware } from '@asenajs/asena/decorators';
+import { AuthSessionMiddleware } from '@asenajs/asena-auth';
+
+@Middleware()
+export class PartnerSessionMiddleware extends AuthSessionMiddleware {
+  protected providerName = 'Partner';
+}
+```
+
+Import `[AuthGuard, AuthGuardMiddleware, AuthProviderRegistry]` and register `PartnerSessionMiddleware` in `globalMiddlewares()` in place of `AuthSessionMiddleware`. `AuthWebSocketMiddleware` takes `providerName` the same way.
+
+## Configuration
+
+### Options
+
+`@Auth` takes these options (`AuthOptions`, plus `name` in the object form). Durations are in seconds.
+
+| Option | Type | Default | Description |
+|:-------|:-----|:--------|:------------|
+| `name` | `string` | class name | Registered name, what `@Protected({ provider })` refers to; object form only |
+| `primary` | `boolean` | `false` | Provider for routes and middlewares that name none, when several are registered |
+| `sessionTtl` | `number` | `604800` (7 days) | Session lifetime; also the cookie's `Max-Age` |
+| `absoluteTtl` | `number \| false` | `2592000` (30 days) | Hard cap from the session's creation; sliding never extends past it. `false` disables it |
+| `sliding` | `boolean` | `true` | Extend a session once less than half of its lifetime is left |
+| `cookie` | `CookieOptions` | see below | The session cookie |
+| `bearer` | `boolean` | `true` | Accept `Authorization: Bearer`; `false` also disables the WebSocket subprotocol token |
+| `csrf` | `{ trustedOrigins?: string[] } \| false` | on | Cross-site check for cookie sessions; see [Cross-Site Requests](#cross-site-requests) |
+| `loadUser` | `(userId: string) => Promise<TUser \| null>` | - | Reload the user on every authenticated request; see [below](#fresh-users-with-loaduser) |
+| `roles` | `(session) => string[]` | `user.roles`, else comma-split `user.role` | Roles resolver for `@Roles` |
+| `store` | `AuthSessionStore` | `MemoryAuthStore` | Where sessions live; see [Custom Session Store](#custom-session-store) |
+| `sweepInterval` | `number` | `60` | How often the default `MemoryAuthStore` removes expired rows |
+| `tokenBytes` | `number` | `32` | Random bytes per token |
+| `hashing` | `{ algorithm?, cost? }` | bcrypt, cost 12 | Algorithm for `hashPassword`: `'bcrypt'`, `'argon2id'`, `'argon2d'` or `'argon2i'`; `cost` applies to bcrypt |
+
+`absoluteTtl` smaller than `sessionTtl` stops the boot:
+`AppAuth: absoluteTtl (60) is smaller than sessionTtl (3600). Raise absoluteTtl, lower sessionTtl, or set absoluteTtl: false.`
+
+### Cookie Options
+
+| Option | Type | Default |
+|:-------|:-----|:--------|
+| `name` | `string` | `'asena_session'` |
+| `path` | `string` | `'/'` |
+| `secure` | `boolean` | `true` |
+| `sameSite` | `'strict' \| 'lax' \| 'none'` | `'lax'` |
+| `domain` | `string` | unset - a host-only cookie |
+
+`HttpOnly` is always set.
+
+### Lazy Options
+
+`@Auth` also accepts a thunk, resolved when the provider is constructed, so options can come from the environment:
+
+```typescript
+@Auth(() => ({
+  sessionTtl: Number(process.env.SESSION_TTL ?? 86_400),
+  cookie: { domain: process.env.COOKIE_DOMAIN },
+}))
+export class AppAuth extends AsenaAuthService {}
+```
+
+A thunk registers under the class name; use the object form's `name` to choose another.
+
+### Fresh Users with `loadUser`
+
+By default a session carries the user snapshot taken at `createSession`, so a role change applies from the user's next login. `loadUser` reloads the user on every authenticated request instead:
+
+```typescript
+import { findUserById } from '../db/users';
+
+@Auth({ loadUser: (userId) => findUserById(userId) })
+export class AppAuth extends AsenaAuthService {}
+```
+
+Its result replaces the stored user for that request, and roles are resolved from it: a demotion applies on the next request. A result of `null` (or `undefined`) ends the session and deletes its row. `listUserSessions` and a `rotateSession` without `user` keep using the stored snapshot.
+
+## Security Defaults
+
+- **Opaque tokens, hashed at rest.** 32 random bytes per token; the store keeps only its SHA-256, which is also the session id. A leaked store yields no usable token.
+- **A strict cookie.** `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Max-Age` = `sessionTtl`.
+- **Sliding with a cap.** A session is extended once less than half of its lifetime is left, never past `createdAt + absoluteTtl`. A slid cookie session gets its cookie re-issued once, after the handler, with `Max-Age` capped at the remaining lifetime.
+- **Challenges on 401.** Guard and WebSocket rejections carry `WWW-Authenticate: Bearer`; a missing role is a 403.
+- **Fail closed.** Provider misconfigurations stop the boot (see [Boot Errors](#boot-errors)). A guard mark this version does not understand stops it too, instead of leaving the route open:
+  `[asena-auth] ReportController carries a guard mark with access 'restricted', which this @asenajs/asena-auth version does not enforce. The boot stops instead of leaving the route unguarded; upgrade @asenajs/asena-auth.`
+  A protected request whose route the guard cannot identify is a 500 with an error log, never a pass.
+
+### Cross-Site Requests
+
+Cookie sessions get a cross-site check, on by default. A request that is state-changing (anything but `GET`, `HEAD`, `OPTIONS`) or a WebSocket upgrade, carrying its token in the cookie and coming cross-site, is treated as having no cookie - a 401 on a protected route.
+
+- **Cross-site** means a `Sec-Fetch-Site` other than `same-origin` or `none`; without that header, an `Origin` that differs from the request URL's origin. A request with neither header is a non-browser client and passes.
+- A same-site subdomain is not same-origin; list it in `trustedOrigins` when it should pass.
+- Bearer tokens are exempt. `csrf: false` disables the check.
+
+```typescript
+@Auth({ csrf: { trustedOrigins: ['https://app.example.com'] } })
+export class AppAuth extends AsenaAuthService {}
+```
+
+::: tip Behind a TLS-terminating proxy
+The app then sees `http://` request URLs while browsers send an `https://` `Origin`. Browsers that send `Sec-Fetch-Site` pass on that header alone; for browsers that do not, list your public `https://` origin in `trustedOrigins`. `X-Forwarded-*` headers are not read.
+:::
+
+## Custom Session Store
+
+Sessions live in a `MemoryAuthStore` by default: in-process, gone on restart, not shared between instances. For more than one instance, implement `AuthSessionStore` over your database or Redis:
+
+```typescript
+interface AuthSessionStore<TUser = AuthUser> {
+  create(session: StoredSession<TUser>): Promise<void>;
+  get(id: string): Promise<StoredSession<TUser> | null>;
+  delete(id: string): Promise<void>;
+  deleteByUser(userId: string): Promise<void>;
+  touch(id: string, expiresAt: number): Promise<void>;
+  listByUser?(userId: string): Promise<StoredSession<TUser>[]>;
+  onStart?(): void | Promise<void>;
+  onStop?(): void | Promise<void>;
+}
+
+interface StoredSession<TUser = AuthUser> {
+  id: string;        // sha256(token), hex
+  userId: string;
+  user: TUser;       // plain data
+  createdAt: number; // epoch milliseconds
+  expiresAt: number; // epoch milliseconds
+}
+```
+
+- `get` may return an expired row; the provider checks expiry itself.
+- `touch` moves `expiresAt` when a session slides.
+- `listByUser` is optional and may return expired rows. Without it, `listUserSessions` throws, naming your store.
+- `onStart` / `onStop` run once per store object, even when several providers share it.
+
+Pass a store with `@Auth({ store })`. A store that needs injected services is set from the provider's own `onStart`, before `super.onStart()`:
+
+```typescript
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { AsenaAuthService, Auth } from '@asenajs/asena-auth';
+import { SessionRepository } from '../repositories/SessionRepository';
+import { SqlSessionStore } from './SqlSessionStore';
+
+@Auth({ sessionTtl: 3600 })
+export class AppAuth extends AsenaAuthService {
+  @Inject(SessionRepository)
+  private sessions: SessionRepository;
+
+  public override async onStart(): Promise<void> {
+    this.setStore(new SqlSessionStore(this.sessions));
+    await super.onStart();
+  }
+}
+```
+
+## Testing
+
+`@asenajs/asena-auth/testing` ships a provider that turns a request header into a session, so a test needs no login step:
+
+```typescript
+import { describe, test } from 'bun:test';
+import { createWebTest } from '@asenajs/asena/test';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { authComponents } from '@asenajs/asena-auth';
+import { TestAuth, TestAuthProvider } from '@asenajs/asena-auth/testing';
+import { ProjectController } from '../src/controllers/ProjectController';
+
+@TestAuth({
+  users: {
+    ada: { id: 'u1', roles: ['admin'] },
+    bob: { id: 'u2', roles: ['user'] },
+  },
+})
+class AppTestAuth extends TestAuthProvider {}
+
+describe('ProjectController', () => {
+  test('guards by role', async () => {
+    const { app } = await createWebTest({
+      adapter: createErgenecoreAdapter(),
+      controllers: [ProjectController],
+      components: [...authComponents, AppTestAuth],
+    });
+
+    try {
+      await app.get('/projects').expectStatus(401);
+      await app.get('/projects', { headers: { 'x-test-user': 'bob' } }).expectStatus(200);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'bob' } }).expectStatus(403);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'ada' } }).expectStatus(200);
+    } finally {
+      await app.stop();
+    }
+  });
+});
+```
+
+- The `x-test-user` header names a key of `users`; a missing header or an unknown key is no session. `users` is read on every request, so a test may change it between requests.
+- `@TestAuth` also takes `header` (another header name), `primary` and `name`, so it can stand in for one provider among several.
+- With [`createTestApp`](/docs/testing/test-app), hand the components in through `imports: [...authComponents]`; [`createWebTest`](/docs/testing/web-test) has no `imports`, so they go into `components`.
+- It drives `AuthWebSocketMiddleware` too: send the header on the upgrade.
+
+To test a real provider, resolve it from the app and create a session:
+
+```typescript
+await using app = await createTestApp({
+  adapter: createErgenecoreAdapter(),
+  components: [AppAuth, MeController],
+  imports: [...authComponents],
+});
+const auth = await app.resolve<AppAuth>('AppAuth');
+const { token } = await auth.createSession({ id: 'u1', roles: ['user'] });
+
+await app.get('/me', { headers: { authorization: `Bearer ${token}` } }).expectStatus(200);
+```
+
+::: warning Tests only
+`TestAuthProvider` trusts a request header. It is published only under the `/testing` subpath; never register it in an application.
+:::
+
+## Helpers and Constants
+
+| Export | Description |
+|:-------|:------------|
+| `applySessionCookie(ctx, provider, token)` | Writes the session cookie with the provider's cookie options |
+| `clearSessionCookie(ctx, provider)` | Deletes the session cookie with the same path, domain, `secure` and `sameSite` |
+| `getRawRequest(ctx)` | The web `Request` behind a context, on either adapter |
+| `withSubprotocolToken(request)` | A copy of an upgrade request with the `bearer, <token>` subprotocol moved into `Authorization` |
+| `defaultRolesResolver(session)` | The default roles resolver |
+| `generateToken(bytes?)` / `hashToken(token)` | Token generation (base64url) and its SHA-256 hex |
+| `hashPassword(password, options?)` / `verifyPassword(password, hash)` | Standalone password hashing |
+| `MemoryAuthStore` | The default in-process store; `new MemoryAuthStore(sweepInterval?)` |
+| `AUTH_REGISTRY_NAME` | `'AsenaAuthProviderRegistry'` - inject the registry by it; `select(name?)` returns a provider |
+| `AUTH_GUARD_NAME` / `AUTH_GUARD_MIDDLEWARE_NAME` | Registered names of the guard components |
+| `WS_TOKEN_SUBPROTOCOL` | `'bearer'` |
+
+## Limitations
+
+- **Write the session cookie through the helpers.** In a request whose session slid, the re-issued cookie is written after the handler. `applySessionCookie`, `clearSessionCookie`, `logout` and `rotateSession` cancel it; a bare `ctx.setCookie('asena_session', ...)` is overwritten by it.
+- **No custom WebSocket subprotocol alongside the token.** The token must be the first two subprotocol entries, and the socket negotiates `bearer`; an app speaking its own subprotocol (for example `graphql-ws`) on the same socket has to authenticate by cookie.
+- **`MemoryAuthStore` is per process.** Use a [shared store](#custom-session-store) when more than one instance serves the app.
+- **One interface per provider class.** `@Auth` and `@BetterAuth` register the class under `AUTH_PROVIDER_KEY`; it cannot also `@Implements` another interface.
+- **The guard needs `ctx.routePattern`.** It identifies the matched route through the adapter's route pattern. Both official adapters report it; on an adapter that does not, protected routes answer 500.
+
+## Related
+
+- [Dependency Injection](/docs/concepts/dependency-injection#registering-components-from-packages) - Registering package components with `imports`
+- [Middleware](/docs/concepts/middleware) - Middleware levels and execution order
+- [Validation](/docs/concepts/validation) - Validators and route context contracts
+- [WebSocket](/docs/concepts/websocket) - Namespaces, middleware and `ws.data`
+- [Inheritance](/docs/concepts/inheritance) - How decorators behave in subclasses
+- [createTestApp](/docs/testing/test-app) and [createWebTest](/docs/testing/web-test) - Booting an app in tests
 
 
 ---
@@ -16989,6 +18325,9 @@ back to `PGHOST`/`PGPORT`/pg's defaults — **never** to the discrete value you 
 `{ port: 5555, connectionString: 'postgres://u:p@host/db' }` resolves to 5432.
 
 That is why Asena omits the discrete fields outright rather than emitting both. Pick one.
+
+`extra` follows the same driver rules: on `pg`, `extra: { host: 'x' }` cannot override a
+connection string; on `mysql2` it can.
 :::
 
 ::: info Where `ssl` fits
@@ -17716,6 +19055,11 @@ The `OpenApiPostProcessor` automatically:
 
 The schemas that validate a request are the ones that document it.
 
+### Routes That Cannot Be Documented
+
+- **Two routes claiming the same path and method throw.** Generation stops and the error names both controllers, so neither endpoint silently disappears from the docs. With `OpenApiPostProcessor` this surfaces on the first request to the spec endpoint, not at boot.
+- **`operationId` collisions get a numeric suffix.** Two controller classes sharing a name would otherwise produce duplicate ids, which OpenAPI forbids. The first occurrence keeps the bare id.
+
 ## Validator Mapping
 
 Each validator method maps to a specific part of the OpenAPI spec:
@@ -17775,6 +19119,10 @@ The `response()` method supports two formats per status code:
 - **Simple:** A Zod schema directly (e.g., `201: z.object({ ... })`)
 - **Detailed:** An object with `schema` and optional `description` (e.g., `400: { schema: z.object({ ... }), description: '...' }`)
 :::
+
+### Path Parameters
+
+Every variable in a route path is documented, whether or not a `param()` validator describes it. `@Get('/:id')` on its own emits `id` as a required `string`; a `param()` schema replaces that default with its own definition. A `param()` field the path template does not mention is dropped — OpenAPI has nowhere to put it.
 
 ### Descriptions
 
@@ -17978,6 +19326,23 @@ export class AppOpenApi extends OpenApiPostProcessor {}
 ::: warning Production Consideration
 Both UIs load from CDN, which requires internet access. If your production environment has no external network access, consider leaving `ui` unset and using an external API documentation tool.
 :::
+
+## Manual Spec Generation
+
+`OpenApiGenerator` builds the spec from a started server's container on demand, without registering any endpoint. Prefer `OpenApiPostProcessor` for serving it.
+
+```typescript
+import { OpenApiGenerator, ZodSchemaConverter } from '@asenajs/asena-openapi';
+
+const generator = new OpenApiGenerator({
+  info: { title: 'My API', version: '1.0.0' },
+  converters: [new ZodSchemaConverter()],
+});
+
+const spec = await generator.generate(server.coreContainer.container);
+```
+
+`OpenApiGenerator` has no default converter — pass `ZodSchemaConverter` explicitly. Both builders share one operation builder, so a route documents identically either way.
 
 ## Best Practices
 
@@ -18331,8 +19696,13 @@ private meter: Meter;
 
 | Metric | Type | Description |
 |:-------|:-----|:------------|
-| `http.server.request.count` | Counter | Total requests by method/path |
-| `http.server.request.duration` | Histogram (ms) | Request duration by method/path |
+| `http.server.request.count` | Counter | Total requests by method, route and status code |
+| `http.server.request.duration` | Histogram (ms) | Request duration by method, route and status code |
+
+Metrics carry only low-cardinality attributes: `http.request.method`, `http.route` (`unmatched` when
+no route matched) and `http.response.status_code`. `url.path` stays on the span — raw paths from
+scanner or bot traffic would otherwise create an unbounded number of metric series. An allow-list
+`View` on the `http.server.*` instruments enforces the same three attributes.
 
 The middleware also extracts incoming W3C `traceparent` headers, enabling distributed tracing when other services call your API.
 
@@ -18347,18 +19717,9 @@ Each step runs independently and every failure is logged rather than thrown, so 
 cannot be reached does not take the application down with it. `shutdown()` is safe to call twice;
 the second call has nothing left to release.
 
-::: warning The package no longer installs its own signal handlers
-Up to now this package registered `process.on('SIGTERM')` and `process.on('SIGINT')` of its own.
-That was wrong three ways: the async listener's rejection was unheld, so an unreachable collector
-— the normal case for a local `Ctrl+C` — killed the process with `ECONNREFUSED`; the listeners were
-never removed, so repeated boots in one process piled them up; and `server.stop()` on its own
-flushed nothing, leaving the `BatchSpanProcessor` timer and the metric reader's export interval
-running.
-
-Signals are now [handled by the server](/docs/concepts/lifecycle#signal-handling), which calls
-`stop()`, which drives this hook. If you added a `SIGTERM` handler of your own to work around the
-missing flush, remove it.
-:::
+The package installs no signal handlers of its own: `SIGTERM` and `SIGINT` are
+[handled by the server](/docs/concepts/lifecycle#signal-handling), which calls `stop()`, which
+drives this hook.
 
 ## Configuration
 
@@ -18776,7 +20137,7 @@ export class AppRedis extends AsenaRedisService {}
 | Adapter | Package | Best For |
 |:--------|:--------|:---------|
 | `'bun'` (default) | None (Bun built-in) | Bun runtime, maximum performance |
-| `'node-redis'` | `redis` ^5.11.0 | Node.js compatibility, Redis modules |
+| `'node-redis'` | `redis` ^5.12.1 | Node.js compatibility, Redis modules |
 
 ## API Reference
 
@@ -18952,12 +20313,14 @@ public transport() {
 
 ### How It Works
 
-Each server instance gets a unique pod ID. When a WebSocket message is published:
+Each server instance gets a unique pod ID. When a message is published through the server (the service-level `this.to()` / `this.in()`):
 
 1. The message is delivered locally via `server.publish()`
 2. The message is sent to Redis pub/sub with the originating pod ID
 3. Other pods receive the message and deliver it to their local sockets
 4. Messages from the same pod are deduplicated automatically
+
+`ws.publish()` takes a different route: it [excludes the sender](/docs/concepts/websocket#publishing-messages), so it does the local delivery itself and hands the transport only step 2 onwards via `publishRemote()`. Steps 3 and 4 are unchanged.
 
 ### Options
 
@@ -19192,7 +20555,7 @@ bun add @asenajs/asena-kafka kafkajs
 **Requirements:**
 - [Bun](https://bun.sh) v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
-- [kafkajs](https://kafka.js.org) v2.2 or higher
+- [kafkajs](https://kafka.js.org) v2.2.4 (peer dependency)
 
 ::: warning Broker compatibility
 Use Apache Kafka **2.8 – 3.9**. Kafka 4.0 removed old protocol API versions (KIP-896) and kafkajs 2.2.4 has reported incompatibilities — pin your broker to 3.9.x. See [Client Roadmap](#client-roadmap) for why kafkajs is the client today.
@@ -19215,6 +20578,8 @@ docker run -d --name asena-kafka --restart always -p 9092:9092 \
   -e KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS=1000 \
   apache/kafka:3.9.1
 ```
+
+`KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS=1000` lets tests use low `sessionTimeout` values for fast crash detection; production brokers can keep the default.
 
 ## Quick Start
 
@@ -19355,7 +20720,7 @@ await admin.disconnect();
 | `disconnect()` | Close the default producer. Called for you by `@OnStop` on `server.stop()` |
 | `testConnection()` | Bounded broker probe (3s), returns `boolean` |
 
-Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer, and `server.stop()` now calls it through the service's `@OnStop`. Before the framework grew a stop phase nothing did, so the client outlived the server that opened it.
+Objects returned by `createProducer` / `createConsumer` / `createAdmin` are **yours** — the service will not connect or disconnect them. `disconnect()` only closes the service's own default producer; `server.stop()` calls it through the service's `@OnStop`.
 
 ### Configuration
 
@@ -19546,7 +20911,7 @@ Broker list, credentials and TLS now live in exactly one place. Config classes a
 
 | Purpose | Kafka Topic | Mechanism |
 |---|---|---|
-| Events | `asena.ms.evt` (shared) | Keyless round-robin production; one consumer group per service; wildcard patterns matched locally; at-least-once with committed offsets |
+| Events | `asena.ms.evt` (shared) | Keyless round-robin production; one consumer group per service; wildcard patterns matched locally (non-matching records are committed immediately); at-least-once with committed offsets |
 | Requests | `asena.ms.req.<pattern>` (topic per pattern) | Consumer group distributes each request to exactly one replica |
 | Replies | `asena.ms.reply` (shared) | Per-instance ephemeral consumer group filters by correlationId |
 | Dead letters | `asena.ms.dlq` | Poison events after `maxRetries`, with provenance headers |
@@ -19564,7 +20929,7 @@ The cost is two commits per record per partition. Throughput scales by adding pa
 ### Retries and DLQ
 
 - A failed **event** handler leaves the offset uncommitted. The partition is paused, seeked back, and re-fetched after `retryBackoffMs` — the broker genuinely redelivers, sharing one mechanism with crash recovery.
-- After `maxRetries` the event is produced to the DLQ topic with provenance headers (`origin_stream`, original value and headers preserved).
+- After `maxRetries` the event is produced to the DLQ topic with its original value and headers, plus provenance headers: `origin_stream` (source topic), `origin_group` (the `serviceName`), `origin_offset` (`topic:partition:offset`), `delivery_count` and `dlq_ts`.
 - **RPC errors are final.** The caller receives the error and the offset is committed; only event handlers are retried. Retrying a request is the caller's decision.
 
 ### Options
@@ -19663,7 +21028,7 @@ await this.ulak.emit('invoices', { invoiceId: 'inv-1' }, { headers: { 'x-tenant'
 **Inbound rules** (external topics with a matching `@EventPattern`):
 
 - The dispatch pattern is **always the topic name** — a foreign record's incidental `p` header never steers routing.
-- The handler must resolve to exactly the topic name, so use `prefix: false` on any prefixed controller.
+- The handler pattern is matched against the topic name like any event pattern, so use `prefix: false` on any prefixed controller. Segment wildcards apply: an `upstream.*` handler also consumes an external `upstream.orders` topic.
 - `context.headers` exposes **all raw record headers**. `context.messageId` honors a `mid` header, otherwise it falls back to the record position `topic:partition:offset` — stable across groups and redeliveries, so [messageId dedup](/docs/concepts/microservices#idempotent-handlers) still works.
 - Retry, DLQ (`origin_stream` = the foreign topic; value and headers preserved) and `context.attempt` work exactly as for own topics.
 
@@ -19729,7 +21094,7 @@ The topic does not exist, or its metadata has not propagated yet. The client nev
 
 ### The service boots but consumes nothing
 
-Check the boot log for the resolved patterns. Since Asena 0.8 the `@MessageController` prefix applies to `@EventPattern` as well, so a handler you expect on `orders` may have registered as `billing.orders`:
+Check the boot log for the resolved patterns. The `@MessageController` prefix applies to `@EventPattern` as well, so a handler you expect on `orders` may have registered as `billing.orders`:
 
 ```
 [Microservice] OrdersListener → "default" (prefix "billing") evt: billing.orders
@@ -20473,6 +21838,13 @@ The exit code is `1` when any check failed and `0` otherwise, so it drops straig
 | `direct-dependencies` | `@asenajs/asena` and `reflect-metadata` are direct dependencies, plus `hono` / `zod` when the matching adapter is installed — they are [peer dependencies](/docs/adapters/overview) your project owns |
 | `duplicate-packages` | `@asenajs/asena`, `hono` and `zod` each resolve to a single version under `node_modules` (including the `.bun` store) |
 | `peer-ranges` | Every installed `@asenajs/*` package's peer range for `@asenajs/asena` is satisfied by the installed core version |
+| `auth-enforcement` | When `Protected` or `Roles` is imported from `@asenajs/asena/auth`, `authComponents` or `AuthGuard` is imported from `@asenajs/asena-auth` — without the [guard](/docs/packages/auth#route-guards) the marks are metadata only and those routes are served open |
+| `auth-better-auth-dep` | When the Better Auth provider of `@asenajs/asena-auth` is used (`@BetterAuth`, `BetterAuthService` or `BetterAuthController`), `better-auth` is in `package.json` and installed |
+| `auth-cookie` | The literal `cookie` options of each `@Auth` provider form a cookie browsers accept: a `__Host-` name has no `domain`, a `path` of `'/'` and no `secure: false`; a `__Secure-` name has no `secure: false`; `sameSite: 'none'` comes without `secure: false` |
+
+The three `auth-*` checks read your source files as text, skipping `node_modules`, `dist` and
+comments, and pass when they do not apply. `auth-cookie` evaluates literal values only; an option
+computed at runtime is not checked.
 
 ### Output
 
@@ -20481,8 +21853,12 @@ The exit code is `1` when any check failed and `0` otherwise, so it drops straig
 ✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
   hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
 ✓ direct-dependencies — all required packages are direct dependencies
-✓ duplicate-packages — @asenajs/asena@0.11.0, hono@4.12.9, zod@4.4.3
-✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.11.0
+✓ duplicate-packages — @asenajs/asena@0.12.3, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.12.3
+✗ auth-enforcement — @Protected/@Roles imported at src/controllers/MeController.ts:1 and @asenajs/asena-auth is a dependency, but neither authComponents nor AuthGuard is imported from it - the markers are metadata only and those routes are served open
+  hint: add `imports: [...authComponents]` (from @asenajs/asena-auth) to AsenaServerFactory.create
+✓ auth-better-auth-dep — Better Auth provider of @asenajs/asena-auth not used
+✓ auth-cookie — no browser-rejected combination in the literal @Auth cookie options
 ```
 
 A failing check prints an indented `hint:` line with the fix. A check that cannot run at all — no
@@ -20568,7 +21944,7 @@ interface AsenaConfig {
 type BuildOptions = Partial<
   Pick<
     Bun.BuildConfig,
-    'outdir' | 'sourcemap' | 'minify' | 'external' | 'format' | 'drop'
+    'outdir' | 'sourcemap' | 'minify' | 'external' | 'format' | 'drop' | 'splitting'
   >
 >;
 ```
@@ -20691,6 +22067,10 @@ export default defineConfig({
 
 After build, `public/` is copied to `dist/public/`, and HTML import paths are automatically rewritten to resolve correctly.
 
+::: warning Do not add `*.html` to `buildOptions.external`
+The build already treats `.html` imports as external and rewrites their paths. Listing them in `external` yourself bypasses that step, and the bundle points at paths that do not exist in the output directory.
+:::
+
 ::: tip Directories are copied recursively
 You can include both files and directories. Directories are copied recursively.
 ```typescript
@@ -20719,6 +22099,7 @@ The `entrypoints` and `target` properties are managed internally by Asena CLI an
 - `external` - Dependencies to exclude from bundling
 - `format` - Output module format (ESM/CJS)
 - `drop` - Remove function calls from bundle (e.g., `console`, `debugger`)
+- `splitting` - Emit dynamically imported code as separate chunks
 
 ## Build Options Reference
 
@@ -20843,6 +22224,38 @@ export default defineConfig({
   },
 });
 ```
+
+### splitting
+
+**Type:** `boolean`
+**Default:** `false`
+
+By default the build writes a single `index.asena.js`. Code reached only through `await import()`
+goes into that file too: it is not run until the import happens, but it is still loaded and parsed
+at startup. With `splitting: true`, each dynamically imported module becomes its own chunk file
+next to `index.asena.js`, and the process loads it only when the import runs.
+
+```typescript
+export default defineConfig({
+  buildOptions: {
+    outdir: 'dist',
+    splitting: true,
+  },
+});
+```
+
+Packages that load optional parts on demand benefit most. `@asenajs/asena-drizzle` imports only the
+driver for the configured `type`, so a `bun-sql` application never loads the PostgreSQL or MySQL
+driver code. In a minimal `bun-sql` application, enabling `splitting` shrank `index.asena.js`
+from 1.67 MB to 91 KB, startup from 51 ms to 45 ms and resident memory from 44.7 MB to 42.8 MB.
+The total size of `dist/` stays the same; the code is only divided.
+
+::: warning Deploy the whole output directory
+With `splitting` enabled, `dist/` holds `index.asena.js` and `chunk-*.js` files that it imports
+at runtime. A deployment that copies only `index.asena.js`, such as a Dockerfile with
+`COPY dist/index.asena.js`, fails with a module-not-found error the first time a chunk is needed.
+Copy the whole directory.
+:::
 
 ### minify
 
@@ -23422,6 +24835,38 @@ carry one — so reach for `error.body` only after you have an `HttpException` y
 yourself. `getResponse` is optional for the same reason, hence the `?.` and the fallback.
 :::
 
+### Authentication Errors
+
+The [asena-auth](/docs/packages/auth#route-guards) guard rejects with a core `HttpException`, so
+`isHttpException()` matches it and it reaches `onError` like any other exception:
+
+| Situation | Status | Body | Header |
+|:----------|:-------|:-----|:-------|
+| No session on a `@Protected` / `@Roles` route | 401 | `Unauthorized` | `WWW-Authenticate: Bearer` |
+| A session without any of the route's roles | 403 | `Forbidden` | - |
+| `requireAuthSession(context)` without a session | 401 | `Authentication required` | - |
+
+The challenge header travels in the exception's response, so a handler that answers with
+`error.getResponse()` keeps it. A handler that builds its own envelope from `error.message` and
+`error.status` drops it unless it copies the header across:
+
+```typescript
+import { isHttpException } from '@asenajs/asena/adapter';
+
+public onError(error: Error, context: Context) {
+  if (isHttpException(error)) {
+    const challenge = error.getResponse?.().headers.get('WWW-Authenticate');
+
+    return context.send(
+      { error: error.message },
+      { status: error.status, headers: challenge ? { 'WWW-Authenticate': challenge } : {} },
+    );
+  }
+
+  return context.send({ error: 'Internal Server Error' }, 500);
+}
+```
+
 ---
 
 ## Global Error Handler
@@ -24126,7 +25571,7 @@ Then run the production build:
 bun dist/index.asena.js
 ```
 
-::: warning Two things worth checking before a first production deploy
+::: warning Three things worth checking before a first production deploy
 - **`buildOptions.minify.identifiers` must be `false`.** Component names are read at runtime, and
   a bundle built with identifiers minified fails to resolve them — in production only. The build
   forces it off and `asena doctor` reports it. `keepNames: true` does not substitute for it. See
@@ -24134,7 +25579,14 @@ bun dist/index.asena.js
 - **One copy of `@asenajs/asena`, `hono` and `zod` each.** Two copies break `instanceof` and the
   `HttpException` brand, turning a deliberate `404` into a `500` with no clue as to why.
   `asena doctor` checks for this.
+- **`@Protected` routes need their guard.** The marks are metadata; without asena-auth's guard in
+  `imports`, those routes are served open. `asena doctor` reports it as `auth-enforcement`. See
+  [Authentication](/docs/concepts/authentication#core-never-enforces-them).
 :::
+
+For a smaller entry file and a faster startup, enable
+[`buildOptions.splitting`](/docs/cli/configuration#splitting). The build then writes chunk files
+next to `index.asena.js`, so ship the whole `dist/` directory rather than the single file.
 
 ## Graceful Shutdown and Probes
 
@@ -24143,8 +25595,32 @@ Two things a deployment needs are already available:
 - **Signals are handled by default.** `SIGTERM`, `SIGINT` and `SIGHUP` call `server.stop()`, which stops taking new work, runs your components' `@OnStop` hooks while the transports are still up, then releases everything in order. See [Component Lifecycle](/docs/concepts/lifecycle#signal-handling).
 - **Liveness and readiness are separate endpoints.** Pass `health: { port }` and point your restart policy at `{path}/live` and your load balancer at `{path}/ready`. Readiness answers `503` for the whole drain, so an instance is pulled from rotation while it still has work to finish. See [Health probes](/docs/concepts/lifecycle#health-probes).
 
+## Sessions Behind a Proxy
+
+With [asena-auth](/docs/packages/auth)'s native sessions behind a load balancer or a
+TLS-terminating proxy:
+
+- **Keep the cookie `Secure`.** The session cookie is `Secure` by default, and browsers accept it
+  because they talk HTTPS to the proxy; the plain-HTTP hop behind it does not matter. `asena doctor`
+  fails `auth-cookie` on cookie options browsers reject, such as `sameSite: 'none'` with
+  `secure: false`.
+- **List your public origin for older browsers.** The app sees `http://` request URLs while
+  browsers send an `https://` `Origin`. Browsers that send `Sec-Fetch-Site` pass the cross-site
+  check on that header alone; for those that do not, list your public origin in `trustedOrigins`.
+  `X-Forwarded-*` headers are not read.
+
+  ```typescript
+  @Auth({ csrf: { trustedOrigins: ['https://app.example.com'] } })
+  export class AppAuth extends AsenaAuthService {}
+  ```
+
+- **Share the session store.** The default `MemoryAuthStore` lives in one process: a session
+  created on one instance is unknown to the others, and every session is lost on restart. Pass a
+  store over your database or Redis - see [Custom Session Store](/docs/packages/auth#custom-session-store).
+
 ## Related
 
+- [Asena Auth](/docs/packages/auth) - Cookie options, the cross-site check and session stores
 - [CLI Build Command](/docs/cli/commands#asena-build) - Building a production bundle
 - [asena doctor](/docs/cli/commands#asena-doctor) - Pre-flight check for the project's configuration
 - [CLI Configuration](/docs/cli/configuration) - Build options and output
@@ -25155,6 +26631,24 @@ await using app = await createTestApp({
 See [`imports`](/docs/concepts/dependency-injection#registering-components-from-packages) for the
 full contract.
 
+[asena-auth](/docs/packages/auth)'s guard arrives the same way. With a real provider in
+`components`, a test creates a session through it and sends the token:
+
+```typescript
+await using app = await createTestApp({
+  adapter: createErgenecoreAdapter(),
+  components: [AppAuth, MeController],
+  imports: [...authComponents],
+});
+const auth = await app.resolve<AppAuth>('AppAuth');
+const { token } = await auth.createSession({ id: 'u1', roles: ['user'] });
+
+await app.get('/me', { headers: { authorization: `Bearer ${token}` } }).expectStatus(200);
+```
+
+A test that does not need a real provider can use the header-driven `TestAuthProvider` instead -
+see [Protected routes](/docs/testing/web-test#protected-routes).
+
 ### `port`
 
 Defaults to `0`, which asks Bun for a free ephemeral port. Read the bound port back from `app.port`:
@@ -25473,6 +26967,53 @@ const { mocks } = await createWebTest({
 
 expect(mocks.UserService).toBe(double);
 ```
+
+## Protected routes
+
+A controller marked [`@Protected` / `@Roles`](/docs/concepts/authentication) needs the
+[asena-auth](/docs/packages/auth) guard in the slice, or the marks are not enforced.
+`createWebTest` has no `imports`, so the package's components go into `components`, next to a
+`TestAuthProvider` from `@asenajs/asena-auth/testing` that turns a request header into a session:
+
+```typescript
+import { describe, test } from 'bun:test';
+import { createWebTest } from '@asenajs/asena/test';
+import { createErgenecoreAdapter } from '@asenajs/ergenecore';
+import { authComponents } from '@asenajs/asena-auth';
+import { TestAuth, TestAuthProvider } from '@asenajs/asena-auth/testing';
+import { ProjectController } from '../src/controllers/ProjectController';
+
+@TestAuth({
+  users: {
+    ada: { id: 'u1', roles: ['admin'] },
+    bob: { id: 'u2', roles: ['user'] },
+  },
+})
+class AppTestAuth extends TestAuthProvider {}
+
+describe('ProjectController', () => {
+  test('guards by role', async () => {
+    const { app } = await createWebTest({
+      adapter: createErgenecoreAdapter(),
+      controllers: [ProjectController],
+      components: [...authComponents, AppTestAuth],
+    });
+
+    try {
+      await app.get('/projects').expectStatus(401);
+      await app.get('/projects', { headers: { 'x-test-user': 'bob' } }).expectStatus(200);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'bob' } }).expectStatus(403);
+      await app.delete('/projects/1', { headers: { 'x-test-user': 'ada' } }).expectStatus(200);
+    } finally {
+      await app.stop();
+    }
+  });
+});
+```
+
+The `x-test-user` header names a key of `users`; a missing header or an unknown key is no session.
+See [Testing](/docs/packages/auth#testing) on the package page for the other options and for
+testing against a real provider.
 
 ## Known behaviours
 
