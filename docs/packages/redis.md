@@ -1,12 +1,12 @@
 ---
 title: Asena Redis
-description: Redis integration with @Redis - multi-pod WebSocket transport and a Redis Streams microservice transport with consumer groups, retry and DLQ
+description: Redis integration with @Redis - cache decorators (@Cacheable, @CachePut, @CacheEvict), multi-pod WebSocket transport and a Redis Streams microservice transport with consumer groups, retry and DLQ
 outline: deep
 ---
 
 # Asena Redis
 
-Redis integration for AsenaJS — service client with built-in multi-pod WebSocket transport. Your `@Redis` decorated service gives you full Redis operations with automatic IoC registration. For multi-pod deployments, `RedisTransport` synchronizes WebSocket messages across instances via Redis pub/sub.
+Redis integration for AsenaJS — service client with cache decorators and built-in multi-pod WebSocket transport. Your `@Redis` decorated service gives you full Redis operations with automatic IoC registration. [`@Cacheable`, `@CachePut` and `@CacheEvict`](#caching-decorators) put a caching policy on a service method. For multi-pod deployments, `RedisTransport` synchronizes WebSocket messages across instances via Redis pub/sub.
 
 <div class="card-grid">
   <a class="info-card" href="#quick-start">
@@ -29,13 +29,18 @@ Redis integration for AsenaJS — service client with built-in multi-pod WebSock
     <div class="ic-title">Configuration</div>
     <p class="ic-desc">Connection options and lifecycle settings.</p>
   </a>
-  <a class="info-card" href="#multi-pod-websocket-transport">
+  <a class="info-card" href="#caching-decorators">
     <span class="ic-kicker">05</span>
+    <div class="ic-title">Caching Decorators</div>
+    <p class="ic-desc"><code>@Cacheable</code>, <code>@CachePut</code> and <code>@CacheEvict</code> on service methods.</p>
+  </a>
+  <a class="info-card" href="#multi-pod-websocket-transport">
+    <span class="ic-kicker">06</span>
     <div class="ic-title">Multi-Pod WebSocket</div>
     <p class="ic-desc">Synchronizing socket messages across pods via pub/sub.</p>
   </a>
   <a class="info-card" href="#microservice-transport-redis-streams">
-    <span class="ic-kicker">06</span>
+    <span class="ic-kicker">07</span>
     <div class="ic-title">Microservice Transport</div>
     <p class="ic-desc">Service-to-service messaging over Redis Streams.</p>
   </a>
@@ -44,6 +49,7 @@ Redis integration for AsenaJS — service client with built-in multi-pod WebSock
 ## Features
 
 - **Decorator-Based Setup** - `@Redis` decorator handles IoC registration and connection lifecycle
+- **Declarative Caching** - `@Cacheable`, `@CachePut` and `@CacheEvict` with class-level `@CacheConfig`
 - **Dual Adapter Support** - Bun native `RedisClient` (default) and `redis` (node-redis) package
 - **Multi-Pod WebSocket Transport** - Synchronize WebSocket messages across pods via Redis pub/sub
 - **Full Redis Operations** - String, Hash, Set, Key, and raw command support
@@ -76,20 +82,7 @@ import { Redis, AsenaRedisService } from '@asenajs/asena-redis';
   config: { url: 'redis://localhost:6379' },
   name: 'AppRedis',
 })
-export class AppRedis extends AsenaRedisService {
-
-  async getOrSet(key: string, factory: () => Promise<string>, ttl?: number): Promise<string> {
-    const cached = await this.get(key);
-
-    if (cached) return cached;
-
-    const value = await factory();
-    await this.set(key, value, ttl);
-
-    return value;
-  }
-
-}
+export class AppRedis extends AsenaRedisService {}
 ```
 
 Asena automatically discovers it — that's it.
@@ -122,21 +115,23 @@ is what lets that package read the consumer's environment at the right moment.
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
 
-@Service('CacheService')
-export class CacheService {
+@Service()
+export class GreetingService {
 
   @Inject('AppRedis')
   private redis: AppRedis;
 
-  async getUserName(id: string): Promise<string> {
-    return this.redis.getOrSet(`user:${id}`, async () => {
-      // fetch from database...
-      return 'John';
-    }, 60);
+  async greet(name: string): Promise<string> {
+    await this.redis.set(`greeting:${name}`, `Hello, ${name}`, 60);
+
+    return (await this.redis.get(`greeting:${name}`)) ?? '';
   }
 
 }
 ```
+
+To cache a method's result, use the [caching decorators](#caching-decorators) rather than writing
+the read, compute and write steps by hand.
 
 ::: tip Connection lifecycle is handled for you
 `AsenaRedisService` carries an [`@OnStart`](/docs/concepts/lifecycle) that connects during
@@ -302,6 +297,221 @@ interface RedisConfig {
 
 It also accepts `() => RedisOptions` — the same object, resolved at construction time. See
 [Lazy options](#lazy-options).
+
+## Caching Decorators
+
+Declarative caching for service methods: `@Cacheable`, `@CachePut` and `@CacheEvict` put the policy
+on the method instead of repeating the read, compute and write steps inside it.
+
+### Activation
+
+`CachePostProcessor` does the wrapping. It carries no `@PostProcessor` and component scanning never
+walks `node_modules`, so caching is activated by subclassing it in your source folder —
+`src/config/` is the convention:
+
+```typescript
+// src/config/AppCache.ts
+import { RedisCache, CachePostProcessor } from '@asenajs/asena-redis';
+
+@RedisCache({ ttl: 300 })
+export class AppCache extends CachePostProcessor {}
+```
+
+The body stays empty; the class only has to exist for scanning to find it. The options are the
+application-wide defaults, and `@RedisCache()` with none is valid. The application also needs a
+[`@Redis` service](#_1-create-redis-service) for the cache to use.
+
+::: warning Nothing is cached without this class
+Without a `@RedisCache` class the decorators record metadata that nothing reads: every call runs the
+method, with no error and no warning. An application that passes an explicit component list, such as
+a [`createTestApp`](/docs/testing/test-app) test, has to list the class too.
+
+Declare one. Each `@RedisCache` class wraps the methods again and writes its own entries.
+:::
+
+### Usage
+
+```typescript
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { Cacheable, CachePut, CacheEvict, CacheConfig } from '@asenajs/asena-redis';
+
+@Service()
+@CacheConfig({ prefix: 'user' })
+export class UserService {
+
+  @Inject(UserRepository)
+  private users: UserRepository;
+
+  @Cacheable({ key: (id: string) => id })
+  async findById(id: string): Promise<User | null> {
+    return this.users.findById(id);
+  }
+
+  @CachePut({ key: (id: string) => id })
+  async refresh(id: string): Promise<User | null> {
+    return this.users.findById(id);
+  }
+
+  @CacheEvict({ key: (id: string) => id })
+  async update(id: string, changes: UserChanges): Promise<void> {
+    await this.users.update(id, changes);
+  }
+
+  @CacheEvict({ allEntries: true })
+  async removeAll(): Promise<void> {
+    await this.users.removeAll();
+  }
+
+}
+```
+
+`@CacheConfig` sets defaults for every cache decorator in the class. A `@Cacheable` hit on `user:42`
+skips `findById`, `refresh('42')` overwrites that entry, `update('42', ...)` deletes it, and
+`removeAll()` deletes every key under `user:`.
+
+::: warning Methods that share an entry must build the same key
+The default key contains the method name, so a bare `@CacheEvict()` on `update` never touches what a
+bare `@Cacheable()` on `findById` stored, and nothing reports the miss. When one method reads an
+entry and another replaces or deletes it, give both the same `key` and the same `prefix`.
+:::
+
+### Semantics
+
+| | Method runs | Reads cache | Writes cache | If the method throws |
+|:--|:--|:--|:--|:--|
+| `@Cacheable` | only on a miss | before the call | after success, on a miss | no write, error propagates |
+| `@CachePut` | always | never | after success | no write, error propagates |
+| `@CacheEvict` | always | never | deletes **after** success | **no eviction**, error propagates |
+| `@CacheEvict({ beforeInvocation: true })` | always | never | deletes **before** the call | eviction already happened, error propagates |
+
+Several decorators on one method produce a single wrapper, in a fixed order:
+`evict(before) → read → method → write → evict(after)`. A `@Cacheable` hit returns straight away and
+skips everything after the read, including an after-success eviction. `@Cacheable` and `@CachePut`
+on the same method contradict each other and fail the boot.
+
+The wrapper is installed on the instance, which has two consequences:
+
+- **Calls from inside the class are cached too.** `this.findById(id)` goes through the wrapper the
+  same way an injected caller does.
+- **Decorators are inherited.** A subclass inherits the decorators on its base class's methods, and
+  an override without a decorator is still wrapped with the inherited options. A decorator of the
+  same kind on the override replaces them. `@CacheConfig` merges field by field, nearest class first.
+
+### Options
+
+`redis`, `prefix` and `ttl` can be set at three levels and resolve independently, nearest level
+first: `method option > @CacheConfig > @RedisCache`. A method that overrides only `ttl` keeps the
+class's `prefix`. The other options exist only on the method decorators.
+
+| Option | Applies to | Meaning |
+|:--|:--|:--|
+| `key` | `@Cacheable`, `@CachePut`, `@CacheEvict` | `(...args) => string`, receiving the method's arguments and returning a non-empty string. Omitted → `` `${Class.name}.${method}:${JSON.stringify(args)}` ``. Ignored with `allEntries` |
+| `prefix` | all three, `@CacheConfig`, `@RedisCache` | Key namespace, joined with `:`; a trailing `:` is not doubled. Also the scope of `allEntries`. Omitted → no prefix |
+| `ttl` | `@Cacheable`, `@CachePut`, `@CacheConfig`, `@RedisCache` | **Seconds**, a positive whole number. Unset at every level means the entry never expires |
+| `redis` | all three, `@CacheConfig`, `@RedisCache` | Name the `@Redis` service is registered under. Omit it when exactly one is registered |
+| `cacheNull` | `@Cacheable`, `@CachePut` | Store `null` and `undefined` results, which then count as hits. Default `true` |
+| `allEntries` | `@CacheEvict` | Delete every key under the prefix, via `SCAN`, instead of one key. Requires a prefix. Default `false` |
+| `beforeInvocation` | `@CacheEvict` | Evict before the method runs rather than after it succeeds. Default `false` |
+
+A level closer to the method can replace `ttl` but cannot remove it: `ttl: undefined` falls through
+to the next level, so a method that must never expire needs the levels above it to leave `ttl` unset.
+
+There is no string key expression language. A `key` function is as short as a template, needs no
+grammar and cannot fail on a malformed expression. TypeScript does not check its parameters against
+the method's, so keep the two in step by hand.
+
+The default key is built from the class name, so a build that mangles identifiers changes it, and
+two subclasses of one base never share entries. It also serializes every argument, so pass a `key`
+function for a method whose arguments are large or carry fields that do not identify the result.
+
+### Failure Policy
+
+**Runtime Redis failures fail open.** A command error, a client that has not started, a corrupt entry
+or a foreign value under the key each produce a `[RedisCache]` warning on the framework logger, and
+the call carries on as though there were no cache. A cache outage must not become an application
+outage.
+
+The cost lands on eviction: when `@CacheEvict` cannot reach Redis, the method's result is still
+returned and the old entry stays until its `ttl` runs out or something overwrites it.
+
+::: warning Failing open needs the command to fail
+With `enableOfflineQueue` at its default of `true`, a command issued while the connection is down
+does not fail. It waits in the queue, and the cached method waits with it:
+
+- On the Bun adapter, until a reconnect succeeds or `maxRetries` runs out, which takes about 30
+  seconds with the default settings. After that the client stays closed, so every call warns and
+  runs the method until the process restarts.
+- On `node-redis`, with no upper bound at the default settings.
+
+For a cache, running the method straight away is usually the better failure, so turn the queue off
+on the service behind it:
+
+```typescript
+@Redis({
+  config: { url: 'redis://localhost:6379', enableOfflineQueue: false },
+  name: 'CacheRedis',
+})
+export class CacheRedis extends AsenaRedisService {}
+
+@RedisCache({ redis: 'CacheRedis', ttl: 300 })
+export class AppCache extends CachePostProcessor {}
+```
+
+The setting covers everything that uses that service, so give the cache its own `@Redis` service when
+something else relies on the queue.
+:::
+
+**Mistakes in the code are not contained.** They are bugs, and they say so. These fail the boot:
+
+- `@Cacheable` and `@CachePut` on the same method
+- `allEntries` with no prefix at any level, which would otherwise delete every key in the database
+- a `ttl` that resolves to anything but a positive whole number
+- a cache decorator whose name is not a method on the instance, such as an arrow-function property
+
+These reject the call, with the error reaching the caller:
+
+- a `key` function that throws, or returns anything but a non-empty string
+- a default key over arguments that cannot be serialized (circular, `BigInt`)
+- a Redis service that cannot be picked (see below)
+
+With `@Cacheable` the method has not run when one of these rejects. With an after-success
+`@CacheEvict`, and with `@CachePut` when the Redis service cannot be picked, it has: its work stands
+even though the caller sees an error.
+
+::: warning A wrong Redis service only shows on the first cached call
+A `redis` name that resolves to nothing, or to something other than a `@Redis` service, and an
+omitted `redis` with zero or several services registered, all reject the **first cached call**
+rather than failing the boot. A post-processor sees the component graph while it is still being
+built, and core has no later hook, so the count cannot be trusted until the application is serving.
+
+Name the service explicitly whenever the application has more than one, and exercise one cached
+endpoint in staging before you ship.
+:::
+
+### Limitations
+
+- **A cached value is whatever survives `JSON.parse(JSON.stringify(x))`.** A `Date` comes back as a
+  string, a `Map` or `Set` as `{}`, a class instance as a plain object. The miss that computed it
+  still returns the original, so one method can return two shapes for one key. A value that cannot be
+  serialized at all (circular, `BigInt`) is returned to the caller with the write skipped and a
+  warning.
+- **Wrapped methods always return a Promise.** The cache read has to be awaited, so a synchronous
+  method becomes asynchronous.
+- **Arrow-function class properties are not supported.** Use `async method()` syntax so the method
+  exists on the instance when post-processing runs.
+- **`allEntries` deletes everything under the prefix**, including keys written by other classes that
+  share it and keys the cache never wrote. `SCAN` is not a snapshot, so a key written mid-scan may
+  survive until its `ttl`. On Redis Cluster it only covers the node it reaches. The walk runs inside
+  the call, so a large prefix makes that call slow.
+- **No stampede protection.** Concurrent misses on the same key all run the method. Per-process
+  deduplication would not help the cross-pod case, which is the one that overloads a database.
+- **A slow miss can undo an eviction.** A `@Cacheable` miss that read the old data and writes after a
+  concurrent `@CacheEvict` stores a stale entry until its `ttl`, which is one more reason to set one.
+- **A class in a post-processor's dependency closure is not wrapped.** Such a class is created in
+  [Phase A](/docs/concepts/post-processor#bootstrap-priority), before post-processing is active, so
+  its cache decorators silently do nothing. Keep cached services out of what your post-processors
+  inject.
 
 ## Multi-Pod WebSocket Transport
 
@@ -499,19 +709,28 @@ export class AppRedis extends AsenaRedisService {}
 export class AppRedis extends AsenaRedisService {}
 ```
 
-### 2. Use Cache Patterns
+### 2. Cache with Decorators
 
 ```typescript
-// ✅ Good: getOrSet pattern for caching
-async getOrSet(key: string, factory: () => Promise<string>, ttl?: number) {
-  const cached = await this.get(key);
-  if (cached) return cached;
+// ✅ Good: The policy is on the method, the method is only the lookup
+@Cacheable({ prefix: 'user', ttl: 60, key: (id: string) => id })
+async findById(id: string) {
+  return this.users.findById(id);
+}
 
-  const value = await factory();
-  await this.set(key, value, ttl);
-  return value;
+// ❌ Bad: Every method repeats the same steps by hand
+async findById(id: string) {
+  const cached = await this.redis.get(`user:${id}`);
+  if (cached) return JSON.parse(cached);
+
+  const user = await this.users.findById(id);
+  await this.redis.set(`user:${id}`, JSON.stringify(user), 60);
+  return user;
 }
 ```
+
+See [Caching Decorators](#caching-decorators), including the `enableOfflineQueue` note under
+[Failure Policy](#failure-policy).
 
 ### 3. Health Checks
 

@@ -109,7 +109,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-auth](/docs/packages/auth)** - Authentication behind core's auth contract: server-side sessions and Better Auth, `@Protected` / `@Public` / `@Roles` route guards, WebSocket upgrade authentication and a test provider
 - **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
 - **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
-- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
+- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with [cache decorators](/docs/packages/redis#caching-decorators), multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
 - **[@asenajs/asena-kafka](/docs/packages/kafka)** - Kafka microservice transport with deterministic topic management, broker-tracked retry attempts, DLQ, and external-topic interop
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
