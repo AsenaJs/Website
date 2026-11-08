@@ -576,8 +576,8 @@ computed at runtime is not checked.
 ✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
   hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
 ✓ direct-dependencies — all required packages are direct dependencies
-✓ duplicate-packages — @asenajs/asena@0.12.3, hono@4.12.9, zod@4.4.3
-✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.12.3
+✓ duplicate-packages — @asenajs/asena@0.13.0, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.13.0
 ✗ auth-enforcement — @Protected/@Roles imported at src/controllers/MeController.ts:1 and @asenajs/asena-auth is a dependency, but neither authComponents nor AuthGuard is imported from it - the markers are metadata only and those routes are served open
   hint: add `imports: [...authComponents]` (from @asenajs/asena-auth) to AsenaServerFactory.create
 ✓ auth-better-auth-dep — Better Auth provider of @asenajs/asena-auth not used
