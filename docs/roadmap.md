@@ -14,13 +14,30 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Current Release <span class="pill pill-live">v0.12.x · Stable</span>
+## Current Release <span class="pill pill-live">v0.13.x · Stable</span> {#v0-13}
 
 These features are **stable and production-ready** in the current release:
 
+### New in v0.13
+
+`@asenajs/asena` 0.13.0. Everything below needs core 0.13.0 or newer. The official packages that
+accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
+`@asenajs/asena-redis` 4.1.0, `@asenajs/asena-drizzle` 4.1.1, `@asenajs/asena-logger` 3.0.2,
+`@asenajs/asena-openapi` 3.2.1, `@asenajs/asena-otel` 3.0.2, `@asenajs/asena-kafka` 4.0.2,
+`@asenajs/asena-auth` 1.0.1 and the CLI 0.13.0.
+
+- **[`@ExceptionHandler`](/docs/guides/error-handling)** - error handling in one place across HTTP, `@On` events and microservice handlers. `@Catch(...types)` methods answer by type with the most specific match winning, `@NotFound()` answers unmatched routes, and duplicates fail the boot
+- **[Event scopes are observe-only](/docs/guides/error-handling#eventpattern-and-on-observe-only)** - a `@Catch` sees `@On` and `@EventPattern` failures, but the original error continues: retry and DLQ for `@EventPattern`, the default error line for `@On`. For `@MessagePattern` its return value is a successful reply, a returned `Response` is declined with a warning, and `undefined` lets the caller see the failure
+- **[Ready-made status exceptions](/docs/guides/error-handling#ready-made-status-exceptions)** - `NotFoundException`, `ConflictException` and the other common statuses as `HttpException` subclasses, catchable by type
+- **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.2.0)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
+- **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
+- **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
+- **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
+- **[Redis cache decorators](/docs/packages/redis#caching-decorators)** *(asena-redis 4.1.0)* - `@Cacheable`, `@CachePut` and `@CacheEvict` put the caching policy on a service method instead of repeating the read, compute and write steps inside it
+
 ### New in v0.12
 
-`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The current patches are `@asenajs/asena` 0.12.3, `@asenajs/ergenecore` 5.0.2 and `@asenajs/hono-adapter` 5.0.3; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
+`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The last releases on the 0.12 line are `@asenajs/asena` 0.12.4, `@asenajs/ergenecore` 5.0.3 and `@asenajs/hono-adapter` 5.1.0; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
 
 - **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
 - **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
@@ -114,7 +131,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.12.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.13.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -123,6 +140,7 @@ Adapters and official packages version independently of the core framework. `@as
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 - **Project Diagnostics** - [`asena doctor`](/docs/cli/commands#asena-doctor) checks decorator flags, the config file, dependencies, duplicate copies, peer ranges and auth wiring; read-only, with an exit code for CI
+- **[Development Console](/docs/cli/console)** - `asena console` runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions
 
 ## Planned for v1.0 <span class="pill pill-teal">Planned</span>
 
@@ -167,37 +185,22 @@ still read the consuming application's environment at the right moment.
 - Database adapters (PostgreSQL, MySQL, MongoDB)
 - Monitoring and APM integrations
 
+### Removals
+
+- **`@Config.onError` and `@Config.onNotFound`** - deprecated in 0.13.0, removed in 1.0.0. Errors and unmatched routes are answered by [`@Catch` and `@NotFound()`](/docs/guides/error-handling) in an `@ExceptionHandler` class
+
 ---
 
 ## Future Ideas · CLI <span class="pill pill-planned">Under discussion</span>
 
 These features are **under consideration** for future CLI releases:
 
-### Dev Console (Quarkus-inspired)
+### Dependency Analysis
 
-Interactive development console for debugging and inspection.
+Building on the [Components panel](/docs/cli/console#components) of `asena console`:
 
-**Planned Features:**
-- Web-based dashboard running during development
-- Live route inspection and testing
-- Request/response logging
-- Performance metrics in real-time
-
-**Inspiration:** Similar to Quarkus Dev UI
-
-### Container Visualizer
-
-Visual representation of IoC container dependencies.
-
-**Planned Features:**
-
-- Dependency graph visualization
-- Service lifecycle tracking
 - Circular dependency detection
-
-**Benefits:**
-
-- Understanding service dependencies
+- Service lifecycle tracking
 
 ::: warning No Timeline Yet
 These CLI features are **ideas under discussion** and do not have a fixed release timeline.
@@ -266,7 +269,8 @@ We welcome contributions in many forms:
 - **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
 - **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
 - **v0.12.0** - Released October 2026 (Route context contracts, `validatorCache`, OpenAPI from contracts, the `@asenajs/asena/auth` contract, one middleware order on both adapters, canonical duplicate-route detection, `WebSocketOriginMiddleware`). **Breaking:** both adapters moved to 5.0.0 — `RateLimiterMiddleware` keys on the connecting peer
-- **v1.0.0** - TBD (Plugin system)
+- **v0.13.0** - Released November 2026 (`@ExceptionHandler` with `@Catch` / `@NotFound`, ready-made status exceptions, `asena console`). **Deprecated:** `@Config.onError` and `onNotFound`
+- **v1.0.0** - TBD (Plugin system). **Breaking:** removes `@Config.onError` and `onNotFound`
 
 ::: tip Follow Progress
 Track development progress on our [GitHub repository](https://github.com/AsenaJs/Asena) and join discussions in [GitHub Issues](https://github.com/AsenaJs/Asena/issues).

@@ -1034,7 +1034,7 @@ For full documentation, see [Frontend Controller](/docs/concepts/frontend-contro
 - [Middleware](/docs/concepts/middleware) - Request interception
 - [Validation](/docs/concepts/validation) - Route context contracts and validators
 - [Context](/docs/concepts/context) - Request, response and typed context state
-- [Error Handling](/docs/guides/error-handling) - `HttpException` and `onError`
+- [Error Handling](/docs/guides/error-handling) - `@ExceptionHandler`, `@Catch` and `HttpException`
 - [WebSocket](/docs/concepts/websocket) - Real-time communication
 - [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling
 - [Frontend Controller](/docs/concepts/frontend-controller) - HTML page serving

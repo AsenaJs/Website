@@ -82,9 +82,9 @@ export const DIAGRAMS: Record<string, Diagram> = {
       },
     ],
     exits: [
-      { when: 'Any step throws', then: '`onError(error, context)` on `@Config`, or the adapter default when there is none.' },
+      { when: 'Any step throws', then: 'The matching `@Catch` in an `@ExceptionHandler`, or the adapter default when none answers.' },
       { when: 'A middleware returns `false`', then: '`403 Forbidden`; nothing after it runs.' },
-      { when: 'No route matches', then: 'Global middleware runs, then `onNotFound()`. Never `onError`.' },
+      { when: 'No route matches', then: 'Global middleware runs, then `@NotFound()`. Never `@Catch`.' },
     ],
   },
 

@@ -162,7 +162,7 @@ const [adapter, logger] = createHonoAdapter({
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
 | `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
-| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
+| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 **Returns:** Tuple: `[adapter, logger]`
 
@@ -557,27 +557,12 @@ Extend `ConfigService` for server configuration:
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
-import { isHttpException, type NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/hono-adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
   globalMiddlewares() {
     return [GlobalCors, ApiRateLimiter];
-  }
-
-  onError(error: Error, context: Context): Response | Promise<Response> {
-    if (isHttpException(error)) {
-      // Answer with the body the exception carries; `error.message` is that body
-      // already flattened to a string, so re-wrapping it double-encodes an object
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-
-    return context.send({ error: 'Internal Server Error' }, 500);
-  }
-
-  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
-    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
@@ -586,40 +571,63 @@ export class ServerConfig extends ConfigService {
 For configuration, see [Configuration](/docs/guides/configuration).
 :::
 
-### The two handlers do not overlap
+### Error Handling
 
-`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
-route** — a routing outcome, not a failure — so neither handler has to ask which case it is
-looking at. An unmatched route never reaches `onError`.
-
-`request.path` is the path only, with no origin and no query string, and `request.method` is
-normalised by the adapter, so the same handler body works unchanged on Ergenecore. With no
-`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
-
-A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
-`onError`:
+Errors and unmatched routes are answered by an `@ExceptionHandler` class, not by the config:
 
 ```typescript
-import { HttpException } from '@asenajs/asena/adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, NotFound, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike, type NotFoundRequest } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/hono-adapter';
 
-throw new HttpException(404, { error: 'User not found' });
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    // Answer with the body the exception carries; `error.message` is that body
+    // already flattened to a string, so re-wrapping it double-encodes an object
+    return error.getResponse?.() ?? ctx.context.send({ error: error.message }, error.status);
+  }
+
+  @NotFound()
+  public missing(context: Context, request: NotFoundRequest) {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
+  }
+}
 ```
 
-`HttpException` lives in the framework core, so that throw is identical on Ergenecore. This
-adapter deliberately does **not** re-export it: it already exports hono's `HTTPException`, and two
-throwable classes differing by the case of two letters is a trap for autocomplete.
+`@Catch` is for something your code **threw**. `@NotFound()` is for a request that matched **no
+route** — a routing outcome, not a failure — so an unmatched route never reaches `@Catch`, not
+even a catch-all. With nothing answering, both adapters answer `{"error":"Not Found"}` with a 404.
 
-### Every thrown error reaches `onError` first
+A *domain* 404 — the route exists, the record does not — is a throw, and goes to `@Catch`:
 
-Including `HttpException`, hono's `HTTPException`, and anything a hono middleware raised. Your
-handler sees all of them; the adapter falls back to answering from the exception itself only when
-there is no handler, when it returns nothing, or when it throws.
+```typescript
+import { NotFoundException } from '@asenajs/asena/adapter';
+
+throw new NotFoundException({ error: 'User not found' });
+```
+
+`HttpException` and its status subclasses live in the framework core, so that throw is identical
+on Ergenecore. This adapter deliberately does **not** re-export `HttpException`: it already
+exports hono's `HTTPException`, and two throwable classes differing by the case of two letters is
+a trap for autocomplete.
+
+### `@Catch(HttpException)` covers hono's `HTTPException`
+
+Applications throw `HttpException`, while `hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and
+hono's own validator throw `HTTPException`, and this adapter's `ValidationError` extends it. The
+adapter brands hono's class, so `@Catch(HttpException)` receives both; a narrower `@Catch`, such
+as `@Catch(ValidationError)`, still wins for its own type. When nothing answers, the adapter
+answers from the exception itself.
 
 ::: warning Match with `isHttpException()`, not `instanceof`
-This adapter is the one where it matters most. Applications throw `HttpException`, while
-`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and hono's own validator throw `HTTPException` —
-two unrelated classes, so **either** `instanceof` check misses half of your 4xx responses and
-sends them down the generic 500 branch. `isHttpException()` matches both.
+Where you branch by hand, this adapter is the one where it matters most. The two classes are
+unrelated, so **either** `instanceof` check misses half of your 4xx responses and sends them down
+the generic 500 branch. `isHttpException()` matches both.
 
 It also survives a project resolving two copies of `@asenajs/asena`, where `instanceof` silently
 answers false: `HttpException` brands each instance, so the brand travels with the exception
@@ -638,7 +646,7 @@ avoids the question entirely, since it brands each instance rather than a protot
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions).
 :::
 
-With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+When nothing answers an unexpected error, the adapter answers `{"error":"Internal Server Error"}`. The
 thrown message is deliberately not echoed to the caller — it is written to the log with its stack
 instead. See [Adapter logging](/docs/guides/error-handling#adapter-logging).
 

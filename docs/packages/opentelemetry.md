@@ -153,8 +153,7 @@ Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-import { isHttpException } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/ergenecore';
 import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
@@ -166,15 +165,6 @@ export class AppConfig extends ConfigService {
       AppOtelMiddleware,  // traces all HTTP requests automatically
       AppCorsMiddleware,
     ];
-  }
-
-  public onError(error: Error, context: Context) {
-    if (isHttpException(error)) {
-      // Answer with the body the exception carries; `error.message` is that body
-      // already flattened to a string, so re-wrapping it double-encodes an object
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-    return context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }

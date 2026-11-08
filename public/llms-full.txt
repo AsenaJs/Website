@@ -473,7 +473,8 @@ it, and the container finds it when the application boots.
 | `@Controller` | HTTP routes |
 | `@Service` | Business logic, the default for anything injectable |
 | `@Middleware` | Request middleware, and validators with `{ validator: true }` |
-| `@Config` | Server hooks: `onError`, `onNotFound`, `globalMiddlewares`, `transport` |
+| `@Config` | Server hooks: `serveOptions`, `globalMiddlewares`, `transport` |
+| `@ExceptionHandler` | `@Catch` and `@NotFound()` methods that answer errors and unmatched routes |
 | `@WebSocket` | A WebSocket namespace |
 | `@MessageController` | Broker message handlers |
 | `@Schedule` | Cron jobs |
@@ -1952,7 +1953,7 @@ For full documentation, see [Frontend Controller](/docs/concepts/frontend-contro
 - [Middleware](/docs/concepts/middleware) - Request interception
 - [Validation](/docs/concepts/validation) - Route context contracts and validators
 - [Context](/docs/concepts/context) - Request, response and typed context state
-- [Error Handling](/docs/guides/error-handling) - `HttpException` and `onError`
+- [Error Handling](/docs/guides/error-handling) - `@ExceptionHandler`, `@Catch` and `HttpException`
 - [WebSocket](/docs/concepts/websocket) - Real-time communication
 - [Scheduled Tasks](/docs/concepts/scheduled-tasks) - Cron-based task scheduling
 - [Frontend Controller](/docs/concepts/frontend-controller) - HTML page serving
@@ -2121,13 +2122,30 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 ---
 
-## Current Release (v0.12.x · Stable)
+## Current Release (v0.13.x · Stable) {#v0-13}
 
 These features are **stable and production-ready** in the current release:
 
+### New in v0.13
+
+`@asenajs/asena` 0.13.0. Everything below needs core 0.13.0 or newer. The official packages that
+accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
+`@asenajs/asena-redis` 4.1.0, `@asenajs/asena-drizzle` 4.1.1, `@asenajs/asena-logger` 3.0.2,
+`@asenajs/asena-openapi` 3.2.1, `@asenajs/asena-otel` 3.0.2, `@asenajs/asena-kafka` 4.0.2,
+`@asenajs/asena-auth` 1.0.1 and the CLI 0.13.0.
+
+- **[`@ExceptionHandler`](/docs/guides/error-handling)** - error handling in one place across HTTP, `@On` events and microservice handlers. `@Catch(...types)` methods answer by type with the most specific match winning, `@NotFound()` answers unmatched routes, and duplicates fail the boot
+- **[Event scopes are observe-only](/docs/guides/error-handling#eventpattern-and-on-observe-only)** - a `@Catch` sees `@On` and `@EventPattern` failures, but the original error continues: retry and DLQ for `@EventPattern`, the default error line for `@On`. For `@MessagePattern` its return value is a successful reply, a returned `Response` is declined with a warning, and `undefined` lets the caller see the failure
+- **[Ready-made status exceptions](/docs/guides/error-handling#ready-made-status-exceptions)** - `NotFoundException`, `ConflictException` and the other common statuses as `HttpException` subclasses, catchable by type
+- **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.2.0)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
+- **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
+- **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
+- **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
+- **[Redis cache decorators](/docs/packages/redis#caching-decorators)** *(asena-redis 4.1.0)* - `@Cacheable`, `@CachePut` and `@CacheEvict` put the caching policy on a service method instead of repeating the read, compute and write steps inside it
+
 ### New in v0.12
 
-`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The current patches are `@asenajs/asena` 0.12.3, `@asenajs/ergenecore` 5.0.2 and `@asenajs/hono-adapter` 5.0.3; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
+`@asenajs/asena` 0.12.0, with both adapters at 5.0.0 — a major, because `RateLimiterMiddleware` now keys on the connecting peer and legacy validator factories run at startup by default. The last releases on the 0.12 line are `@asenajs/asena` 0.12.4, `@asenajs/ergenecore` 5.0.3 and `@asenajs/hono-adapter` 5.1.0; `@asenajs/asena-auth` 1.0.0 and the CLI 0.12.0 build on them.
 
 - **[Route context contracts](/docs/concepts/validation#route-context-contracts)** - `class CreateUserContext extends Context.define({ body, query, params })` as the handler's first parameter: Standard Schema v1 validation after middleware, typed output on `context.input`, on both adapters
 - **[`validatorCache`](/docs/concepts/validation#schema-factory-caching)** - a validator's schema factories run once per route at startup by default; `validatorCache: false` runs them on every request
@@ -2221,7 +2239,7 @@ These features are **stable and production-ready** in the current release:
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 
 ::: info Independent Versioning
-Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.12.x is the baseline they all target — check each package page for its own current version.
+Adapters and official packages version independently of the core framework. `@asenajs/asena` v0.13.x is the baseline they all target — check each package page for its own current version.
 :::
 
 ### CLI Tools
@@ -2230,6 +2248,7 @@ Adapters and official packages version independently of the core framework. `@as
 - **Code Generation** - Generate controllers, services, middleware, WebSocket services
 - **Project Bundling** - `asena build` command bundles your project based on [`asena-config.ts`](/docs/cli/configuration), significantly improving performance by reducing cold start time and package size
 - **Project Diagnostics** - [`asena doctor`](/docs/cli/commands#asena-doctor) checks decorator flags, the config file, dependencies, duplicate copies, peer ranges and auth wiring; read-only, with an exit code for CI
+- **[Development Console](/docs/cli/console)** - `asena console` runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions
 
 ## Planned for v1.0 (Planned)
 
@@ -2274,37 +2293,22 @@ still read the consuming application's environment at the right moment.
 - Database adapters (PostgreSQL, MySQL, MongoDB)
 - Monitoring and APM integrations
 
+### Removals
+
+- **`@Config.onError` and `@Config.onNotFound`** - deprecated in 0.13.0, removed in 1.0.0. Errors and unmatched routes are answered by [`@Catch` and `@NotFound()`](/docs/guides/error-handling) in an `@ExceptionHandler` class
+
 ---
 
 ## Future Ideas · CLI (Under discussion)
 
 These features are **under consideration** for future CLI releases:
 
-### Dev Console (Quarkus-inspired)
+### Dependency Analysis
 
-Interactive development console for debugging and inspection.
+Building on the [Components panel](/docs/cli/console#components) of `asena console`:
 
-**Planned Features:**
-- Web-based dashboard running during development
-- Live route inspection and testing
-- Request/response logging
-- Performance metrics in real-time
-
-**Inspiration:** Similar to Quarkus Dev UI
-
-### Container Visualizer
-
-Visual representation of IoC container dependencies.
-
-**Planned Features:**
-
-- Dependency graph visualization
-- Service lifecycle tracking
 - Circular dependency detection
-
-**Benefits:**
-
-- Understanding service dependencies
+- Service lifecycle tracking
 
 ::: warning No Timeline Yet
 These CLI features are **ideas under discussion** and do not have a fixed release timeline.
@@ -2373,7 +2377,8 @@ We welcome contributions in many forms:
 - **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
 - **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
 - **v0.12.0** - Released October 2026 (Route context contracts, `validatorCache`, OpenAPI from contracts, the `@asenajs/asena/auth` contract, one middleware order on both adapters, canonical duplicate-route detection, `WebSocketOriginMiddleware`). **Breaking:** both adapters moved to 5.0.0 — `RateLimiterMiddleware` keys on the connecting peer
-- **v1.0.0** - TBD (Plugin system)
+- **v0.13.0** - Released November 2026 (`@ExceptionHandler` with `@Catch` / `@NotFound`, ready-made status exceptions, `asena console`). **Deprecated:** `@Config.onError` and `onNotFound`
+- **v1.0.0** - TBD (Plugin system). **Breaking:** removes `@Config.onError` and `onNotFound`
 
 ::: tip Follow Progress
 Track development progress on our [GitHub repository](https://github.com/AsenaJs/Asena) and join discussions in [GitHub Issues](https://github.com/AsenaJs/Asena/issues).
@@ -2427,8 +2432,8 @@ where there is none.
 | Passport strategies | asena-auth providers: server-side sessions, Better Auth, or your own `AsenaAuthProvider` |
 | `ValidationPipe` + DTO classes | Route context contracts |
 | Interceptors | Middleware with code after `await next()`; `@PostProcessor` |
-| Exception filters | `onError` on the `@Config` class |
-| `HttpException` | `HttpException` from `@asenajs/asena/adapter` |
+| Exception filters, `@Catch()` | `@ExceptionHandler` classes with `@Catch()` methods |
+| `HttpException`, `NotFoundException` and the other built-in exceptions | The same names for the common statuses, from `@asenajs/asena/adapter` |
 | `@nestjs/config` | `@Value('ENV_KEY')` |
 | `onModuleInit` / `onApplicationShutdown` | `@OnStart` / `@OnStop` |
 | `Test.createTestingModule()` | `mockComponent`, `createWebTest`, `createTestApp` |
@@ -2503,7 +2508,7 @@ export class UserService {
 ```typescript [Asena]
 import { Service } from '@asenajs/asena/decorators';
 import { Inject } from '@asenajs/asena/decorators/ioc';
-import { HttpException } from '@asenajs/asena/adapter';
+import { NotFoundException } from '@asenajs/asena/adapter';
 
 @Service()
 export class UserService {
@@ -2513,7 +2518,7 @@ export class UserService {
   async findById(id: string) {
     const user = await this.users.findById(id);
 
-    if (!user) throw new HttpException(404, { message: 'User not found' });
+    if (!user) throw new NotFoundException('User not found');
 
     return user;
   }
@@ -2611,9 +2616,9 @@ A matched route:
 
 Off the main path:
 
-- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- Any step throws: The matching `@Catch` in an `@ExceptionHandler`, or the adapter default when none answers.
 - A middleware returns `false`: `403 Forbidden`; nothing after it runs.
-- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
+- No route matches: Global middleware runs, then `@NotFound()`. Never `@Catch`.
 
 ### Guards → Middleware
 
@@ -2641,7 +2646,7 @@ export class AdminController {}
 
 ```typescript [Asena]
 import { Controller, Middleware } from '@asenajs/asena/decorators';
-import { HttpException } from '@asenajs/asena/adapter';
+import { UnauthorizedException } from '@asenajs/asena/adapter';
 import { MiddlewareService, type Context } from '@asenajs/ergenecore';
 
 @Middleware()
@@ -2649,7 +2654,7 @@ export class AuthMiddleware extends MiddlewareService {
   async handle(context: Context, next: () => Promise<void>) {
     const token = context.headers['authorization'];
 
-    if (!token) throw new HttpException(401, { message: 'Unauthorized' });
+    if (!token) throw new UnauthorizedException();
 
     context.setValue('userId', token.slice('Bearer '.length));
     await next();
@@ -2773,51 +2778,73 @@ container.
 **No direct equivalent:** mapping the handler's result in an interceptor
 (`map(data => ({ data }))`). Shape the response in the handler or the service.
 
-## Exception Filters → `onError`
+## Exception Filters → `@ExceptionHandler`
 
-One `onError` method on the `@Config` class sees every error a route throws: `HttpException`s,
-validation failures and unexpected errors.
+An `@ExceptionHandler` class plays the part of a set of global exception filters, and `@Catch`
+keeps its NestJS name. The method receives the error and an `ExceptionContext` instead of an
+`ArgumentsHost`, and answers by returning a `Response` instead of writing to one.
 
 ::: code-group
 
 ```typescript [NestJS]
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse();
-    const status = exception instanceof HttpException ? exception.getStatus() : 500;
 
-    response.status(status).json({ statusCode: status });
+    response.status(exception.getStatus()).json({ statusCode: exception.getStatus() });
   }
 }
 
-app.useGlobalFilters(new AllExceptionsFilter());
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    host.switchToHttp().getResponse().status(500).json({ statusCode: 500 });
+  }
+}
+
+app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 ```
 
 ```typescript [Asena]
-import { Config } from '@asenajs/asena/decorators';
-import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore';
 
-@Config()
-export class AppConfig extends ConfigService {
-  globalMiddlewares() {
-    return [TimingMiddleware];
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return ctx.context.send({ statusCode: error.status }, error.status);
   }
 
-  onError(error: Error, context: Context) {
-    if (isValidationError(error)) return context.send({ message: 'Invalid request' }, 400);
-    if (isHttpException(error)) return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
+  @Catch()
+  public fallback(_error: unknown, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({ message: 'Internal server error' }, 500);
+    return ctx.context.send({ statusCode: 500 }, 500);
   }
 }
 ```
 
 :::
 
-There is one error hook per application rather than filters per controller or route. Unmatched
-routes go to a separate `onNotFound` hook.
+| NestJS | Asena |
+|:-------|:------|
+| `@Catch(A, B)` on a filter class | `@Catch(A, B)` on a method; one class holds many |
+| Filter order decides which one runs | Most specific type wins; one handler per type, checked at boot |
+| `@Catch()` catch-all filter | `@Catch()`, one per application; it also receives non-`Error` throws |
+| `app.useGlobalFilters(...)` | Nothing to register: the class is a component found by the scan |
+| `host.switchToHttp()` / `switchToRpc()` | `ctx.scope`: `'http'`, `'event'` or `'microservice'` |
+| `NotFoundException` and the other built-in exceptions | The same names for the common statuses, from `@asenajs/asena/adapter`; the constructor takes `(body, options)` |
+| An unmatched route throws `NotFoundException` | An unmatched route never throws; it goes to a `@NotFound()` method |
+
+**No direct equivalent:** filters bound to one controller or route with `@UseFilters()`. Every
+`@Catch` is application-wide; narrow by error type, or by `ctx.context.routePattern` inside the
+handler.
 
 Learn more: [Error Handling](/docs/guides/error-handling)
 
@@ -3627,11 +3654,9 @@ export class UserController {
 ```
 
 ::: warning Validation Errors
-If validation fails and your application defines **no** `onError` handler, the adapter
-answers with its own `400 Bad Request` envelope.
-
-As soon as you define `ConfigService.onError`, the failure is routed there instead as a
-`ValidationError` - match it with `isValidationError()`. See
+A failed contract throws a `ContractValidationError`. When no
+[`@Catch`](/docs/guides/error-handling#validation-errors) answers it, the adapter answers with
+its own `400 Bad Request` envelope. See
 [Validation](/docs/concepts/validation#validation-error-responses).
 :::
 
@@ -6184,8 +6209,9 @@ Both adapters accept the same three ways to answer a request from middleware:
 
 - **`return context.send(...)`** - returning a `Response` short-circuits the chain
 - **`return false`** - short-circuits with `403 Forbidden`
-- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your `onError`
-  handler. The same class on both adapters, so a middleware that guards a route is portable
+- **`throw`** - an `HttpException` from `@asenajs/asena/adapter` is routed to your
+  [`@Catch` handlers](/docs/guides/error-handling), and answered from its own status when none
+  matches. The same class on both adapters, so a middleware that guards a route is portable
 
 The one thing that is *not* portable is **omitting `next()`**. See
 [Stopping Middleware Chain](#stopping-middleware-chain).
@@ -6342,7 +6368,7 @@ In the examples below the Ergenecore tab answers with `context.send(...)` and th
 line is where `MiddlewareService` and `Context` are imported from.
 
 Return a `Response` when the middleware is the right place to phrase the answer. Throw when you
-want the rejection to reach `onError` and be shaped there with the rest of your API's errors.
+want the rejection to reach `@Catch` and be shaped there with the rest of your API's errors.
 :::
 
 ### Authentication Middleware
@@ -6726,9 +6752,9 @@ A matched route:
 
 Off the main path:
 
-- Any step throws: `onError(error, context)` on `@Config`, or the adapter default when there is none.
+- Any step throws: The matching `@Catch` in an `@ExceptionHandler`, or the adapter default when none answers.
 - A middleware returns `false`: `403 Forbidden`; nothing after it runs.
-- No route matches: Global middleware runs, then `onNotFound()`. Never `onError`.
+- No route matches: Global middleware runs, then `@NotFound()`. Never `@Catch`.
 
 **Example:**
 
@@ -6824,7 +6850,7 @@ export class MaintenanceMiddleware extends MiddlewareService {
     const isMaintenanceMode = process.env.MAINTENANCE === 'true';
 
     if (isMaintenanceMode) {
-      // Returning a Response also works here; throwing routes through onError instead
+      // Returning a Response also works here; throwing routes through @Catch instead
       throw new HttpException(503, 'Service under maintenance');
     }
 
@@ -8423,7 +8449,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Asena's Context wrapper
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -8454,7 +8480,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Hono's NATIVE context, not Asena's wrapper - see the warning below
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -8538,7 +8564,7 @@ hook: (result, context) => {
   if (result.success) return;
 
   // A Response short-circuits everything - the handler never runs and
-  // onError is never called for this request
+  // no @Catch is consulted for this request
   return context.send({ error: 'Invalid signup payload' }, 422);
 }
 ```
@@ -8560,9 +8586,9 @@ When validation fails, Asena answers with **400 Bad Request**.
 
 ### Default response
 
-A `ValidationError` is always thrown. When nothing answers it - your application defines no
-global error handler, or its handler returns nothing - **both** adapters fall back to the same
-envelope, Zod's flattened error:
+A `ValidationError` is always thrown. When nothing answers it - no `@Catch` matches it, or the
+one that matches returns nothing - **both** adapters fall back to the same envelope, Zod's
+flattened error:
 
 ```json
 {
@@ -8582,62 +8608,52 @@ envelope, Zod's flattened error:
 `header`.
 
 The failure is also logged like any other 4xx, at DEBUG (or INFO when your logger has no
-`debug`). Before 0.9.1 an application with no `onError` got this response from inside the
-validator, which never threw - so it reached neither `onError` nor the log, the one rejection
-that was invisible at every level. See
-[Error Handling](/docs/guides/error-handling#adapter-logging).
+`debug`). See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Customizing the response
 
-Define `onError` in your `@Config` class and validation failures arrive there like any
-other error, so they can share your application's response envelope:
+A `@Catch` in an [`@ExceptionHandler`](/docs/guides/error-handling) receives validation failures
+like any other error, so they can share your application's response envelope:
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { isValidationError } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { ContractValidationError, type ValidationErrorLike } from '@asenajs/asena/adapter';
+import { ValidationError, type Context } from '@asenajs/hono-adapter';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  public onError(error: Error, context: Context): Response {
-    if (isValidationError(error)) {
-      return context.send(
-        {
-          success: false,
-          message: 'Validation failed',
-          errors: error.issues // [{ path, message, code }]
-        },
-        400
-      );
-    }
+@ExceptionHandler()
+export class ValidationExceptionHandler {
+  @Catch(ValidationError, ContractValidationError)
+  public validation(error: ValidationErrorLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({ success: false, message: 'Internal Server Error' }, 500);
+    return ctx.context.send(
+      {
+        success: false,
+        message: 'Validation failed',
+        errors: error.issues // [{ path, message, code }]
+      },
+      400
+    );
   }
 }
 ```
 
-`isValidationError()` is exported from `@asenajs/asena/adapter` and works with both
-adapters. The error it narrows to also carries `target` and `cause` (the original
-`ZodError`) if you need more than `issues`.
+`ValidationError` comes from your adapter package and is what a validator class throws;
+`ContractValidationError` comes from `@asenajs/asena/adapter` and is what a
+[route context contract](#route-context-contracts) throws. Both carry `target`, `issues` and
+`cause` (the original `ZodError` for a validator class) and satisfy `isValidationError()`.
 
-::: tip Existing error handlers keep working
-The thrown error is an HTTP exception carrying status **400**, so a handler that matches with
-`isHttpException()` and replies with `error.status` keeps answering 400 - adopting this does not
-silently turn validation failures into 500s.
-
-Check `isValidationError()` **first** if you want validation failures to have their own envelope.
-A `ValidationError` is an HTTP exception too, so a generic `isHttpException()` branch placed
-above it would swallow it.
-
-The class each adapter extends is an implementation detail and they differ - Ergenecore's extends
-`HttpException`, the Hono adapter's extends hono's `HTTPException` so that pre-0.9 handlers
-written against `instanceof HTTPException` keep answering 400. Match with the guards and you do
-not have to know which.
+::: tip A generic HTTP handler still answers 400
+Both errors are HTTP exceptions carrying status **400**. Without a narrower `@Catch`, a
+`@Catch(HttpException)` receives them and answers from `error.status`, so validation failures
+never silently become 500s. A `@Catch(ValidationError)` is more specific and wins for its own
+type.
 :::
 
 ::: warning A hook that returns a Response wins
-If the validator's `hook` returns a `Response`, that response is sent as-is and `onError`
-is never reached for that request. See [Validation Hooks](#validation-hooks).
+If the validator's `hook` returns a `Response`, that response is sent as-is and no `@Catch` is
+consulted for that request. See [Validation Hooks](#validation-hooks).
 :::
 
 ## Route Context Contracts
@@ -8809,10 +8825,11 @@ itself, the handler does not run.
 | A non-empty `body` request whose content type is not `application/json` or `application/*+json` | **415** |
 | A `form` request whose content type is not `multipart/form-data` or `application/x-www-form-urlencoded` | **415** |
 
-A failing schema throws an error that `isValidationError()` recognizes, so it reaches your
-`onError` like a validator failure does. Its `target` is the contract key (`body`, `form`, `query`,
-`params`, `headers`) and its `issues` carry `path` and `message`, with each path segment
-normalized to a string or a number. Without an `onError` that answers it, the response is:
+A failing schema throws a `ContractValidationError` from `@asenajs/asena/adapter`, which
+`isValidationError()` recognizes and a `@Catch` can match by type. Its `target` is the contract key
+(`body`, `form`, `query`, `params`, `headers`) and its `issues` carry `path` and `message`, with
+each path segment normalized to a string or a number. Without a `@Catch` that answers it, the
+response is:
 
 ```json
 {
@@ -8822,7 +8839,7 @@ normalized to a string or a number. Without an `onError` that answers it, the re
 }
 ```
 
-An exception thrown from inside a schema is not a validation failure. It reaches `onError` as it
+An exception thrown from inside a schema is not a validation failure. It reaches `@Catch` as it
 was thrown.
 
 A route cannot combine a contract with the `validator` option. Doing so, or setting
@@ -11319,8 +11336,27 @@ export class TestService {
 ```
 
 ::: tip Errors are caught and logged
-Errors are automatically caught and logged. Your application continues running normally.
+Errors are automatically caught and logged with an `[EventDispatchService]` error line. Your
+application continues running normally.
 :::
+
+### Observing failures with `@Catch`
+
+A `@Catch` method in an [`@ExceptionHandler`](/docs/guides/error-handling) also receives `@On`
+failures, with `ctx.scope === 'event'`, the event name, its data and the failing method as
+`source`. It can only **observe**: the error line above is logged whatever the `@Catch` does, and
+the other handlers keep running. A value it returns has no effect and logs a warning.
+
+```typescript
+@Catch(QuotaExceededError)
+public async quota(error: QuotaExceededError, ctx: ExceptionContext) {
+  if (ctx.scope === 'event') {
+    await this.metrics.increment('event.quota_exceeded', { event: ctx.event });
+  }
+}
+```
+
+See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
 
 ---
 
@@ -12504,6 +12540,30 @@ try {
   }
 }
 ```
+
+### Handler failures and `@Catch`
+
+On the receiving side, a failure in a `@MessagePattern` or `@EventPattern` handler, or in its
+`onReceive` interceptors, reaches a matching `@Catch` in an
+[`@ExceptionHandler`](/docs/guides/error-handling) with `ctx.scope === 'microservice'`:
+
+| Handler | What the `@Catch` return value does |
+|---|---|
+| `@MessagePattern` | A value other than `undefined` or a `Response` is a **successful** reply: the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false`, so `send()` rejects with `REMOTE_ERROR`. A returned `Response` is declined the same way and logs a warning |
+| `@EventPattern` | Nothing. The `@Catch` observes, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
+
+```typescript
+@Catch(OutOfStockError)
+public outOfStock(error: OutOfStockError, ctx: ExceptionContext) {
+  if (ctx.scope === 'microservice' && ctx.kind === 'message') {
+    return { status: 'rejected', reason: 'OUT_OF_STOCK', sku: error.sku };
+  }
+}
+```
+
+The caller's `send()` resolves with `{ status: 'rejected', ... }`, so the caller has to check
+`status`. To make `send()` reject instead, return `undefined`. See
+[Error Handling - `@MessagePattern`](/docs/guides/error-handling#messagepattern-the-return-value-is-the-reply).
 
 ---
 
@@ -15078,7 +15138,7 @@ const adapter = createErgenecoreAdapter({
 | `logger`            | `ServerLogger`               | `undefined` | Custom logger instance         |
 | `enableWebSocket`   | `boolean`                    | `true`      | Enable WebSocket support       |
 | `websocketAdapter`  | `ErgenecoreWebsocketAdapter` | Auto        | Custom WebSocket adapter       |
-| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
+| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 ### createProductionAdapter(options?)
 
@@ -15445,66 +15505,68 @@ Extend `ConfigService` for server configuration:
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-import type { NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
   globalMiddlewares() {
     return [GlobalCors, ApiRateLimiter];
   }
+}
+```
 
-  onError(error: Error, context: Context): Response | Promise<Response> {
-    return context.send({ error: 'Something went wrong' }, 500);
+### Error Handling
+
+Errors and unmatched routes are answered by an `@ExceptionHandler` class, not by the config:
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, NotFound, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike, type NotFoundRequest } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return error.getResponse?.() ?? ctx.context.send({ error: error.message }, error.status);
   }
 
-  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+  @NotFound()
+  public missing(context: Context, request: NotFoundRequest) {
     return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
 
-### The two handlers do not overlap
+`@Catch` is for something your code **threw**. `@NotFound()` is for a request that matched **no
+route** — a routing outcome, not a failure — so an unmatched route never reaches `@Catch`, not even
+a catch-all. A file that `@StaticServe` cannot find reaches `@NotFound()` too; the per-route
+`StaticServeService.onNotFound` still runs first when you declare one.
 
-`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
-route** — a routing outcome, not a failure — so neither handler has to ask which case it is looking
-at. An unmatched route never reaches `onError`.
-
-`request.path` is the path only, with no origin and no query string, and `request.method` is
-normalised by the adapter, so the same handler body works unchanged on the Hono adapter. With no
-`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
-
-A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
-`onError`:
+A *domain* 404 — the route exists, the record does not — is a throw, and goes to `@Catch`:
 
 ```typescript
-import { HttpException } from '@asenajs/asena/adapter';
+import { NotFoundException } from '@asenajs/asena/adapter';
 
-throw new HttpException(404, { error: 'User not found' });
+throw new NotFoundException({ error: 'User not found' });
 ```
 
-`HttpException` lives in the framework core, not in this adapter, so the same throw works
-unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports it under the name it has always
-had, and that re-export is the same class object.
+`HttpException` and its status subclasses live in the framework core, not in this adapter, so the
+same throw works unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports `HttpException`
+under the name it has always had, and that re-export is the same class object.
 
-::: warning `onNotFound` also catches missing static files
-A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
-body. The per-route `StaticServeService.onNotFound` still runs first when you declare one.
-:::
-
-### Every thrown error reaches `onError` first
-
-Including `HttpException`, so you can reshape your own 4xx envelopes the same way on both
-adapters. The adapter falls back to `getResponse()` (or a generic 500) only when there is no
-handler, when it returns nothing, or when it throws.
-
-With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
-thrown message is deliberately not echoed to the caller — it is written to the log with its stack
-instead.
+When nothing answers, this adapter answers from the error itself: an `HttpException` from its
+own status and body, a validation failure with its 400 envelope, anything else with
+`{"error":"Internal Server Error"}` and a 500. The thrown message of an unexpected error is not
+echoed to the caller — it is written to the log with its stack instead. An unmatched route
+answers `{"error":"Not Found"}` with a 404.
 
 ::: info
-For configuration, see [Configuration](/docs/guides/configuration), and for the full picture of
-both hooks see [Error Handling](/docs/guides/error-handling).
+For the resolution chain, scopes and the full set of status exceptions, see
+[Error Handling](/docs/guides/error-handling).
 :::
 
 ## Best Practices
@@ -15543,7 +15605,6 @@ import {
   type Context,
   type ValidationSchema,
 } from '@asenajs/ergenecore';
-import { isHttpException } from '@asenajs/asena/adapter';
 import { z } from 'zod';
 
 // MiddlewareService requires handle() - it is the only abstract member
@@ -15565,13 +15626,8 @@ export class MyValidator extends ValidationService {
 // ConfigService has no abstract members; override only the hooks you need
 @Config()
 export class MyConfig extends ConfigService {
-  public onError(error: Error, context: Context) {
-    // Without this branch every deliberate 401/403/404 arrives at the client as a 500
-    if (isHttpException(error)) {
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-
-    return context.send({ error: 'Internal Server Error' }, 500);
+  public globalMiddlewares() {
+    return [MyMiddleware];
   }
 }
 ```
@@ -15794,7 +15850,7 @@ const [adapter, logger] = createHonoAdapter({
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
 | `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
-| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
+| `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 **Returns:** Tuple: `[adapter, logger]`
 
@@ -16189,27 +16245,12 @@ Extend `ConfigService` for server configuration:
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
-import { isHttpException, type NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/hono-adapter';
 
 @Config()
 export class ServerConfig extends ConfigService {
   globalMiddlewares() {
     return [GlobalCors, ApiRateLimiter];
-  }
-
-  onError(error: Error, context: Context): Response | Promise<Response> {
-    if (isHttpException(error)) {
-      // Answer with the body the exception carries; `error.message` is that body
-      // already flattened to a string, so re-wrapping it double-encodes an object
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-
-    return context.send({ error: 'Internal Server Error' }, 500);
-  }
-
-  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
-    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
@@ -16218,40 +16259,63 @@ export class ServerConfig extends ConfigService {
 For configuration, see [Configuration](/docs/guides/configuration).
 :::
 
-### The two handlers do not overlap
+### Error Handling
 
-`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
-route** — a routing outcome, not a failure — so neither handler has to ask which case it is
-looking at. An unmatched route never reaches `onError`.
-
-`request.path` is the path only, with no origin and no query string, and `request.method` is
-normalised by the adapter, so the same handler body works unchanged on Ergenecore. With no
-`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
-
-A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
-`onError`:
+Errors and unmatched routes are answered by an `@ExceptionHandler` class, not by the config:
 
 ```typescript
-import { HttpException } from '@asenajs/asena/adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, NotFound, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike, type NotFoundRequest } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/hono-adapter';
 
-throw new HttpException(404, { error: 'User not found' });
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    // Answer with the body the exception carries; `error.message` is that body
+    // already flattened to a string, so re-wrapping it double-encodes an object
+    return error.getResponse?.() ?? ctx.context.send({ error: error.message }, error.status);
+  }
+
+  @NotFound()
+  public missing(context: Context, request: NotFoundRequest) {
+    return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
+  }
+}
 ```
 
-`HttpException` lives in the framework core, so that throw is identical on Ergenecore. This
-adapter deliberately does **not** re-export it: it already exports hono's `HTTPException`, and two
-throwable classes differing by the case of two letters is a trap for autocomplete.
+`@Catch` is for something your code **threw**. `@NotFound()` is for a request that matched **no
+route** — a routing outcome, not a failure — so an unmatched route never reaches `@Catch`, not
+even a catch-all. With nothing answering, both adapters answer `{"error":"Not Found"}` with a 404.
 
-### Every thrown error reaches `onError` first
+A *domain* 404 — the route exists, the record does not — is a throw, and goes to `@Catch`:
 
-Including `HttpException`, hono's `HTTPException`, and anything a hono middleware raised. Your
-handler sees all of them; the adapter falls back to answering from the exception itself only when
-there is no handler, when it returns nothing, or when it throws.
+```typescript
+import { NotFoundException } from '@asenajs/asena/adapter';
+
+throw new NotFoundException({ error: 'User not found' });
+```
+
+`HttpException` and its status subclasses live in the framework core, so that throw is identical
+on Ergenecore. This adapter deliberately does **not** re-export `HttpException`: it already
+exports hono's `HTTPException`, and two throwable classes differing by the case of two letters is
+a trap for autocomplete.
+
+### `@Catch(HttpException)` covers hono's `HTTPException`
+
+Applications throw `HttpException`, while `hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and
+hono's own validator throw `HTTPException`, and this adapter's `ValidationError` extends it. The
+adapter brands hono's class, so `@Catch(HttpException)` receives both; a narrower `@Catch`, such
+as `@Catch(ValidationError)`, still wins for its own type. When nothing answers, the adapter
+answers from the exception itself.
 
 ::: warning Match with `isHttpException()`, not `instanceof`
-This adapter is the one where it matters most. Applications throw `HttpException`, while
-`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt` and hono's own validator throw `HTTPException` —
-two unrelated classes, so **either** `instanceof` check misses half of your 4xx responses and
-sends them down the generic 500 branch. `isHttpException()` matches both.
+Where you branch by hand, this adapter is the one where it matters most. The two classes are
+unrelated, so **either** `instanceof` check misses half of your 4xx responses and sends them down
+the generic 500 branch. `isHttpException()` matches both.
 
 It also survives a project resolving two copies of `@asenajs/asena`, where `instanceof` silently
 answers false: `HttpException` brands each instance, so the brand travels with the exception
@@ -16270,7 +16334,7 @@ avoids the question entirely, since it brands each instance rather than a protot
 [Error Handling](/docs/guides/error-handling#throwing-http-exceptions).
 :::
 
-With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
+When nothing answers an unexpected error, the adapter answers `{"error":"Internal Server Error"}`. The
 thrown message is deliberately not echoed to the caller — it is written to the log with its stack
 instead. See [Adapter logging](/docs/guides/error-handling#adapter-logging).
 
@@ -16836,27 +16900,34 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 }
 ```
 
-### Error Handling in Config
+### Error Handling in an Exception Handler
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import type { Context } from '@asenajs/ergenecore';
 import { logger } from '../logger';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  onError(error: Error, context: Context): Response {
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(Error)
+  public unexpected(error: Error, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
     logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.req.url,
-      method: context.req.method
+      url: ctx.context.req.url,
+      method: ctx.context.req.method
     });
 
-    return context.send({ error: 'Internal server error' }, 500);
+    return ctx.context.send({ error: 'Internal server error' }, 500);
   }
 }
 ```
+
+A `@Catch` that answers owns the log line: the adapter writes nothing for a request it did not
+answer itself. See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Performance Profiling
 
@@ -17036,7 +17107,7 @@ bun add @asenajs/asena-auth better-auth
 **Requirements:**
 - [Bun](https://bun.sh) v1.4 or higher
 - [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.12.2 or higher
-- [@asenajs/ergenecore](/docs/adapters/ergenecore) v5.0.2 or higher, or [@asenajs/hono-adapter](/docs/adapters/hono) v5.0.3 or higher
+- [@asenajs/ergenecore](/docs/adapters/ergenecore) v5.0.2 or higher, or [@asenajs/hono-adapter](/docs/adapters/hono) v5.0.3 or higher; on core 0.13, ergenecore v5.1.0 or hono-adapter v5.2.0, the first releases that accept it
 - [better-auth](https://www.better-auth.com) v1.2 or higher, below v2 - optional peer dependency, only for the Better Auth provider
 
 ## Quick Start
@@ -19512,8 +19583,7 @@ Add `AppOtelMiddleware` to your config's `globalMiddlewares()`. This is required
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-import { isHttpException } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/ergenecore';
 import { AppOtelMiddleware } from '../middlewares/AppOtelMiddleware';
 import { AppCorsMiddleware } from '../middlewares/AppCorsMiddleware';
 
@@ -19525,15 +19595,6 @@ export class AppConfig extends ConfigService {
       AppOtelMiddleware,  // traces all HTTP requests automatically
       AppCorsMiddleware,
     ];
-  }
-
-  public onError(error: Error, context: Context) {
-    if (isHttpException(error)) {
-      // Answer with the body the exception carries; `error.message` is that body
-      // already flattened to a string, so re-wrapping it double-encodes an object
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-    return context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }
@@ -21411,14 +21472,16 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
 - **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
+- **Console** - `asena console` runs the app with a browser page for its component graph, requests, logs and handlers
 - **Diagnostics** - `asena doctor` checks the project for the configuration mistakes that only surface in production
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
 ## Key Features
 
 - **Quick Project Setup** - Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.
-- **Code Generation** - Generate controllers with route handlers, services with business logic, middleware, config classes and WebSocket namespaces.
+- **Code Generation** - Generate controllers with route handlers, services with business logic, middleware, config classes, exception handlers and WebSocket namespaces.
 - **Fast Development** - One-shot build and run — the CLI discovers and registers all your components automatically. No manual imports needed.
+- **asena console** - Run the app in development with a browser page to read its dependency graph, call its routes, follow a request through its chain and run a schedule.
 - **Production Builds** - Bundle with Bun's fast bundler, with full control over minification, source maps and output options. Your entry file is never rewritten.
 - **asena doctor** - A read-only check for missing decorator flags, duplicate package copies, unsatisfied peer ranges and build settings that mangle component names.
 
@@ -21447,6 +21510,7 @@ asena dev start
 
 - [Installation](/docs/cli/installation) - Install and verify the CLI
 - [Commands](/docs/cli/commands) - All available commands and options
+- [Console](/docs/cli/console) - The browser console for a running app
 - [Configuration](/docs/cli/configuration) - Configure your project
 - [Examples](/docs/cli/examples) - Step-by-step tutorials
 
@@ -21710,7 +21774,7 @@ Quickly and consistently create project components with proper structure and imp
 
 ### Features
 
-- **Multi-Component Support** - Generate controllers, services, middlewares, configs, and websockets
+- **Multi-Component Support** - Generate controllers, services, middlewares, validators, configs, exception handlers and websockets
 - **Automatic Code Generation** - Creates template code with base structure and necessary imports
 - **Adapter-Aware** - Generates adapter-specific code based on project configuration
 - **Suffix Configuration** - Customize component naming conventions (see [Suffix Configuration](/docs/cli/suffix-configuration))
@@ -21726,6 +21790,7 @@ Quickly and consistently create project components with proper structure and imp
 | Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
 | Validator  | `asena generate validator`  | `asena g v`   | Generates a Zod validator   |
 | Config     | `asena generate config`     | `asena g config` | Generates a server config |
+| Exception Handler | `asena generate exception-handler` | `asena g eh` | Generates an exception handler |
 | WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
 
 ### Examples
@@ -21837,19 +21902,58 @@ asena generate config
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
 
-  public onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error.message);
+}
+```
 
-    return context.send({ error: error.message }, 500);
+The class is empty: add the [server options](/docs/guides/configuration) you need. Errors are
+answered by an exception handler, which has a generator of its own.
+
+#### Generate Exception Handler
+
+```bash
+asena g eh
+# or
+asena generate exception-handler
+```
+
+**Prompt:**
+```bash
+✔ Enter exception handler name: Api
+```
+
+**Generated:** `src/exceptions/ApiExceptionHandler.ts`
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { isHttpException } from '@asenajs/asena/adapter';
+import { type Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+
+  @Catch()
+  public fallback(error: unknown, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http' || isHttpException(error)) return;
+
+    console.error('Unhandled error:', error);
+
+    return ctx.context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }
 ```
+
+The generated `@Catch()` is a catch-all that answers unexpected HTTP errors with `500`. It returns
+nothing in two cases: for an HTTP exception, so validation failures and status exceptions keep the
+adapter's own envelopes, and outside HTTP (`@On`, `@MessagePattern`, `@EventPattern`), so those
+failures keep their default handling. Add `@Catch(YourError)` methods next to it for your domain
+errors. See [Error Handling](/docs/guides/error-handling).
 
 #### Generate WebSocket
 
@@ -21935,6 +22039,30 @@ Build completed successfully.
 ::: info Controller Names in Output
 Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
+
+## asena console
+
+Run the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging,
+config and exceptions. It restarts the app when a file under `sourceFolder` changes, and does not start when
+`NODE_ENV=production`.
+
+### Usage
+
+```bash
+asena console                # free port, opens the browser
+asena console --port 23530   # a fixed port for the console
+asena console --no-open      # print the address only
+asena console --no-watch     # restart by hand only
+```
+
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--port <port>` | The console's own port; `0` picks a free one | A free port |
+| `--no-open` | Do not open the browser | Opens it |
+| `--no-watch` | Do not restart the app when a source file changes | Restarts |
+
+The project needs `@asenajs/asena` 0.13.0 or newer. See [Asena Console](/docs/cli/console) for the panels and the
+security model.
 
 ## asena build
 
@@ -22099,8 +22227,8 @@ computed at runtime is not checked.
 ✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
   hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
 ✓ direct-dependencies — all required packages are direct dependencies
-✓ duplicate-packages — @asenajs/asena@0.12.3, hono@4.12.9, zod@4.4.3
-✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.12.3
+✓ duplicate-packages — @asenajs/asena@0.13.0, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.13.0
 ✗ auth-enforcement — @Protected/@Roles imported at src/controllers/MeController.ts:1 and @asenajs/asena-auth is a dependency, but neither authComponents nor AuthGuard is imported from it - the markers are metadata only and those routes are served open
   hint: add `imports: [...authComponents]` (from @asenajs/asena-auth) to AsenaServerFactory.create
 ✓ auth-better-auth-dep — Better Auth provider of @asenajs/asena-auth not used
@@ -22129,8 +22257,10 @@ check is the fastest way to rule it in or out.
 | `asena generate service` | `asena g s`    | Generate a service            |
 | `asena generate middleware` | `asena g m` | Generate a middleware         |
 | `asena generate config` | `asena g config` | Generate a config          |
+| `asena generate exception-handler` | `asena g eh` | Generate an exception handler |
 | `asena generate websocket` | `asena g ws` | Generate a WebSocket namespace |
 | `asena dev start`    | -               | Start development server             |
+| `asena console`      | -               | Run the app with a browser console   |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
 | `asena doctor`       | -               | Check the project for configuration mistakes |
@@ -22139,6 +22269,7 @@ check is the fastest way to rule it in or out.
 
 ## Related
 
+- [Asena Console](/docs/cli/console) - The browser console for a running app
 - [Configuration](/docs/cli/configuration) - CLI configuration options
 - [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See complete project examples
@@ -22146,6 +22277,289 @@ check is the fastest way to rule it in or out.
 - [Services](/docs/concepts/services) - Service patterns
 - [Middleware](/docs/concepts/middleware) - Middleware patterns
 - [WebSocket](/docs/concepts/websocket) - WebSocket patterns
+
+
+---
+
+# Asena Console
+Section: Asena CLI
+Source: https://asena.sh/raw/cli/console.md
+
+# Asena Console
+
+`asena console` runs your app in development and opens a browser page that shows how the app is wired and what it does
+while it runs. You can read the dependency graph, watch memory and output, call any route or socket, follow a request
+through its chain, run a schedule, and ask which `@Catch` answers a given error.
+
+![The Components panel: the graph of a task-list app, with TaskService selected and the inspector listing what it injects](/images/console/components.png)
+
+## Starting it
+
+Run it from the project root:
+
+```bash
+asena console
+```
+
+The command prints the page's address and opens it in your default browser:
+
+```
+Asena console: http://127.0.0.1:41873/?t=<token>
+```
+
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--port <port>` | The console's own port; `0` picks a free one | A free port |
+| `--no-open` | Do not open the browser; open the printed address yourself | Opens it |
+| `--no-watch` | Do not restart the app when a source file changes | Restarts |
+
+`--port` sets the console's port. The app listens on the port it configures, as it always does. Press `Ctrl+C` to stop
+both.
+
+### How the app runs
+
+The console reads `sourceFolder` and `rootFile` from `asena-config.ts` and scans the source folder as
+[`asena build`](/docs/cli/commands#asena-build) does. It then writes a temporary wrapper entry in the OS temp directory,
+which it deletes when it stops, and runs that as a child process, unbundled, from the project root. Your entry file is
+not rewritten. The child gets the terminal's environment and your project's `tsconfig.json`, and its output is copied
+to the terminal as well as to the page.
+
+Saving a file under `sourceFolder` restarts the app, and the scan runs again, so a new component file is picked up.
+Editor temp files and anything under a dot directory are ignored, and several saves in a burst make one restart. To
+restart by hand, press **Restart** at the top of the page; it works with `--no-watch` too.
+
+A restart or stop sends the app `SIGTERM` and then `SIGKILL` after 3 seconds. An app that crashes leaves the console
+running: its output stays on the page, and saving a file or pressing **Restart** runs it again.
+
+If the browser loses the console, for example when the machine sleeps, the page reconnects on its own and fills in what
+it missed. The console keeps the last 2000 log entries and 500 requests for this.
+
+## What a project needs
+
+- `@asenajs/asena-cli` 0.13.0 or newer, which provides the command and the page.
+- `@asenajs/asena` 0.13.0 or newer in the project, which provides the in-app agent at `@asenajs/asena/devtools`.
+- For HTTP requests in the [Requests](#requests) panel, an adapter that reports them. Ergenecore and the Hono adapter
+  do, in the releases listed in the [roadmap](/docs/roadmap#v0-13). An adapter that does not still runs under the
+  console, and the panel then lists only event, schedule and message dispatches.
+
+There is nothing to install, import or configure in the project. The wrapper entry loads the agent, and only a process
+the console spawned runs it. `asena build`, `asena dev start` and your own `bun` commands do not load it, and with no
+agent attached the framework and the adapters record nothing. The console also works on a headless app, which has no
+HTTP port: Endpoints then lists nothing to call, and the other panels work as usual.
+
+## The page
+
+The sidebar holds the seven panels. The bar at the top shows the app's state (`Starting`, `Ready`, `Not ready`,
+`Degraded`, `Restarting`, `Stopped`, `Crashed`, or `Disconnected` when the page has lost the console), the current run
+and process id, the uptime, the **Restart** button and the theme switch. The box at the bottom of the sidebar names the
+adapter, the port and the core version the app reports.
+
+### Components
+
+The graph of your components: who injects whom and which middleware guards which route. Components sit in three lanes:
+entry points on the left, services and middleware in the middle, data and error handling on the right.
+
+| Line | Meaning |
+|:-----|:--------|
+| Solid | Injects |
+| Dashed | Injects every implementation of an interface (`@Strategy`) |
+| Orange, dashed | Guarded by a middleware or validator |
+| Dotted | Applies globally |
+
+The chips switch component kinds on and off, and the search box finds a component by name. The footer counts what is
+shown: components and core services are counted apart, so the component total matches the number in the sidebar.
+
+Selecting a component opens the inspector beside the graph. It lists the fields it injects and who uses it, each with a
+link that selects that component, plus whichever of these apply: its scope, the routes it serves or guards, the
+environment variables its `@Value` fields read, the events and messages it handles, and the errors it catches. **Try
+these in Endpoints** opens its routes in the tester.
+
+#### Focus and Full views
+
+The **Focus** and **Full** buttons switch between two views of the graph.
+
+![The Focus view: TaskService in the middle, with the controller that uses it on its left and the three it injects on its right](/images/console/components-focus.png)
+
+**Focus** shows the selected component and its direct neighbours in both directions, wired only to it.
+
+- Clicking a neighbour moves the focus there. The chips filter the neighbours and never hide the focused component.
+- More than 3 validators collapse into one `N validators` node, and more than 3 core services into `N core services`.
+  Clicking the node expands it in place. The inspector always lists them one by one.
+- The search box finds any component, not only those on screen, and lists the matches. Choosing one moves the focus;
+  `Enter` chooses the first and `Escape` clears the search.
+- The first fit never goes below 60%. A larger neighbourhood starts at the top, for you to pan.
+- On opening, the focus is the first controller that has a neighbour, or else the first component that has one.
+
+**Full** shows every component and every edge. The search box dims what does not match, and how the view starts depends
+on the size of the app:
+
+| | 40 components or fewer | More than 40 components |
+|:--|:-----------------------|:------------------------|
+| The panel opens in | Full | Focus |
+| Full starts with | Every kind on | Core services and validators off |
+| First fit | All of it in the card | To the card's width, no lower than 35%, from the top |
+| Validators | Under the Middleware chip | A Validator chip of their own |
+| Edges | Always drawn | Faint until you hover or select a node, which shows its own edges at full strength |
+
+Clicking the empty canvas in a large app's Full view clears the selection. In any large-app view, zooming below 55%
+reduces each node to its name, enlarged. A name that does not fit shows in full in a tooltip, and on the node itself
+from a zoom level where it fits. The zoom buttons and the mouse wheel go from 15% to 160%, and the fit button returns to
+the first fit.
+
+The view you pick holds until the page reloads or the app crosses the 40-component limit.
+
+### Runtime
+
+![The Runtime panel: the app's state, its runs this session, four metric cards and the app's output with level filters](/images/console/runtime.png)
+
+Whether the app is up, what it costs, and what it is saying.
+
+- **Health** shows the state, the lifecycle phase and each microservice transport.
+- **Restarts this session** is a timeline of the runs. Each says what started it: the first start, the Restart button,
+  or the file you saved.
+- **Metrics** sample RSS, heap, CPU and event-loop lag once a second. The console keeps the last 120 samples and starts
+  over with each run.
+- **Output** is the app's stdout and stderr, with a separator between runs and a filter for level and text.
+
+The level comes from a marker at the start of an entry's first line, such as `[WARN]`, `error:` or `TypeError:`. Without
+one, a marker in the body decides, and after that an entry from stderr counts as a warning and one from stdout as info.
+An error's message and stack join one entry, so the **Errors** count follows real errors rather than lines. A logger's
+own timestamp and level are hidden when they agree with the console's columns; hover over a row for the raw line.
+
+**Pause** holds the view and counts what arrives meanwhile. **Clear** empties the view only, and reloading the page
+brings the lines back.
+
+### Endpoints
+
+![The Endpoints panel: the routes by controller, a POST request with a JSON body, its 201 response and the chain that handled it](/images/console/endpoints.png)
+
+Every route of the app, grouped by controller, and every WebSocket namespace.
+
+Choosing a route gives you a request prefilled from its definition: the method, a field for each path parameter, and
+`{}` as the body when the route declares a body schema. Add query parameters and headers, then press **Send** or
+`Ctrl+Enter`.
+A body sent without a `Content-Type` goes as `application/json`. The console sends the request from its own process to
+`127.0.0.1`, so CORS does not apply; redirects are shown rather than followed, and it gives up after 30 seconds.
+
+The response shows its status, time, size, body and headers, and which run answered. **Handled by** shows the chain that
+produced it, from the same record the [Requests](#requests) panel uses.
+
+Each route keeps its last 20 requests under **History**, in your browser. Clicking one restores the request and its
+response.
+
+Choosing a namespace opens the WebSocket tester: connect, send text or JSON, and read the frame log. The browser
+connects straight to the app, so the handshake carries the console's origin. A namespace guarded by
+`WebSocketOriginMiddleware` must allow that origin; `--port` keeps it the same between starts.
+
+### Requests
+
+![The Requests panel: the session's requests, newest first, with the details of a 404 that a @Catch answered](/images/console/requests.png)
+
+Every request the app served this session, newest first, with what answered it. Filter by status class, method or text.
+
+The list also holds what the app dispatched outside HTTP. `@On`, `@Schedule`, `@MessagePattern` and `@EventPattern`
+appear in the method column, with the event, job or pattern as the path.
+
+Selecting a row opens its details:
+
+- **Chain** lists the steps it went through (global middleware, middleware, validator, handler, `@Catch`,
+  `@Config.onError`, the adapter's default, not found) and marks the one that answered.
+- **Output during the request** is what the app wrote through `console.*`, `process.stdout` and `process.stderr` while
+  this request was in scope, up to 100 entries or 16 KiB. Concurrent requests do not mix.
+- **Replay in Endpoints** opens the route with this request's method and path values. Headers and bodies are not
+  recorded, so fill those in again. A dispatch is run again from Messaging instead.
+
+### Messaging
+
+![The Messaging panel: a schedule with its next run and an event, each with the result of the last action](/images/console/messaging.png)
+
+The app's schedules, events and message handlers, with an action for each. Every action runs inside the running app
+through the same path a real trigger takes.
+
+| Section | Shows | Action |
+|:--------|:------|:-------|
+| Schedules | The cron expression, the next run in the app's time zone, and the last run this session | **Run now** runs it once; the schedule stays as it is |
+| Events | Each `@On` event with its handlers | **Emit** takes an optional JSON payload and an editable event name. Write a concrete name, not a pattern |
+| Messages, one section per transport | Each `@MessagePattern` and `@EventPattern` with its handler, and whether the transport is connected | **Send** takes an optional JSON payload. A `@MessagePattern` waits for the reply; an `@EventPattern` publishes to every subscriber |
+
+Each action asks for an inline confirmation that says what it will do, and then shows the result or the error. A
+command still waiting when the app restarts or exits ends as failed.
+
+### Config
+
+![The Config panel: the @Value fields with their environment keys and state, the @Config component, the server, global middleware and transports](/images/console/config.png)
+
+- **`@Value` fields** lists each field with its component, environment key, whether it has a default and a parser, and
+  the variable's state: `set`, `unset, default used` or `unset, no default`. A key that reads like a credential is
+  tagged `secret-looking`. The values themselves never reach the console.
+- **`@Config`** names the component and says whether the deprecated `onError` and `onNotFound` are defined.
+- **Server** shows the adapter, port, core version and process id.
+- **Global middleware** lists them in run order, with the routes each one covers.
+- **Transports** lists the microservice transports and whether each is connected.
+
+### Exceptions
+
+![The Exceptions panel: the class chain of TaskNotFoundError walked to its @Catch, the table of caught types and what answers when nothing matches](/images/console/exceptions.png)
+
+How errors resolve in this app, per the rules in [Error Handling](/docs/guides/error-handling).
+
+- **Who catches this?** takes an error class name and walks its chain the way the exception registry does: the nearest
+  `@Catch`, then `@Catch(HttpException)` for a branded error, then the catch-all. It names what answers and why. A
+  checkbox asks the same question for an error that carries the `HttpException` brand.
+- **Thrown errors** maps each caught type to its class chain and handler, then says what answers when nothing matches.
+- **Unmatched routes** shows the same for a request no route serves: `@NotFound()`, then the deprecated
+  `@Config.onNotFound()`, then the adapter's 404.
+
+## Security
+
+The console is a development tool that can act on your app, so it is built to stay on your machine.
+
+- **It does not start in production.** With `NODE_ENV=production` the command prints a refusal and exits with code 1.
+  That variable is the only check it makes, so see the warning below.
+- **It binds to `127.0.0.1`.** The console's server is not reachable from another machine. The app keeps its own
+  binding, which the console does not change.
+- **The URL carries a token.** Each start creates a random token. Without it the page, the page's socket and the request
+  tester answer `403`; only the page's static files are served without it. Anyone with the full URL can act on your app,
+  so treat it like a password.
+- **Actions ask first.** **Run now**, **Emit** and **Send** in Messaging do nothing until you confirm inline. The
+  Endpoints and WebSocket testers send as soon as you press **Send**, as any HTTP client does.
+- **Environment values stay in the app.** The agent reports whether each `@Value` variable is set, never its value. It
+  opens no port of its own and talks to the console over the IPC channel of the child process.
+
+Two things can still put a secret in front of you or in your browser:
+
+- **The output panels show what your app prints.** If it logs a secret, the secret appears on the page.
+- **Endpoints history is kept in your browser's local storage**, with the headers and body of each request and its
+  response, whose body is cut at 16 KiB. A pasted token stays there until you press **Clear history**. Local storage
+  belongs to the page's origin, so a fixed `--port` keeps the history between starts and a free port starts empty.
+
+::: warning Requests and actions are real
+Everything the console runs reaches your real handlers and whatever they connect to. The app gets the terminal's
+environment, and Bun loads your `.env` as usual. An environment that points at a shared database with `NODE_ENV` unset
+is not refused, so check where the environment points before you press **Send** or **Emit**.
+:::
+
+## When it does not start
+
+The command prints the reason and exits with code 1.
+
+| Message | Cause |
+|:--------|:------|
+| `asena console is a development tool and does not start when NODE_ENV=production.` | `NODE_ENV` is `production` |
+| `No config file detected or invalid format` | No readable `asena-config.ts` in the current directory |
+| `asena console needs @asenajs/asena 0.13.0 or newer, ...` | The project's core is older, or not installed. The message names the version it found |
+| `asena console could not start: Failed to start server. Is port 23531 in use?` | The port given to `--port` is taken |
+
+If the CLI and the app's core speak different versions of the console protocol, the console starts but says so in the
+terminal and in Output, and it drops the agent's messages. Updating `@asenajs/asena-cli` or `@asenajs/asena` so that
+they match fixes it.
+
+## Related
+
+- [CLI Commands](/docs/cli/commands) - Every other command
+- [Error Handling](/docs/guides/error-handling) - `@Catch`, `@NotFound` and how errors resolve
+- [Event System](/docs/concepts/event-system) - `@On` handlers
+- [Microservices](/docs/concepts/microservices) - `@MessagePattern` and `@EventPattern`
 
 
 ---
@@ -22912,6 +23326,7 @@ If your `.asena/config.json` doesn't include a `suffixes` field, all components 
 | Service        | `Service`      |
 | Middleware     | `Middleware`   |
 | Config         | `Config`       |
+| Exception handler (`exceptionHandler`) | `ExceptionHandler` |
 | WebSocket      | `Namespace`    |
 
 ## Configuration Options
@@ -23559,21 +23974,24 @@ Source: https://asena.sh/raw/guides/configuration.md
 
 # @Config - Application Configuration
 
-The `@Config` decorator provides a centralized way to configure your Asena application, including server options, error handling, and global middleware. It allows you to customize both Bun's native server settings and Asena-specific features in a type-safe manner.
+The `@Config` decorator provides a centralized way to configure your Asena application, including server options, global middleware and transports. It allows you to customize both Bun's native server settings and Asena-specific features in a type-safe manner.
 
 - [Quick Start](#quick-start) - A `@Config` class wired into the server.
 - [serveOptions()](#serveoptions-method) - Bun's native server settings, type-safe.
-- [onError()](#onerror-method) - One global handler for everything that throws.
-- [onNotFound()](#onnotfound-method) - Your own answer for unmatched routes.
 - [globalMiddlewares()](#globalmiddlewares-method) - Middleware applied to every route at once.
 - [transport()](#transport-method) - Wiring Redis or Kafka transports into the server.
+
+::: tip Error handling is not configured here
+Errors and unmatched routes are handled by an `@ExceptionHandler` class with `@Catch` and
+`@NotFound()` methods. See [Error Handling](/docs/guides/error-handling).
+:::
 
 ## Quick Start
 
 ::: code-group
 
 ```typescript [Ergenecore]
-import type { ConfigService, Context } from '@asenajs/ergenecore';
+import type { ConfigService } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 import { Config } from '@asenajs/asena/decorators';
 
@@ -23590,20 +24008,12 @@ export class AppConfig implements ConfigService {
         idleTimeout: 120,
       },
     };
-  }
-
-  public onError(error: Error, _context: Context) {
-    console.error('Application error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 }
 ```
 
 ```typescript [Hono]
-import type { ConfigService, Context } from '@asenajs/hono-adapter';
+import type { ConfigService } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
 import { Config } from '@asenajs/asena/decorators';
 
@@ -23620,14 +24030,6 @@ export class AppConfig implements ConfigService {
         idleTimeout: 120,
       },
     };
-  }
-
-  public onError(error: Error, _context: Context) {
-    console.error('Application error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 }
 ```
@@ -23667,12 +24069,12 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
   serveOptions?(): AsenaServeOptions;
 
   /**
-   * Custom error handler for unhandled errors
+   * @deprecated Removed in 1.0. Use an `@ExceptionHandler` class with `@Catch()` methods.
    */
   onError?(error: Error, context: C): Response | Promise<Response>;
 
   /**
-   * Answers a request that matched no route
+   * @deprecated Removed in 1.0. Use a `@NotFound()` method in an `@ExceptionHandler` class.
    */
   onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>;
 
@@ -23719,7 +24121,7 @@ type AsenaServerOptions = Omit<ServeOptions, 'fetch' | 'routes' | 'websocket' | 
 | `fetch` | HTTP Adapter (e.g., HonoAdapter) | Core request handler |
 | `routes` | AsenaJS decorators (@Get, @Post, etc.) | Route definitions |
 | `websocket` | AsenaWebsocketAdapter | WebSocket handler |
-| `error` | AsenaConfig.onError() | Error handling |
+| `error` | The HTTP adapter and `@ExceptionHandler` | Error handling |
 
 **✅ Available Options:**
 
@@ -23958,206 +24360,28 @@ public serveOptions(): AsenaServeOptions {
 - `true` / `false` - Enable/disable with defaults
 - `WebSocketCompressor` - Custom compressor configuration
 
-## onError() Method
+## onError() and onNotFound()
 
-Custom error handler for application-wide error handling. This method is called whenever an unhandled error occurs during request processing.
+::: warning Deprecated, removed in 1.0
+Use `@Catch` and `@NotFound()` methods in an `@ExceptionHandler` class instead. See
+[Error Handling](/docs/guides/error-handling).
+:::
 
 ```typescript
 onError?(error: Error, context: C): Response | Promise<Response>
-```
-
-**Parameters:**
-- `error` - The error that occurred
-- `context` - The Asena context for the current request
-
-**Returns:** `Response` or `Promise<Response>`
-
-::: warning Branch on `isHttpException()` before answering 500
-The examples below answer every error with a 500, to keep the focus on logging and DI. A real
-handler needs one branch above that, or every deliberate `401`, `403` and `404` your application
-throws — and every one raised by an auth middleware — arrives at the client as a 500:
-
-```typescript
-import { isHttpException } from '@asenajs/asena/adapter';
-
-public onError(error: Error, context: Context) {
-  if (isHttpException(error)) {
-    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-  }
-
-  // ... the 500 handling shown below
-}
-```
-
-See [Error Handling](/docs/guides/error-handling#global-error-handler) for why this is a guard
-rather than an `instanceof` check, and why the body comes from `getResponse()`.
-:::
-
-### Basic Error Handler
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  public onError(error: Error, context: AsenaContext<any, any>) {
-    console.error('Application error:', error);
-
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-### Production Error Handler
-
-Hide sensitive error details in production.
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  public onError(error: Error, context: AsenaContext<any, any>) {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-
-    // Log full error details
-    console.error('[ERROR]', {
-      message: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    // Return appropriate response
-    if (isDevelopment) {
-      return new Response(
-        JSON.stringify({
-          error: error.message,
-          stack: error.stack,
-          url: context.req.url,
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({ error: 'Internal Server Error' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-### Error Handler with Dependency Injection
-
-Integrate with dependency injection for advanced error handling.
-
-```typescript
-@Config()
-class AppConfig implements AsenaConfig {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
-  @Inject(ErrorReportingService)
-  private errorReporter!: ErrorReportingService;
-
-  public async onError(error: Error, context: AsenaContext<any, any>) {
-    // Log to logging service
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    // Report to external service (Sentry, etc.)
-    await this.errorReporter.report(error);
-
-    // Return user-friendly error
-    return new Response(
-      JSON.stringify({
-        error: 'Something went wrong. Please try again later.',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-}
-```
-
-## onNotFound() Method
-
-Answers a request that matched no route. Separate from `onError` on purpose: nothing threw, the
-router simply had nowhere to send the request, so neither handler has to ask which case it is
-looking at.
-
-```typescript
 onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>
 ```
 
-**Parameters:**
-- `context` - The request context
-- `request` - `{ path, method }`, normalised by the adapter
+Both hooks still run, as the last link before the adapter's default answer:
 
-**Returns:** `Response` or `Promise<Response>`
-
-### Basic Usage
-
-```typescript
-import { Config } from '@asenajs/asena/decorators';
-import type { NotFoundRequest } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
-
-@Config()
-export class AppConfig extends ConfigService {
-
-  public onNotFound(context: Context, request: NotFoundRequest) {
-    return context.send({
-      type: 'about:blank',
-      title: 'Not Found',
-      status: 404,
-      instance: request.path
-    }, 404);
-  }
-
-}
+```
+@Catch      →  onError     →  adapter default
+@NotFound() →  onNotFound  →  adapter 404
 ```
 
-`request.path` carries the path only - no origin, no query string - and `request.method` is the
-upper-case verb. Both adapters produce identical values, so the same body works under either.
-
-### Defaults
-
-With no `onNotFound` declared, both adapters answer `{"error":"Not Found"}` with status `404` and
-`Content-Type: application/json`.
-
-Global middlewares run **before** `onNotFound` on both adapters, so a 404 still carries CORS
-headers and anything else you apply to every request.
-
-If the hook throws, the adapter logs it and falls back to the default 404 rather than taking the
-server down. It is deliberately **not** routed to `onError`.
-
-::: warning Not for domain 404s
-When the route exists but the record does not, throw instead - that reaches `onError` like any
-other application decision:
-
-```typescript
-import { HttpException } from '@asenajs/asena/adapter';
-
-if (!user) {
-  throw new HttpException(404, { code: 'USER_NOT_FOUND' });
-}
-```
-:::
-
+`onError` is called only after every `@Catch` declined, and `onNotFound` only when no
+`@NotFound()` answered. Returning nothing declines to the adapter default. Each hook logs a
+deprecation warning at boot.
 
 ## globalMiddlewares() Method
 
@@ -24419,23 +24643,12 @@ A real-world configuration example combining all features:
 ::: code-group
 
 ```typescript [Ergenecore]
-import { Config, Service } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { ConfigService, Context } from '@asenajs/ergenecore';
+import { Config } from '@asenajs/asena/decorators';
+import type { ConfigService } from '@asenajs/ergenecore';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-
-@Service()
-class LoggerService {
-  public error(message: string, meta: any) {
-    console.error(`[ERROR] ${message}`, meta);
-  }
-}
 
 @Config()
 export class AppConfig implements ConfigService {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
   public serveOptions(): AsenaServeOptions {
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -24461,25 +24674,6 @@ export class AppConfig implements ConfigService {
         publishToSelf: false,
       },
     };
-  }
-
-  public async onError(error: Error, context: Context) {
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    if (isProduction) {
-      return context.send({ error: 'Internal Server Error' }, 500);
-    }
-
-    return context.send({
-      error: error.message,
-      stack: error.stack,
-    }, 500);
   }
 
   public globalMiddlewares() {
@@ -24504,23 +24698,12 @@ export class AppConfig implements ConfigService {
 ```
 
 ```typescript [Hono]
-import { Config, Service } from '@asenajs/asena/decorators';
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import type { ConfigService, Context } from '@asenajs/hono-adapter';
+import { Config } from '@asenajs/asena/decorators';
+import type { ConfigService } from '@asenajs/hono-adapter';
 import type { AsenaServeOptions } from '@asenajs/asena/adapter';
-
-@Service()
-class LoggerService {
-  public error(message: string, meta: any) {
-    console.error(`[ERROR] ${message}`, meta);
-  }
-}
 
 @Config()
 export class AppConfig implements ConfigService {
-  @Inject(LoggerService)
-  private logger!: LoggerService;
-
   public serveOptions(): AsenaServeOptions {
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -24546,25 +24729,6 @@ export class AppConfig implements ConfigService {
         publishToSelf: false,
       },
     };
-  }
-
-  public async onError(error: Error, context: Context) {
-    await this.logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
-      url: context.req.url,
-    });
-
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    if (isProduction) {
-      return context.send({ error: 'Internal Server Error' }, 500);
-    }
-
-    return context.send({
-      error: error.message,
-      stack: error.stack,
-    }, 500);
   }
 
   public globalMiddlewares() {
@@ -24603,9 +24767,9 @@ The `@Config` decorator is processed during the application bootstrap sequence:
 5. **Component start hooks** - every [`@OnStart`](/docs/concepts/lifecycle) runs, in registration order
 6. **Phase: APPLICATION_SETUP** - Config methods are applied:
    - `serveOptions()` is called and passed to adapter
-   - `onError()` is registered as error handler
-   - `onNotFound()` is registered as the unmatched-route handler
    - `globalMiddlewares()` is called and middleware are registered
+   - `@ExceptionHandler` classes are read and the exception chain is handed to the adapter, with a
+     deprecated `onError()` / `onNotFound()` as its last link
    - `transport()` is called and the WebSocket / microservice transports are wired
 7. **Phase: SERVER_READY** - the adapter binds the socket, scheduled jobs start, signal handlers are installed
 
@@ -24722,17 +24886,9 @@ widen the type at the call site.
    }
    ```
 
-5. **Log Errors Properly**
-   ```typescript
-   public onError(error: Error, context: AsenaContext<any, any>) {
-     console.error('[ERROR]', {
-       message: error.message,
-       stack: error.stack,
-       url: context.req.url,
-     });
-     // Return response...
-   }
-   ```
+5. **Handle Errors Outside the Config**
+   - Errors and unmatched routes belong in an `@ExceptionHandler` class, not in `@Config`.
+     See [Error Handling](/docs/guides/error-handling)
 
 ### ❌ Don'ts
 
@@ -24860,113 +25016,515 @@ Source: https://asena.sh/raw/guides/error-handling.md
 
 # Error Handling
 
-Error handling is a critical part of building robust web applications. Asena provides a powerful and flexible error handling system that works seamlessly with both Ergenecore and Hono adapters.
+An `@ExceptionHandler` class is where an Asena application decides what a failure means. Its
+`@Catch(...types)` methods answer errors by type, and its `@NotFound()` method answers a request
+that matched no route. The same `@Catch` sees a failure wherever the framework dispatched the
+code that threw: an HTTP request, an `@On` event handler, or a `@MessagePattern` /
+`@EventPattern` handler. It works the same on Ergenecore and the Hono adapter. The package versions
+it needs are listed in the [roadmap](/docs/roadmap#v0-13).
 
-- [Philosophy](#philosophy) - The model Asena's error handling is built on.
-- [Basics](#basic-error-handling) - Throwing and answering from a route handler.
-- [Global Handler](#global-error-handler) - One place to catch everything that escapes.
-- [Custom Errors](#custom-error-classes) - Your own exception types on top of HttpException.
-- [Not Found](#not-found) - Handling routes that never matched.
-- [Validation Errors](#validation-errors) - Shaping the 400 responses Zod produces.
+- [Exception Handlers](#exception-handlers) - An `@ExceptionHandler` class with `@Catch` methods.
+- [Choosing a Handler](#choosing-a-handler) - Most specific wins, one handler per type, one catch-all.
+- [The Chain](#the-resolution-chain) - Who answers when a handler declines, returns nothing or throws.
+- [Scopes](#scopes) - HTTP, `@On` events and microservice handlers.
+- [Not Found](#not-found) - `@NotFound()` for routes that never matched.
+- [HTTP Exceptions](#throwing-http-exceptions) - `HttpException` and the ready-made status exceptions.
 
-## Why Error Handling Matters
+## Exception Handlers
 
-Proper error handling ensures:
+### A first handler
 
-- **User Experience**: Clear, consistent error messages help users understand what went wrong
-- **Debugging**: Structured errors with context make troubleshooting easier
-- **Security**: Proper error responses prevent sensitive information leakage
-- **Maintainability**: Centralized error handling reduces code duplication
-
-## Philosophy
-
-Asena's error handling philosophy:
-
-1. **Explicit over implicit**: Throw errors explicitly, handle them centrally
-2. **Type-safe**: Use TypeScript classes for compile-time safety
-3. **Adapter-agnostic**: Same patterns work across Ergenecore and Hono
-4. **Production-ready**: Built-in support for logging and monitoring
-
----
-
-## Basic Error Handling
-
-### Throwing HTTP Exceptions
-
-Throw an `HttpException`. It comes from `@asenajs/asena/adapter` — the framework core, not an
-adapter — so the same import and the same throw work unchanged on Ergenecore and Hono:
+The service throws a domain error. The controller does not catch it. The exception handler
+decides what the caller sees.
 
 ```typescript
-import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import { HttpException } from '@asenajs/asena/adapter';
-import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
+// src/errors/OrderErrors.ts
+export abstract class OrderError extends Error {}
 
-@Controller('/users')
-export class UserController {
-  @Get('/:id')
-  async getUser(context: Context) {
-    const id = context.getParam('id');
-
-    const user = await findUserById(id);
-
-    if (!user) {
-      throw new HttpException(404, { error: 'User not found' });
-    }
-
-    return context.send(user);
+export class OrderNotFoundError extends OrderError {
+  public constructor(public readonly orderId: string) {
+    super(`Order ${orderId} not found`);
+    this.name = 'OrderNotFoundError';
   }
 }
 ```
 
-Only the `Context` type is adapter-specific. Everything else — the class, the constructor, the
-response it produces — is identical, so moving an application between adapters does not mean
-rewriting its error handling.
+```typescript
+// src/services/OrderService.ts
+import { Service } from '@asenajs/asena/decorators';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import { OrderRepository } from '../repositories/OrderRepository';
+import { OrderNotFoundError } from '../errors/OrderErrors';
 
-::: tip Upgrading from 0.9
-`HttpException` used to be declared by each adapter. Ergenecore exported its own class; the Hono
-adapter re-exported `HTTPException` from `hono/http-exception`, which takes
-`(status, { message })` rather than `(status, body)`. There is now one class, in core.
+@Service()
+export class OrderService {
+  @Inject(OrderRepository)
+  private orderRepository: OrderRepository;
 
-`import { HttpException } from '@asenajs/ergenecore'` still works and is the *same class object*,
-so nothing breaks — but prefer `@asenajs/asena/adapter` in new code. On the Hono adapter this is
-the only import path: `@asenajs/hono-adapter` deliberately does not re-export it, because
-`HttpException` and `HTTPException` sitting side by side in one package differ by the case of two
-letters and autocomplete cannot tell which you meant.
+  public async findById(id: string) {
+    const order = await this.orderRepository.findById(id);
+
+    if (!order) {
+      throw new OrderNotFoundError(id);
+    }
+
+    return order;
+  }
+}
+```
+
+```typescript
+// src/controllers/OrderController.ts
+import { Controller } from '@asenajs/asena/decorators';
+import { Get } from '@asenajs/asena/decorators/http';
+import { Inject } from '@asenajs/asena/decorators/ioc';
+import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
+import { OrderService } from '../services/OrderService';
+
+@Controller('/orders')
+export class OrderController {
+  @Inject(OrderService)
+  private orderService: OrderService;
+
+  @Get('/:id')
+  public async getById(context: Context) {
+    return context.send(await this.orderService.findById(context.getParam('id')));
+  }
+}
+```
+
+```typescript
+// src/exceptions/ApiExceptionHandler.ts
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
+import { OrderNotFoundError } from '../errors/OrderErrors';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(OrderNotFoundError)
+  public orderNotFound(error: OrderNotFoundError, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return ctx.context.send({ error: 'ORDER_NOT_FOUND', id: error.orderId }, 404);
+  }
+}
+```
+
+A `@Catch` method receives the thrown value and an [`ExceptionContext`](#scopes). On HTTP it
+answers by returning a `Response`. It may be `async`.
+
+### What an exception handler is
+
+- **An ordinary component.** It is found by the component scan and resolved from the container,
+  so `@Inject` works in it: a logger, an audit service, a metrics client.
+- **Several are allowed.** Their handlers are merged into one table, so error handling can be
+  split by domain (`OrderExceptionHandler`, `PaymentExceptionHandler`) instead of piling up in one
+  file. What is not allowed is two of them catching the [same type](#one-handler-per-type).
+- **Inert until something matches.** An application with no `@Catch` at all runs exactly the
+  code path it would without the feature.
+
+### Imports
+
+| What | From |
+|:-----|:-----|
+| `ExceptionHandler` | `@asenajs/asena/decorators` |
+| `Catch`, `NotFound`, `ExceptionContext` and the per-scope context types | `@asenajs/asena/exception` |
+| `HttpException`, the [status exceptions](#ready-made-status-exceptions), `ContractValidationError`, `isHttpException`, `isValidationError`, `NotFoundRequest` | `@asenajs/asena/adapter` |
+| `ValidationError` (thrown by validator classes) | `@asenajs/ergenecore` or `@asenajs/hono-adapter` |
+
+---
+
+## Choosing a Handler
+
+### Most specific wins
+
+The thrown value's constructor chain is walked upward, and the first `@Catch` found on it
+answers. No handler declares an order; the class hierarchy is the order.
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike, type ValidationErrorLike } from '@asenajs/asena/adapter';
+import { ValidationError, type Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(ValidationError)
+  public validation(error: ValidationErrorLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return ctx.context.send({ error: 'VALIDATION_FAILED', issues: error.issues }, 400);
+  }
+
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return error.getResponse?.() ?? ctx.context.send({ error: error.message }, error.status);
+  }
+
+  @Catch(Error)
+  public unexpected(_error: Error, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return ctx.context.send({ error: 'Internal Server Error' }, 500);
+  }
+}
+```
+
+| Thrown | Answered by |
+|:-------|:------------|
+| a failed validator (`ValidationError`, itself an HTTP exception) | `validation` |
+| `new NotFoundException()` | `http` |
+| `new TypeError('...')` | `unexpected` |
+
+`@Catch(HttpException)` is matched by more than identity. It also receives:
+
+- hono's `HTTPException`, which `hono/basic-auth`, `hono/bearer-auth` and `hono/jwt` throw, and
+  which the Hono adapter's `ValidationError` extends;
+- an `HttpException` built by a second copy of `@asenajs/asena` in the same project.
+
+Both carry the `HttpException` brand rather than the class. The brand is only consulted when no
+narrower `@Catch` matched, and `@Catch(Error)` never shadows it. Type the parameter as
+`HttpExceptionLike`, not `HttpException`: the guaranteed members are `status`, `message` and an
+optional `getResponse()`.
+
+One method can list several types: `@Catch(OrderNotFoundError, CustomerNotFoundError)`.
+
+### One handler per type
+
+An exception type is caught in exactly one place across the whole application. A second `@Catch`
+on the same type fails the boot rather than picking one silently:
+
+```
+Duplicate @Catch(OrderNotFoundError) detected — already handled by OrderExceptionHandler.notFound(),
+conflicts with ApiExceptionHandler.missing(). An exception type may be caught in exactly one place;
+delete one of them, or narrow one to a subclass.
+```
+
+A subclass and its base in two different handlers is fine: `@Catch(OrderNotFoundError)` in one
+class and `@Catch(OrderError)` in another both register, and the subclass wins for its own errors.
+
+### `@Catch()` is not `@Catch(Error)`
+
+`@Catch()` with no arguments is the catch-all. It is a separate slot, not another spelling of
+`@Catch(Error)`:
+
+| Thrown | `@Catch(Error)` | `@Catch()` |
+|:-------|:----------------|:-----------|
+| `new TypeError()` | matches | receives it only when there is no `@Catch(Error)` |
+| `'boom'`, `null`, `{}` | **no match** | matches |
+| `ValidationError`, `HttpException` with no narrower `@Catch` | matches | matches |
+
+So a typed handler can read `error.message` without checking first: values that are not `Error`s
+only ever reach the catch-all. Both may exist side by side. Only **one** catch-all is allowed per
+application; a second one fails the boot.
+
+A catch-all also receives every `ValidationError` and `HttpException` that no narrower `@Catch`
+claimed, which replaces the adapter's own 400 and status envelopes. The boot log says so:
+
+```
+@Catch() catch-all ApiExceptionHandler.fallback() will receive every error, including ValidationError and
+HttpException — narrow it with @Catch(HttpException) if the adapter's envelopes should be kept.
+```
+
+To keep those envelopes, declare `@Catch(HttpException)` next to it, or
+[decline](#the-resolution-chain) them inside the catch-all:
+
+```typescript
+@Catch()
+public fallback(error: unknown, ctx: ExceptionContext<Context>) {
+  if (ctx.scope !== 'http' || isHttpException(error)) return;
+
+  return ctx.context.send({ error: 'Internal Server Error' }, 500);
+}
+```
+
+### Custom errors and abstract bases
+
+Any class works as a `@Catch` argument, including an abstract one. Catching a domain base answers
+every subclass that has no handler of its own:
+
+```typescript
+@Catch(OrderError)
+public order(error: OrderError, ctx: ExceptionContext<Context>) {
+  if (ctx.scope !== 'http') return;
+
+  return ctx.context.send({ error: error.name, message: error.message }, 409);
+}
+```
+
+### Inheritance
+
+`@Catch` and `@NotFound` methods declared on a base class are inherited by an `@ExceptionHandler`
+subclass, and a subclass overrides one by declaring a method with the same name. The boot log
+lists the handlers a class inherited. Two subclasses of one base both inherit its `@Catch`
+methods, so they collide on those types like any other [duplicate](#one-handler-per-type).
+
+### Boot checks
+
+Everything below fails or warns during startup, before the server binds a port:
+
+| Problem | Result |
+|:--------|:-------|
+| Two `@Catch` on the same type | boot fails, naming both methods |
+| Two `@Catch()` catch-alls | boot fails |
+| Two `@NotFound()` methods | boot fails |
+| `@Catch(undefined)`, usually a circular import between the handler and the error's module | fails when the class is decorated |
+| An `@ExceptionHandler` with no `@Catch` or `@NotFound` method | warning: it is registered but never called |
+
+---
+
+## The Resolution Chain
+
+An error raised while handling an HTTP request goes through three links. Each one either answers
+or **declines** by returning nothing, which hands the error to the next:
+
+```
+@Catch  →  @Config.onError  →  adapter default
+```
+
+Unmatched routes use the same shape: `@NotFound()` → `@Config.onNotFound` → the adapter's 404.
+[`@Config.onError` and `onNotFound`](#config-onerror-and-onnotfound) are deprecated; most
+applications have only the first and last links.
+
+What a `@Catch` does on HTTP decides what happens next:
+
+| The `@Catch` method | Result |
+|:--------------------|:-------|
+| returns a `Response` | the request is answered with it |
+| returns `undefined` | declines: the next link answers |
+| returns anything else | logged as an error, then treated as a decline |
+| throws | its own error is logged, then treated as a decline; the next link still sees the **original** error |
+| does not exist for this type | the next link answers |
+
+A handler that throws can never make a request hang or disappear: the framework still answers,
+and still records the original failure.
+
+Declining is useful on its own. A `@Catch` that records something and returns nothing leaves the
+answer to the adapter:
+
+```typescript
+@Catch(PaymentGatewayError)
+public async gateway(error: PaymentGatewayError) {
+  await this.alerts.notify('payment-gateway', error);
+}
+```
+
+### The adapter default
+
+When no link answered, the adapter answers from the error itself, identically on both adapters:
+
+| Error | Response |
+|:------|:---------|
+| `HttpException`, a status exception, hono's `HTTPException` | the exception's own status, body and headers (`getResponse()`) |
+| a failed validator or contract | `400` with the [validation envelope](#validation-errors) |
+| anything else | `500` `{"error":"Internal Server Error"}` |
+
+The thrown message of an unexpected error is never echoed to the caller. It is written to the
+log with its stack instead.
+
+### Adapter logging
+
+One rule, both adapters: **the framework's default log fires exactly when the framework's
+default response fires.**
+
+| | a handler answered | nothing answered, or every link declined or threw |
+|:--|:--|:--|
+| response | yours | the framework's |
+| log | none | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
+
+If your `@Catch` returns a `Response`, you own the response and therefore the record: log it
+there, with your correlation id, and the adapter stays out of the way. If it declines or throws,
+the adapter is the one answering, so it writes the original error rather than letting it
+disappear. The same holds for `@NotFound()`.
+
+The level split exists so a wall of 401s from a bot cannot flood the error stream: only `5xx`
+carries a stack. An unmatched route logs `Route not found:` with `{ path, method, status }` at
+INFO, low enough that a scanner walking `/wp-admin` and `/.env` cannot fill the warning stream,
+high enough that a mistyped route in a deployed client is visible without turning on debug.
+
+Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence all of it,
+including the 404 line. There is no setting that forces a log line for a request your own handler
+answered.
+
+---
+
+## Scopes
+
+The second argument of a `@Catch` method says where the error was raised. `ctx.scope` is the
+discriminant, and narrowing on it gives the fields of that scope:
+
+| `ctx.scope` | Raised by | Fields |
+|:------------|:----------|:-------|
+| `'http'` | a controller, a middleware or a validator | `context`: the adapter's request context |
+| `'event'` | an `@On` handler | `event`, `data`, `source` (`UserEventService.onCreated`; absent for a handler registered on the emitter directly) |
+| `'microservice'` | a `@MessagePattern` or `@EventPattern` handler, or its `onReceive` interceptors | `kind` (`'message'` or `'event'`), `message`, `data`, `source`, `transport` |
+
+The generic of `ExceptionContext<Context>` types `ctx.context` as your adapter's `Context`.
+
+```typescript
+@Catch(DatabaseUnavailableError)
+public async database(error: DatabaseUnavailableError, ctx: ExceptionContext<Context>) {
+  await this.alerts.notify('database', error);
+
+  switch (ctx.scope) {
+    case 'http':
+      return ctx.context.send({ error: 'Service Unavailable' }, 503);
+    case 'microservice':
+      return ctx.kind === 'message' ? { status: 'unavailable', retryable: true } : undefined;
+    case 'event':
+      return;
+  }
+}
+```
+
+No other code path reaches `@Catch`: WebSocket handlers, scheduled tasks and lifecycle hooks keep
+their own error handling.
+
+### HTTP
+
+A `Response` answers the request; anything else declines, as described in
+[The Resolution Chain](#the-resolution-chain).
+
+### `@MessagePattern`: the return value is the reply
+
+What the `@Catch` method does decides what the caller of `ulak.send()` sees:
+
+| The `@Catch` method | The caller |
+|:--------------------|:-----------|
+| returns a value other than `undefined` or a `Response` | a **successful** reply: `send()` resolves with that value, as if the handler had returned it |
+| returns `undefined` | the failure: the **original** error reaches the transport, which replies `ok: false`, and `send()` rejects with `REMOTE_ERROR` |
+| throws | the same failure; the `@Catch` method's own error is logged |
+| returns a `Response` | the same failure, and a warning naming the method is logged |
+| does not exist for this type | the same failure |
+
+A returned value is delivered as it is, never inspected. `{ ok: false }` or `{ error: 'OUT_OF_STOCK' }`
+is still a successful reply, and `send()` resolves with it. Return a value only when it is an answer
+the caller is written to act on; **return `undefined` when the caller must see the failure.**
+
+A `Response` is an HTTP answer, never a message reply. It typically comes from a handler shared
+between scopes, such as a `@Catch(HttpException)` that returns `error.getResponse()` without checking
+`ctx.scope`. Delivering it would hand the caller a serialized response as success, so it is declined:
+
+```
+@Catch handler ApiExceptionHandler.http() returned a Response for @MessagePattern OrderMessageController.reserve() —
+a Response is an HTTP answer, not a message reply; it is treated as a decline and the original error reaches the transport.
+```
+
+The `@Catch` sits outside the [interceptor](/docs/concepts/microservices) chain, so an
+interceptor's `onReceive` still sees the failure before the `@Catch` turns it into a reply.
+
+### `@EventPattern` and `@On`: observe-only
+
+An event has no caller waiting for an answer, so a `@Catch` in these scopes can only observe. It
+runs, and then the original failure continues **exactly as if no `@Catch` existed**:
+
+| Scope | What still happens |
+|:------|:-------------------|
+| `@EventPattern` | the error is rethrown to the transport, so its retry and DLQ policy applies: no ack, redelivery up to `maxRetries`, then the dead-letter queue |
+| `@On` | the `[EventDispatchService]` error line is logged; the other handlers of the same event keep running |
+
+That holds whether the `@Catch` returns nothing, returns a value or throws. A returned value has
+no effect, and since it can only mean the handler expected it to count, it is logged as a warning
+naming the method:
+
+```
+@Catch handler ApiExceptionHandler.database() returned a value for an event failure — a return value
+has no effect in event scopes (@On, @EventPattern); the original error continues unchanged.
+```
+
+Use these scopes for alerting, metrics and audit. To stop an event from being retried, handle the
+error inside the event handler itself.
+
+### Headless applications
+
+Without an HTTP adapter, `@Catch` still receives `@On`, `@MessagePattern` and `@EventPattern`
+failures. A `@NotFound()` method is ignored, with a warning at boot.
+
+---
+
+## Not Found
+
+A request that matched no route is not an error: nothing threw, the router simply had nowhere to
+send it. It therefore **never reaches `@Catch`**, not even the catch-all. It has its own hook,
+`@NotFound()`, so a catch-all never has to ask which of the two it is looking at, and a 404 can
+never be swallowed by a handler written for exceptions.
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { NotFound } from '@asenajs/asena/exception';
+import type { NotFoundRequest } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @NotFound()
+  public missing(context: Context, request: NotFoundRequest) {
+    return context.send({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      instance: request.path,
+    }, 404);
+  }
+}
+```
+
+The signature is `(context, request) => Response | void`. `request.path` is the path only, with no
+origin and no query string, and `request.method` is the upper-case verb. Both are normalised by the
+adapter, so the same body works on Ergenecore and the Hono adapter.
+
+- **One per application.** Every unmatched route looks the same, so there is nothing to
+  discriminate on; a second `@NotFound()` fails the boot.
+- **It can decline.** Returning nothing, returning something that is not a `Response`, or throwing
+  hands the request to `@Config.onNotFound` and then the adapter's 404. A throw is logged first.
+- **Global middlewares run before it** on both adapters, so a 404 still carries CORS headers and
+  anything else you apply to every request.
+- **Missing static files reach it too.** A file `@StaticServe` cannot find is answered by the
+  same handler. The per-route `StaticServeService.onNotFound` still runs first when you declare
+  one; it observes the miss and does not answer it.
+
+With nothing answering, **both** adapters answer `404` with `Content-Type: application/json`:
+
+```json
+{ "error": "Not Found" }
+```
+
+and write one INFO line, `Route not found:` with `{ path, method, status }`.
+
+::: info Not the same as a domain 404
+`@NotFound()` is about routing. When the route exists but the record does not, throw: that is an
+application decision, and a `@Catch` answers it.
+
+```typescript
+import { NotFoundException } from '@asenajs/asena/adapter';
+
+throw new NotFoundException({ error: 'ORDER_NOT_FOUND', id });
+```
 :::
 
-::: info Hono's `HTTPException` keeps working
-`@asenajs/hono-adapter` still exports `HTTPException`, and hono packages that throw it —
-`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt`, hono's own validator — are unaffected by the
-move. Both classes are recognised by `isHttpException()` and both are answered from their own
-status, so your handler does not have to know which one it is holding.
+---
 
-**Import it from `@asenajs/hono-adapter`, never from `hono/http-exception`.** This is not a style
-preference. If a project ever resolves *two* copies of `hono`, `HTTPException` from the other copy
-is a different class — `isHttpException()` does not recognise it, and every deliberate `401`/`403`
-thrown from it becomes a `500`, silently, with the API still responding. The brand cannot close
-that: it is installed on the prototype of the copy the adapter resolved and cannot reach another
-copy's class.
+## Throwing HTTP Exceptions
 
-Since **3.0.0 `hono` is a peer dependency**, so the adapter no longer has a resolution slot of its
-own and a project normally resolves exactly one copy. That is the real fix; importing from the
-adapter is the guarantee on top of it. Before 3.0.0 this happened in a real application, triggered
-by nothing more than a patch bump of `hono` in its own `package.json`.
+`HttpException` is the class to throw for a deliberate HTTP status. It comes from
+`@asenajs/asena/adapter`, the framework core rather than an adapter, so the same import and the
+same throw work on Ergenecore and Hono:
 
-`HttpException` from `@asenajs/asena/adapter` sidesteps the question entirely — it brands each
-*instance*, so it is recognised no matter which copy of the framework constructed it. Another
-reason to prefer it for your own throws.
+```typescript
+import { HttpException } from '@asenajs/asena/adapter';
 
-If you suspect a duplicate, `bun pm ls --all | grep hono` shows a nested
-`@asenajs/hono-adapter/node_modules/hono` when there is one, and the adapter writes a startup
-warning if it finds itself resolving one. Note that removing the duplicate from the lockfile is not
-enough — the stale `node_modules` directory has to go too, so upgrade with
-`rm -rf node_modules bun.lock && bun install`.
-:::
+throw new HttpException(429, 'Too Many Requests', {
+  headers: { 'Retry-After': '60' },
+});
+```
+
+With no `@Catch` matching it, the adapter answers from the exception's own status, body and
+headers. Thrown from a middleware, it reaches `@Catch` exactly like a throw from a controller.
 
 ### HttpException API
-
-The `HttpException` class accepts three parameters:
 
 ```typescript
 new HttpException(status, body, options?)
@@ -24978,27 +25536,12 @@ new HttpException(status, body, options?)
 | `body` | `string \| object` | No (default `''`) | Response body. An object is serialized and gets `Content-Type: application/json` automatically. |
 | `options` | `HttpExceptionInit` | No | Extends `ResponseInit` (headers, statusText) with `cause?: Error` for wrapping the original failure. |
 
-**Examples:**
-
 ```typescript
-// Simple string message
-throw new HttpException(404, 'Not Found');
+throw new HttpException(400, { error: 'Invalid input', field: 'email' });
 
-// JSON object response
-throw new HttpException(400, {
-  error: 'Invalid input',
-  field: 'email'
-});
+throw new HttpException(503, 'Service Unavailable', { statusText: 'Maintenance Mode' });
 
-// With custom headers
-throw new HttpException(429, 'Too Many Requests', {
-  headers: { 'Retry-After': '60' }
-});
-
-// With status text
-throw new HttpException(503, 'Service Unavailable', {
-  statusText: 'Maintenance Mode'
-});
+throw new HttpException(500, 'Database Error', { cause: originalError });
 ```
 
 ::: warning `message` is the body as a *string* — do not re-wrap it
@@ -25006,85 +25549,101 @@ throw new HttpException(503, 'Service Unavailable', {
 an object body is the **serialized JSON**:
 
 ```typescript
-const error = new HttpException(404, { error: 'User not found' });
+const error = new HttpException(404, { error: 'Order not found' });
 
-error.message              // '{"error":"User not found"}'   <- a string, not an object
-error.getResponse()        // 404, body {"error":"User not found"}
+error.message              // '{"error":"Order not found"}'   <- a string, not an object
+error.getResponse()        // 404, body {"error":"Order not found"}
 ```
 
-So an `onError` that answers `context.send({ error: error.message }, error.status)` double-encodes
-an object body into `{"error":"{\"error\":\"User not found\"}"}`. Pick one of two styles and stay
-with it:
+So a handler that answers `context.send({ error: error.message }, error.status)` double-encodes an
+object body into `{"error":"{\"error\":\"Order not found\"}"}`. Pick one style and stay with it:
 
-- **The exception owns the body** — throw whatever shape you want and let your handler answer with
+- **The exception owns the body**: throw whatever shape you want and answer with
   `error.getResponse()`. Works for hono's `HTTPException` too, which has no `body` at all.
-- **The handler owns the body** — throw a **string** and let `onError` build the envelope from
-  `error.message` and `error.status`. Use this when every error in your API must share one shape.
+- **The handler owns the body**: throw a **string** and build the envelope from `error.message`
+  and `error.status`. Use this when every error in your API must share one shape.
 
-The examples below use the first. `error.body` is only on `HttpException` itself, not on the
-`isHttpException()` contract, so a handler that reads it is assuming it threw the exception itself.
+`error.body` exists only on `HttpException` itself, not on `HttpExceptionLike`, so a handler that
+reads it is assuming it threw the exception itself.
 :::
 
-::: tip Your handler always gets first refusal
-Both adapters turn the exception into a proper HTTP response without you catching it, and
-both offer it to `onError` first:
+### Ready-made status exceptions
 
-1. `onError` is called. If it returns a `Response`, that is the answer.
-2. If there is no handler, it returns nothing, or it throws, the exception answers itself
-   from its own status and body. Anything that is not an `HttpException` becomes a 500.
+`@asenajs/asena/adapter` exports one `HttpException` subclass per commonly thrown status. Each
+takes `(body?, options?)`, and `body` defaults to the reason phrase, so
+`throw new NotFoundException()` answers `404 Not Found`.
 
-So an ExceptionMapper that logs or enriches thrown exceptions works the same on both adapters.
+| Status | Class |
+|:-------|:------|
+| 400 | `BadRequestException` |
+| 401 | `UnauthorizedException` |
+| 403 | `ForbiddenException` |
+| 404 | `NotFoundException` |
+| 405 | `MethodNotAllowedException` |
+| 406 | `NotAcceptableException` |
+| 408 | `RequestTimeoutException` |
+| 409 | `ConflictException` |
+| 410 | `GoneException` |
+| 412 | `PreconditionFailedException` |
+| 413 | `PayloadTooLargeException` |
+| 415 | `UnsupportedMediaTypeException` |
+| 418 | `ImATeapotException` |
+| 422 | `UnprocessableEntityException` |
+| 500 | `InternalServerErrorException` |
+| 501 | `NotImplementedException` |
+| 502 | `BadGatewayException` |
+| 503 | `ServiceUnavailableException` |
+| 504 | `GatewayTimeoutException` |
+| 505 | `HttpVersionNotSupportedException` |
 
-Before 0.9.0 Ergenecore answered an `HttpException` straight from `getResponse()` and only
-consulted `onError` for everything else, so the same ExceptionMapper worked on Hono and was
-bypassed here. If you worked around that by throwing a plain domain error, you can now throw
-`HttpException` directly.
-:::
+They exist so a status can be caught by type. `@Catch(ConflictException)` singles out one status,
+which a bare `HttpException` carrying a runtime number cannot; `@Catch(HttpException)` still
+receives every one of them that has no narrower handler. `error.name` is the concrete class name,
+so logs identify it.
 
-::: info The log follows the response
-When the framework answers — no handler, or one that declined or threw — it also writes the line,
-at a level derived from *the status the caller actually received*. A 4xx is logged as a rejected
-request without a stack; a 5xx is logged as an application error with one. See
-[Adapter logging](#adapter-logging).
-:::
+### Hono's `HTTPException`
 
-::: warning Match the exception with `isHttpException()`, not `instanceof`
-There are two reasons, and on the Hono adapter both apply at once.
+`@asenajs/hono-adapter` exports hono's `HTTPException`, and hono packages that throw it
+(`hono/basic-auth`, `hono/bearer-auth`, `hono/jwt`, hono's validator) work unchanged. It is a
+different class from `HttpException`, but the Hono adapter brands it, so `@Catch(HttpException)`
+and `isHttpException()` both recognise it and the adapter answers it from its own status.
 
-**Two classes.** Anything hono's ecosystem raises is an `HTTPException`, not an `HttpException`.
-`instanceof HttpException` answers false for every 401 from `hono/bearer-auth`, and
-`instanceof HTTPException` answers false for everything your own code throws. `isHttpException()`
-matches both, which is the whole reason it exists.
+**Import it from `@asenajs/hono-adapter`, never from `hono/http-exception`.** The brand is
+installed on the prototype of the copy of `hono` the adapter resolved. If a project resolves *two*
+copies, `HTTPException` from the other copy is recognised by neither `@Catch(HttpException)` nor
+`isHttpException()`, and every deliberate `401`/`403` thrown from it becomes a `500`, silently,
+with the API still responding. `hono` is a peer dependency of the adapter, so a project normally
+resolves exactly one copy; importing from the adapter is the guarantee on top of that.
 
-**Two copies.** A project that resolves two copies of `@asenajs/asena` — or of `hono` — ends up
-with two distinct exception classes, and `instanceof` silently answers false for one of them.
-Every deliberate 401/403/404 then collapses to your generic 500 branch while the API keeps
-responding, so nothing looks broken until someone reads the status codes.
+`HttpException` from `@asenajs/asena/adapter` sidesteps the question: it brands each *instance*,
+so it is recognised no matter which copy of the framework constructed it.
+
+If you suspect a duplicate, `bun pm ls --all | grep hono` shows a nested
+`@asenajs/hono-adapter/node_modules/hono` when there is one, and the adapter writes a startup
+warning if it finds itself resolving one. Removing the duplicate from the lockfile is not enough;
+the stale `node_modules` directory has to go too: `rm -rf node_modules bun.lock && bun install`.
+
+### `isHttpException()` outside `@Catch`
+
+`@Catch(HttpException)` already matches by brand. Where you branch on an error by hand, in a
+catch-all or a `try`/`catch`, use `isHttpException()` rather than `instanceof`, which misses hono's
+`HTTPException` and anything built by a second copy of the framework:
 
 ```typescript
 import { isHttpException } from '@asenajs/asena/adapter';
 
-public onError(error: Error, context: Context) {
-  if (isHttpException(error)) {
-    // Let the exception answer with the body it carries. `error.message` would be that body
-    // flattened to a string - re-wrapping it double-encodes an object body
-    return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-  }
-
-  return context.send({ error: 'Internal Server Error' }, 500);
+if (isHttpException(error)) {
+  return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
 }
 ```
 
-The guard narrows to `status`, an optional `getResponse()` and the usual `Error` members. It
-deliberately does **not** guarantee `body` — a branded exception from another package may not
-carry one — so reach for `error.body` only after you have an `HttpException` you know you threw
-yourself. `getResponse` is optional for the same reason, hence the `?.` and the fallback.
-:::
+The guard narrows to `HttpExceptionLike`: `status`, an optional `getResponse()` and the usual
+`Error` members.
 
-### Authentication Errors
+### Authentication errors
 
-The [asena-auth](/docs/packages/auth#route-guards) guard rejects with a core `HttpException`, so
-`isHttpException()` matches it and it reaches `onError` like any other exception:
+The [asena-auth](/docs/packages/auth#route-guards) guard rejects with a core `HttpException`, so it
+reaches `@Catch(HttpException)` like any other:
 
 | Situation | Status | Body | Header |
 |:----------|:-------|:-----|:-------|
@@ -25093,472 +25652,150 @@ The [asena-auth](/docs/packages/auth#route-guards) guard rejects with a core `Ht
 | `requireAuthSession(context)` without a session | 401 | `Authentication required` | - |
 
 The challenge header travels in the exception's response, so a handler that answers with
-`error.getResponse()` keeps it. A handler that builds its own envelope from `error.message` and
-`error.status` drops it unless it copies the header across:
+`error.getResponse()` keeps it. A handler that builds its own envelope drops it unless it copies
+the header across:
 
 ```typescript
-import { isHttpException } from '@asenajs/asena/adapter';
+@Catch(HttpException)
+public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+  if (ctx.scope !== 'http') return;
 
-public onError(error: Error, context: Context) {
-  if (isHttpException(error)) {
-    const challenge = error.getResponse?.().headers.get('WWW-Authenticate');
+  const challenge = error.getResponse?.().headers.get('WWW-Authenticate');
 
-    return context.send(
-      { error: error.message },
-      { status: error.status, headers: challenge ? { 'WWW-Authenticate': challenge } : {} },
-    );
-  }
-
-  return context.send({ error: 'Internal Server Error' }, 500);
+  return ctx.context.send(
+    { error: error.message },
+    { status: error.status, headers: challenge ? { 'WWW-Authenticate': challenge } : {} },
+  );
 }
 ```
 
 ---
-
-## Global Error Handler
-
-For production applications, you'll want centralized error handling to ensure consistent error responses and proper logging.
-
-### Using onError() Hook
-
-Both adapters support the `onError()` hook in your `ServerConfig` class.
-
-#### Basic Global Error Handler
-
-```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-
-@Config()
-export class ServerConfig extends ConfigService {
-  public onError(error: Error, context: Context): Response | Promise<Response> {
-    // Log the error
-    console.error('Error occurred:', error);
-
-    // Return custom response
-    return context.send({
-      success: false,
-      message: error.message,
-      timestamp: new Date().toISOString()
-    }, 500);
-  }
-}
-```
-
-### Advanced: ExceptionMapper Pattern
-
-For complex applications, use the **ExceptionMapper pattern** to handle different error types with dependency injection.
-
-#### Step 1: Create ExceptionMapper
-
-```typescript
-// src/exceptions/ExceptionMapper.ts
-import { Scope } from '@asenajs/asena/decorators/ioc';
-import { Component } from '@asenajs/asena/decorators';
-import type { Context } from '@asenajs/hono-adapter';
-import { isHttpException, isValidationError } from '@asenajs/asena/adapter';
-import { ClientErrorStatusCode, ServerErrorStatusCode } from '@asenajs/asena/web-types';
-
-@Component({ name: 'ExceptionMapper', scope: Scope.SINGLETON })
-export class ExceptionMapper {
-  public map(error: Error, context: Context): Response | Promise<Response> {
-    const requestPath = context.req.path;
-    const requestMethod = context.req.method;
-
-    // Handle request validation errors.
-    // Checked BEFORE the HTTP exception branch on purpose: a ValidationError *is* an HTTP
-    // exception (status 400), so the generic branch below would otherwise swallow it
-    if (isValidationError(error)) {
-      const errors = error.issues.map((issue) => ({
-        field: issue.path.join('.'),
-        message: issue.message
-      }));
-
-      return context.send({
-        success: false,
-        message: 'Validation error',
-        errors
-      }, ClientErrorStatusCode.BadRequest);
-    }
-
-    // Handle every deliberate HTTP status: your own HttpException, and anything a
-    // hono middleware raised. One branch covers both - see the warning above on why
-    // this is not an `instanceof` check
-    if (isHttpException(error)) {
-      console.warn(`HTTP Exception: ${error.message}`, {
-        path: requestPath,
-        method: requestMethod,
-        status: error.status
-      });
-
-      // The exception carries its own body - answer with it rather than re-wrapping
-      // `error.message`, which is that body already flattened to a string
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-
-    // Handle custom domain errors
-    if (error instanceof AuthError) {
-      return context.send({
-        success: false,
-        message: 'Authentication failed'
-      }, ClientErrorStatusCode.Unauthorized);
-    }
-
-    // Default error response for unexpected errors
-    console.error(`Internal Server Error: ${error.message}`, {
-      path: requestPath,
-      method: requestMethod,
-      stack: error.stack
-    });
-
-    return context.send({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    }, ServerErrorStatusCode.InternalServerError);
-  }
-}
-```
-
-#### Step 2: Register in ServerConfig
-
-```typescript
-// src/config/ServerConfig.ts
-import { Inject } from '@asenajs/asena/decorators/ioc';
-import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
-import type { ExceptionMapper } from '../exceptions/ExceptionMapper';
-
-@Config()
-export class ServerConfig extends ConfigService {
-  @Inject('ExceptionMapper')
-  private mapper: ExceptionMapper;
-
-  public onError(error: Error, context: Context): Response | Promise<Response> {
-    return this.mapper.map(error, context);
-  }
-}
-```
-
-::: tip Production Pattern
-The ExceptionMapper pattern is used in production applications for centralized error handling with IoC integration. It provides a single place to manage all error types.
-:::
-
----
-
-## Custom Error Classes
-
-Create custom error classes for domain-specific errors in your application.
-
-### Basic Custom Error
-
-```typescript
-// src/errors/AuthError.ts
-export class AuthError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = 'AuthError';
-  }
-}
-```
-
-### Custom Error with Response
-
-For more control, store a custom response in your error:
-
-```typescript
-// src/errors/AuthError.ts
-export class AuthError extends Error {
-  private _response?: Response | Promise<Response>;
-
-  public constructor(message: string, response?: Response | Promise<Response>) {
-    super(message);
-    this.name = 'AuthError';
-    this._response = response;
-  }
-
-  public get response(): Response | Promise<Response> | undefined {
-    return this._response;
-  }
-}
-```
-
-### Using Custom Errors
-
-#### In Controllers
-
-```typescript
-import { Controller } from '@asenajs/asena/decorators';
-import { Post } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/hono-adapter';
-import { AuthError } from '../errors/AuthError';
-
-@Controller('/auth')
-export class AuthController {
-  @Post('/login')
-  async login(context: Context) {
-    const { username, password } = await context.getBody<{ username: string; password: string }>();
-
-    const user = await validateCredentials(username, password);
-
-    if (!user) {
-      throw new AuthError('Invalid credentials');
-    }
-
-    return context.send({ token: generateToken(user) });
-  }
-}
-```
-
-#### In Middleware
-
-```typescript
-import { Middleware } from '@asenajs/asena/decorators';
-import type { Context, MiddlewareService } from '@asenajs/hono-adapter';
-import type { Next } from 'hono';
-import { HttpException } from '@asenajs/asena/adapter';
-
-@Middleware()
-export class AuthMiddleware implements MiddlewareService {
-  public async handle(context: Context, next: Next): Promise<void> {
-    const authHeader = context.req.header('authorization');
-
-    if (!authHeader) {
-      throw new HttpException(401, {
-        error: 'Unauthorized',
-        message: 'Missing Authorization header'
-      });
-    }
-
-    await next();
-  }
-}
-```
-
-The throw is the same on Ergenecore — only the `Context` and `MiddlewareService` imports change.
-
-### Mapping Custom Errors
-
-Handle custom errors in your `ExceptionMapper`:
-
-```typescript
-public map(error: Error, context: Context): Response {
-  // ... other error handlers
-
-  // Handle AuthError
-  if (error instanceof AuthError) {
-    // Use custom response if provided
-    if (error.response) {
-      return error.response;
-    }
-
-    // Default auth error response
-    return context.send({
-      success: false,
-      message: error.message
-    }, 401);
-  }
-
-  // ... default handler
-}
-```
-
----
-
-## Not Found
-
-A request that matched no route is not an error - nothing threw, the router simply had nowhere
-to send it. It has its own hook, so `onError` only ever sees something your code raised and
-never has to ask which it is looking at.
-
-```typescript
-import type { NotFoundRequest } from '@asenajs/asena/adapter';
-
-@Config()
-export class AppConfig extends ConfigService {
-
-  public onNotFound(context: Context, request: NotFoundRequest) {
-    return context.send({
-      type: 'about:blank',
-      title: 'Not Found',
-      status: 404,
-      instance: request.path
-    }, 404);
-  }
-
-  public onError(error: Error, context: Context) {
-    // No 404 branch needed here
-    return context.send({ error: 'Internal Server Error' }, 500);
-  }
-
-}
-```
-
-`request.path` is the path only - no origin, no query string - and `request.method` is the
-upper-case verb. Both are normalised by the adapter, so the same handler body works on
-Ergenecore and the Hono adapter alike.
-
-With no `onNotFound` declared, **both** adapters answer:
-
-```json
-{ "error": "Not Found" }
-```
-
-with status `404` and `Content-Type: application/json`, and write one INFO line -
-`Route not found:` with `{ path, method, status }`. A hook that answers the request itself
-replaces both. See [Adapter logging](#adapter-logging).
-
-::: info Not the same as a domain 404
-`onNotFound` is about routing. When the route exists but the record does not, throw - that is a
-real application decision and belongs in `onError`:
-
-```typescript
-const user = await this.db.findUser(id);
-
-if (!user) {
-  throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
-}
-```
-:::
-
-::: warning Upgrading from 0.8
-`NotFoundError`, `isNotFoundError` and the `NOT_FOUND_ERROR` brand are removed. An `onError`
-that branched on `isNotFoundError()` should move that branch into `onNotFound`. On the Hono
-adapter the default 404 body also changes from `text/plain` to the JSON envelope above.
-:::
-
-::: tip Static file 404s are separate
-`StaticServeService.onNotFound` handles a file missing *inside* a `@StaticServe` route. It is
-unrelated to the config hook, which only fires when no route matched at all.
-:::
-
-### Adapter logging
-
-One rule, both adapters: **the framework's default log fires exactly when the framework's
-default response fires.**
-
-| | your hook answered | no hook, or it declined or threw |
-|:--|:--|:--|
-| response | yours | the framework's |
-| log | none | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
-
-If your `onError` returns a `Response`, you own the response and therefore the record - log it
-there, with your correlation id, and the adapter stays out of the way. If it returns nothing or
-throws, the adapter is the one answering, so it writes the original error rather than letting it
-disappear. Same for `onNotFound`.
-
-The level split exists so a wall of 401s from a bot cannot flood the error stream: only `5xx`
-carries a stack. An unmatched route logs `Route not found:` with `{ path, method, status }` at
-INFO - low enough that a scanner walking `/wp-admin` and `/.env` cannot fill the warning stream,
-high enough that a mistyped route in a deployed client is visible without turning on debug.
-
-Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence all of it,
-including the 404 line. There is no setting that forces a log line for a request your own handler
-answered.
-
-::: warning Upgrading from ergenecore 1.5.x / hono-adapter 1.7.x
-Those versions logged only when **no** `onError` was registered - which in a real application
-meant never, since almost every application configures one. A 500 answered the client and wrote
-nothing at all, stack included. You will now see error output you did not see before: whenever the
-framework is the one answering. If your own handler answers and also logs, nothing is duplicated.
-:::
 
 ## Validation Errors
 
-### Request Validation Errors
+A failed request validation is thrown like any other error, so a `@Catch` can give it the same
+envelope as the rest of your API. Two classes are involved:
 
-A failed request validation reaches your error handler like any other error, so it can
-share the same response envelope as the rest of your API.
+| Validation | Thrown | Import |
+|:-----------|:-------|:-------|
+| [Route context contract](/docs/concepts/validation#route-context-contracts) | `ContractValidationError` | `@asenajs/asena/adapter` |
+| [Validator class](/docs/concepts/validation) (`@Middleware({ validator: true })`) | `ValidationError` | your adapter package |
 
-Match it with `isValidationError()` rather than `instanceof ZodError`: the framework wraps
-the failure in an adapter-specific `ValidationError` that carries HTTP status 400, and the
-guard works with both adapters.
+Both carry status 400, both are HTTP exceptions, and both satisfy `isValidationError()` and the
+`ValidationErrorLike` type: `target` (which part of the request failed) and `issues`
+(`{ path, message, code? }`, adapter-agnostic). Catch them together:
 
 ```typescript
-import { isValidationError } from '@asenajs/asena/adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { ContractValidationError, type ValidationErrorLike } from '@asenajs/asena/adapter';
+import { ValidationError, type Context } from '@asenajs/ergenecore'; // or '@asenajs/hono-adapter'
 
-public map(error: Error, context: Context): Response {
-  if (isValidationError(error)) {
-    // error.issues is adapter-agnostic: { path, message, code }
-    const errors = error.issues.map((issue) => ({
-      field: issue.path.join('.'),
-      message: issue.message,
-      code: issue.code
-    }));
+@ExceptionHandler()
+export class ValidationExceptionHandler {
+  @Catch(ValidationError, ContractValidationError)
+  public validation(error: ValidationErrorLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({
+    return ctx.context.send({
       success: false,
       message: 'Validation failed',
-      errors
+      target: error.target,
+      errors: error.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })),
     }, 400);
   }
-
-  // ... other handlers
 }
 ```
 
-::: tip Reaching the original ZodError
-`error.cause` holds the underlying `ZodError` if you need something `issues` does not
-carry - `z.treeifyError(error.cause)`, for instance. Note that Zod 4 removed
-`ZodError.errors`; the field is now `issues`.
+Because both are HTTP exceptions, a `@Catch(HttpException)` receives them when nothing narrower
+does, and answers them with their own status.
+
+::: tip Reaching the original error
+`error.cause` holds what the validator produced: the `ZodError` for a validator class, the
+Standard Schema issues for a contract. Zod 4 removed `ZodError.errors`; the field is `issues`.
 :::
 
-::: info When no handler answers it
-A `ValidationError` is always thrown, whether or not you declare `onError`. If nothing answers it -
-no handler, or a handler that returns nothing - both adapters fall back to the same envelope:
+With nothing answering, the adapter falls back to the error's own envelope. A validator class
+answers Zod's flattened error:
 
 ```json
 {
   "error": "Validation failed",
-  "details": { "formErrors": [], "fieldErrors": { "email": ["..."] } },
+  "details": { "formErrors": [], "fieldErrors": { "email": ["Invalid email"] } },
   "target": "json"
 }
 ```
 
-`target` is which part of the request failed: `json`, `query`, `param`, `form` or `header`. The
-failure is logged like any other 4xx. See
-[Validation](/docs/concepts/validation#validation-error-responses).
-:::
+and a contract answers its issues:
 
-### Custom Validation Error Response
-
-```typescript
+```json
 {
-  "success": false,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Invalid email format",
-      "code": "invalid_string"
-    },
-    {
-      "field": "password",
-      "message": "String must contain at least 8 character(s)",
-      "code": "too_small"
-    }
-  ]
+  "error": "Validation failed",
+  "target": "body",
+  "issues": [{ "message": "Too small: expected number to be >0", "path": ["quantity"] }]
 }
 ```
 
+The failure is logged like any other 4xx. A validator `hook` that returns a `Response` answers
+the request itself, and no `@Catch` is consulted. See
+[Validation](/docs/concepts/validation#validation-error-responses).
+
+---
+
+## `@Config.onError` and `onNotFound` {#config-onerror-and-onnotfound}
+
+::: warning Deprecated, removed in 1.0
+`onError` and `onNotFound` on the `@Config` class are deprecated and will be removed in 1.0. Use
+`@Catch` and `@NotFound()` methods in an `@ExceptionHandler` class instead.
+:::
+
+Until then they keep working as the last link before the adapter default: `onError` runs after
+every `@Catch` declined, `onNotFound` after `@NotFound()` declined. Each logs a deprecation
+warning at boot. See [Configuration](/docs/guides/configuration#onerror-and-onnotfound).
+
+---
 
 ## Best Practices
 
-### 1. Consistent Error Response Format
+### 1. Throw from services, answer in one place
 
-Always return errors in a consistent format:
+Services throw domain errors and ready-made status exceptions. Controllers stay thin and do not
+catch them. The exception handler is the one place that maps them to responses, so the mapping is
+not repeated in every route.
+
+```typescript
+// ❌ Each route translates errors itself
+@Get('/:id')
+public async getById(context: Context) {
+  try {
+    return context.send(await this.orderService.findById(context.getParam('id')));
+  } catch (error) {
+    if (error instanceof OrderNotFoundError) return context.send({ error: 'Not found' }, 404);
+    throw error;
+  }
+}
+
+// ✅ The route does its job; ApiExceptionHandler answers OrderNotFoundError
+@Get('/:id')
+public async getById(context: Context) {
+  return context.send(await this.orderService.findById(context.getParam('id')));
+}
+```
+
+### 2. Keep one response format
+
+Return errors in a consistent shape, whichever handler answers:
 
 ```typescript
 {
   "success": false,
   "message": "Human-readable error message",
   "error": "ERROR_CODE",
-  "details": { /* optional additional context */ },
-  "timestamp": "2025-01-15T10:30:00.000Z"
+  "details": { /* optional additional context */ }
 }
 ```
 
-### 2. Security Considerations
+### 3. Do not leak internals
 
 ::: danger Never Leak Sensitive Information
 - **Don't expose stack traces** in production
@@ -25567,26 +25804,29 @@ Always return errors in a consistent format:
 - **Do sanitize error messages** before sending to clients
 :::
 
-**Bad:**
 ```typescript
-return context.send({
-  error: error.stack,  // ❌ Exposes internal details
-  query: sql           // ❌ Exposes database structure
-}, 500);
+@Catch(Error)
+public unexpected(error: Error, ctx: ExceptionContext<Context>) {
+  if (ctx.scope !== 'http') return;
+
+  this.logger.error('Unexpected error', {
+    path: ctx.context.req.url,
+    method: ctx.context.req.method,
+    error,
+  });
+
+  return ctx.context.send({
+    success: false,
+    message: 'An error occurred. Please try again later.',
+    ...(process.env.NODE_ENV === 'development' && { debug: error.message }),
+  }, 500);
+}
 ```
 
-**Good:**
-```typescript
-return context.send({
-  success: false,
-  message: 'An error occurred. Please try again later.',
-  ...(process.env.NODE_ENV === 'development' && { debug: error.message })
-}, 500);
-```
+A handler that answers also owns the log line: the adapter writes nothing for a request a
+`@Catch` answered.
 
-### 3. Use Specific Status Codes
-
-Choose the right HTTP status code for each error:
+### 4. Use specific status codes
 
 | Status Code | When to Use |
 |:------------|:------------|
@@ -25600,178 +25840,43 @@ Choose the right HTTP status code for each error:
 | `500` | Internal Server Error - Unexpected server error |
 | `503` | Service Unavailable - Temporary downtime |
 
-### 4. Error Boundaries
+### 5. Degrade gracefully
 
-Create error boundaries at different levels:
-
-```typescript
-// Application-level (ServerConfig)
-public onError(error: Error, context: Context): Response {
-  return this.mapper.map(error, context);
-}
-
-// Route-level (Controller)
-@Get('/:id')
-async getUser(context: Context) {
-  try {
-    // Risky operation
-    return await this.userService.getUser(id);
-  } catch (error) {
-    // Handle specific errors
-    if (error instanceof DatabaseError) {
-      throw new HttpException(503, 'Database temporarily unavailable');
-    }
-    throw error; // Let global handler deal with it
-  }
-}
-
-// Service-level (Business Logic)
-async getUser(id: string) {
-  if (!id) {
-    // `ValidationError` is the framework's own type for a failed *request* validation and
-    // takes a ZodError - it is not a general-purpose error to construct by hand
-    throw new HttpException(400, { code: 'USER_ID_REQUIRED' });
-  }
-
-  const user = await this.db.findUser(id);
-
-  if (!user) {
-    throw new HttpException(404, { code: 'USER_NOT_FOUND', id });
-  }
-
-  return user;
-}
-```
-
-### 5. Graceful Degradation
-
-Handle errors gracefully without crashing the application:
+Not every failure has to fail the request. Where partial data is still useful, settle the calls
+and report what is missing:
 
 ```typescript
 @Get('/dashboard')
-async getDashboard(context: Context) {
-  try {
-    const [users, posts, stats] = await Promise.allSettled([
-      this.userService.getUsers(),
-      this.postService.getPosts(),
-      this.statsService.getStats()
-    ]);
+public async getDashboard(context: Context) {
+  const [orders, invoices] = await Promise.allSettled([
+    this.orderService.findRecent(),
+    this.invoiceService.findOpen(),
+  ]);
 
-    return context.send({
-      users: users.status === 'fulfilled' ? users.value : [],
-      posts: posts.status === 'fulfilled' ? posts.value : [],
-      stats: stats.status === 'fulfilled' ? stats.value : null,
-      warnings: [
-        users.status === 'rejected' && 'Failed to load users',
-        posts.status === 'rejected' && 'Failed to load posts',
-        stats.status === 'rejected' && 'Failed to load stats'
-      ].filter(Boolean)
-    });
-  } catch (error) {
-    throw new HttpException(500, 'Dashboard unavailable');
-  }
-}
-```
-
-### 6. Error Context
-
-Always include request context in error logs:
-
-```typescript
-logger.error('Payment processing failed', {
-  userId: user.id,
-  orderId: order.id,
-  amount: order.total,
-  path: context.req.path,
-  method: context.req.method,
-  userAgent: context.req.header('user-agent'),
-  timestamp: new Date().toISOString()
-});
-```
-
----
-
-## Common Patterns
-
-### Pattern 1: Try-Catch in Controllers
-
-```typescript
-@Post('/charge')
-async processPayment(context: Context) {
-  try {
-    const { amount, token } = await context.getBody<{ amount: number; token: string }>();
-
-    const charge = await this.paymentService.charge(amount, token);
-
-    return context.send({ success: true, charge });
-  } catch (error) {
-    if (error instanceof PaymentError) {
-      throw new HttpException(402, {
-        error: 'Payment failed',
-        reason: error.reason
-      });
-    }
-
-    throw error; // Let global handler deal with unexpected errors
-  }
-}
-```
-
-### Pattern 2: Early Returns
-
-```typescript
-@Get('/:id')
-async getUser(context: Context) {
-  const id = context.getParam('id');
-
-  if (!id) {
-    throw new HttpException(400, 'User ID is required');
-  }
-
-  if (!isValidUUID(id)) {
-    throw new HttpException(400, 'Invalid user ID format');
-  }
-
-  const user = await this.userService.getUser(id);
-
-  if (!user) {
-    throw new HttpException(404, 'User not found');
-  }
-
-  return context.send(user);
-}
-```
-
-### Pattern 3: Error Enrichment
-
-```typescript
-public map(error: Error, context: Context): Response {
-  // Enrich error with request context
-  const enrichedError = {
-    ...error,
-    requestId: context.getValue('requestId'),
-    userId: context.getValue('user')?.id,
-    path: context.req.path,
-    method: context.req.method
-  };
-
-  // Send to monitoring service
-  monitoringService.captureException(enrichedError);
-
-  // Return safe response to client
   return context.send({
-    success: false,
-    message: error.message,
-    requestId: enrichedError.requestId
-  }, 500);
+    orders: orders.status === 'fulfilled' ? orders.value : [],
+    invoices: invoices.status === 'fulfilled' ? invoices.value : [],
+    warnings: [
+      orders.status === 'rejected' && 'Failed to load orders',
+      invoices.status === 'rejected' && 'Failed to load invoices',
+    ].filter(Boolean),
+  });
 }
 ```
+
+### 6. Observe events, do not try to recover them
+
+In `@On` and `@EventPattern` scopes a `@Catch` is for alerting and metrics. Return nothing there:
+the original failure continues whatever the handler does, and a returned value only adds a
+warning.
 
 ## Related
 
-- [Configuration](/docs/guides/configuration) - Registering the global `onError` handler
-- [Middleware](/docs/concepts/middleware) - Error handling in middleware
-- [Validation](/docs/concepts/validation) - Handling validation errors
+- [Configuration](/docs/guides/configuration) - The `@Config` class and its deprecated error hooks
+- [Middleware](/docs/concepts/middleware) - Throwing from middleware
+- [Validation](/docs/concepts/validation) - Validators, contracts and their errors
+- [Event System](/docs/concepts/event-system) - `@On` handlers and error isolation
+- [Microservices](/docs/concepts/microservices) - `@MessagePattern`, `@EventPattern` and delivery semantics
 - [Context API](/docs/concepts/context) - Understanding request context
 - [Logger Package](/docs/packages/logger) - Structured logging with AsenaLogger
 

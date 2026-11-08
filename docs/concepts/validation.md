@@ -403,7 +403,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Asena's Context wrapper
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -434,7 +434,7 @@ export class UserValidatorWithHook extends ValidationService {
         // context: Hono's NATIVE context, not Asena's wrapper - see the warning below
 
         if (!result.success) {
-          // Return nothing to let the framework report the failure through onError
+          // Return nothing: the ValidationError is thrown and reaches @Catch
           return;
         }
 
@@ -518,7 +518,7 @@ hook: (result, context) => {
   if (result.success) return;
 
   // A Response short-circuits everything - the handler never runs and
-  // onError is never called for this request
+  // no @Catch is consulted for this request
   return context.send({ error: 'Invalid signup payload' }, 422);
 }
 ```
@@ -540,9 +540,9 @@ When validation fails, Asena answers with **400 Bad Request**.
 
 ### Default response
 
-A `ValidationError` is always thrown. When nothing answers it - your application defines no
-global error handler, or its handler returns nothing - **both** adapters fall back to the same
-envelope, Zod's flattened error:
+A `ValidationError` is always thrown. When nothing answers it - no `@Catch` matches it, or the
+one that matches returns nothing - **both** adapters fall back to the same envelope, Zod's
+flattened error:
 
 ```json
 {
@@ -562,62 +562,52 @@ envelope, Zod's flattened error:
 `header`.
 
 The failure is also logged like any other 4xx, at DEBUG (or INFO when your logger has no
-`debug`). Before 0.9.1 an application with no `onError` got this response from inside the
-validator, which never threw - so it reached neither `onError` nor the log, the one rejection
-that was invisible at every level. See
-[Error Handling](/docs/guides/error-handling#adapter-logging).
+`debug`). See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Customizing the response
 
-Define `onError` in your `@Config` class and validation failures arrive there like any
-other error, so they can share your application's response envelope:
+A `@Catch` in an [`@ExceptionHandler`](/docs/guides/error-handling) receives validation failures
+like any other error, so they can share your application's response envelope:
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { isValidationError } from '@asenajs/asena/adapter';
-import { ConfigService, type Context } from '@asenajs/hono-adapter';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { ContractValidationError, type ValidationErrorLike } from '@asenajs/asena/adapter';
+import { ValidationError, type Context } from '@asenajs/hono-adapter';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  public onError(error: Error, context: Context): Response {
-    if (isValidationError(error)) {
-      return context.send(
-        {
-          success: false,
-          message: 'Validation failed',
-          errors: error.issues // [{ path, message, code }]
-        },
-        400
-      );
-    }
+@ExceptionHandler()
+export class ValidationExceptionHandler {
+  @Catch(ValidationError, ContractValidationError)
+  public validation(error: ValidationErrorLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
 
-    return context.send({ success: false, message: 'Internal Server Error' }, 500);
+    return ctx.context.send(
+      {
+        success: false,
+        message: 'Validation failed',
+        errors: error.issues // [{ path, message, code }]
+      },
+      400
+    );
   }
 }
 ```
 
-`isValidationError()` is exported from `@asenajs/asena/adapter` and works with both
-adapters. The error it narrows to also carries `target` and `cause` (the original
-`ZodError`) if you need more than `issues`.
+`ValidationError` comes from your adapter package and is what a validator class throws;
+`ContractValidationError` comes from `@asenajs/asena/adapter` and is what a
+[route context contract](#route-context-contracts) throws. Both carry `target`, `issues` and
+`cause` (the original `ZodError` for a validator class) and satisfy `isValidationError()`.
 
-::: tip Existing error handlers keep working
-The thrown error is an HTTP exception carrying status **400**, so a handler that matches with
-`isHttpException()` and replies with `error.status` keeps answering 400 - adopting this does not
-silently turn validation failures into 500s.
-
-Check `isValidationError()` **first** if you want validation failures to have their own envelope.
-A `ValidationError` is an HTTP exception too, so a generic `isHttpException()` branch placed
-above it would swallow it.
-
-The class each adapter extends is an implementation detail and they differ - Ergenecore's extends
-`HttpException`, the Hono adapter's extends hono's `HTTPException` so that pre-0.9 handlers
-written against `instanceof HTTPException` keep answering 400. Match with the guards and you do
-not have to know which.
+::: tip A generic HTTP handler still answers 400
+Both errors are HTTP exceptions carrying status **400**. Without a narrower `@Catch`, a
+`@Catch(HttpException)` receives them and answers from `error.status`, so validation failures
+never silently become 500s. A `@Catch(ValidationError)` is more specific and wins for its own
+type.
 :::
 
 ::: warning A hook that returns a Response wins
-If the validator's `hook` returns a `Response`, that response is sent as-is and `onError`
-is never reached for that request. See [Validation Hooks](#validation-hooks).
+If the validator's `hook` returns a `Response`, that response is sent as-is and no `@Catch` is
+consulted for that request. See [Validation Hooks](#validation-hooks).
 :::
 
 ## Route Context Contracts
@@ -757,10 +747,11 @@ itself, the handler does not run.
 | A non-empty `body` request whose content type is not `application/json` or `application/*+json` | **415** |
 | A `form` request whose content type is not `multipart/form-data` or `application/x-www-form-urlencoded` | **415** |
 
-A failing schema throws an error that `isValidationError()` recognizes, so it reaches your
-`onError` like a validator failure does. Its `target` is the contract key (`body`, `form`, `query`,
-`params`, `headers`) and its `issues` carry `path` and `message`, with each path segment
-normalized to a string or a number. Without an `onError` that answers it, the response is:
+A failing schema throws a `ContractValidationError` from `@asenajs/asena/adapter`, which
+`isValidationError()` recognizes and a `@Catch` can match by type. Its `target` is the contract key
+(`body`, `form`, `query`, `params`, `headers`) and its `issues` carry `path` and `message`, with
+each path segment normalized to a string or a number. Without a `@Catch` that answers it, the
+response is:
 
 ```json
 {
@@ -770,7 +761,7 @@ normalized to a string or a number. Without an `onError` that answers it, the re
 }
 ```
 
-An exception thrown from inside a schema is not a validation failure. It reaches `onError` as it
+An exception thrown from inside a schema is not a validation failure. It reaches `@Catch` as it
 was thrown.
 
 A route cannot combine a contract with the `validator` option. Doing so, or setting
