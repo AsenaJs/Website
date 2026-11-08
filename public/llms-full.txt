@@ -2135,7 +2135,9 @@ This roadmap is updated regularly as we complete features and adjust priorities 
 
 Not published yet: `@asenajs/asena` 0.13.0. Everything below needs core 0.13.0 or newer. The official
 packages accept it as a peer from their next release: `@asenajs/ergenecore` 5.1.0,
-`@asenajs/hono-adapter` 5.2.0 and the patch of every other `@asenajs/*` package released with it.
+`@asenajs/hono-adapter` 5.2.0, `@asenajs/asena-redis` 4.1.0, `@asenajs/asena-drizzle` 4.1.1,
+`@asenajs/asena-logger` 3.0.2, `@asenajs/asena-openapi` 3.2.1, `@asenajs/asena-otel` 3.0.2,
+`@asenajs/asena-kafka` 4.0.2 and `@asenajs/asena-auth` 1.0.1.
 
 - **[`@ExceptionHandler`](/docs/guides/error-handling)** - error handling in one place across HTTP, `@On` events and microservice handlers. `@Catch(...types)` methods answer by type with the most specific match winning, `@NotFound()` answers unmatched routes, and duplicates fail the boot
 - **[Event scopes are observe-only](/docs/guides/error-handling#eventpattern-and-on-observe-only)** - a `@Catch` sees `@On` and `@EventPattern` failures, but the original error continues: retry and DLQ for `@EventPattern`, the default error line for `@On`. For `@MessagePattern` its return value is a successful reply, a returned `Response` is declined with a warning, and `undefined` lets the caller see the failure
