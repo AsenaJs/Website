@@ -1,6 +1,6 @@
 ---
 title: CLI Commands
-description: Reference for every CLI command - create, generate, dev start, build, init and doctor, including shortcuts
+description: Reference for every CLI command - create, generate, dev start, console, build, init and doctor, including shortcuts
 outline: deep
 ---
 
