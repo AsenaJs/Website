@@ -12,6 +12,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { SNIPPETS } from '../.vitepress/theme/components/hover-snippets';
 import { DIAGRAMS } from '../.vitepress/theme/components/diagrams';
+import { stripBenchMarkers } from './bench-markers';
 
 const ROOT = resolve(import.meta.dir, '..');
 const DOCS_DIR = join(ROOT, 'docs');
@@ -169,7 +170,7 @@ function flattenLayoutHtml(body: string, docsPath: string): string {
 
 /** Splits frontmatter from the markdown body. */
 function parsePage(absPath: string): { data: Record<string, string>; body: string } {
-  const raw = readFileSync(absPath, 'utf8');
+  const raw = stripBenchMarkers(readFileSync(absPath, 'utf8'));
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
 
   if (!match) {

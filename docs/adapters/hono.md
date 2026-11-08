@@ -26,15 +26,19 @@ Hono Adapter brings together the best of both worlds:
 
 Hono Adapter delivers excellent performance powered by Bun and Hono:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
-|:-------------------|:--------|------------:|-------------------:|------------------:|
-| Ergenecore         | Bun     | 151,923     | 148,415            | 86,710            |
-| **Hono adapter**   | Bun     | **141,822** | **132,708**        | **86,840**        |
+<!-- bench:table s1a,s1b,s3 asena-ergenecore-bun,asena-hono-bun bold=asena-hono-bun -->
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Full API endpoint |
+|:-----------------|:--------|------------:|-------------------:|------------------:|
+| Ergenecore       | Bun     |     211,630 |            201,879 |           133,533 |
+| **Hono adapter** | Bun     | **191,199** |        **190,401** |       **135,480** |
+
+<!-- /bench:table -->
 
 The two are level on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, <!-- bench:cpus -->one CPU<!-- /bench:cpus --> and <!-- bench:memory -->2 GB<!-- /bench:memory --> per server, `wrk` at <!-- bench:connections -->128<!-- /bench:connections --> connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
