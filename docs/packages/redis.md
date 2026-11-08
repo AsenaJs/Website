@@ -412,9 +412,9 @@ nearest level first: `method option > @CacheConfig > @RedisCache`. A method that
 |:--|:--|:--|
 | `key` | `@Cacheable`, `@CachePut`, `@CacheEvict` | `(...args) => string`, receiving the method's arguments and returning a non-empty string. Omitted → `` `${Class.name}.${method}:${JSON.stringify(args)}` ``. Ignored with `allEntries` |
 | `prefix` | all three, `@CacheConfig`, `@RedisCache` | Key namespace, joined with `:`; a trailing `:` is not doubled. Also the scope of `allEntries`. Omitted → no prefix |
-| `ttl` | `@Cacheable`, `@CachePut`, `@CacheConfig`, `@RedisCache` | **Seconds**, a positive whole number. Unset at every level means the entry never expires |
+| `ttl` | `@Cacheable`, `@CachePut`, `@CacheConfig`, `@RedisCache` | **Seconds**, a positive whole number up to `Number.MAX_SAFE_INTEGER` (`9007199254740991`). Unset at every level means the entry never expires |
 | `redis` | all three, `@CacheConfig`, `@RedisCache` | Name the `@Redis` service is registered under. Omit it when exactly one is registered |
-| `timeout` | all three, `@CacheConfig`, `@RedisCache` | **Milliseconds**, a positive finite number: the limit on each Redis command the cache sends. A command past it counts as failed. Default `500`. See [Time limit](#time-limit) |
+| `timeout` | all three, `@CacheConfig`, `@RedisCache` | **Milliseconds**, a positive number up to `2147483647`, the largest delay a timer holds: the limit on each Redis command the cache sends. A command past it counts as failed. Default `500`. See [Time limit](#time-limit) |
 | `cacheNull` | `@Cacheable`, `@CachePut` | Store `null` and `undefined` results, which then count as hits. Default `true` |
 | `allEntries` | `@CacheEvict` | Delete every key under the prefix, via `SCAN`, instead of one key. Requires a prefix. Default `false` |
 | `beforeInvocation` | `@CacheEvict` | Evict before the method runs rather than after it succeeds. Default `false` |
@@ -492,8 +492,8 @@ Mistakes in the code are not contained. They are bugs, and they say so. These fa
 
 - `@Cacheable` and `@CachePut` on the same method
 - `allEntries` with no prefix at any level, which would otherwise delete every key in the database
-- a `ttl` that resolves to anything but a positive whole number of seconds
-- a `timeout` that resolves to anything but a positive, finite number of milliseconds
+- a `ttl` that resolves to anything but a positive whole number of seconds up to `9007199254740991`
+- a `timeout` that resolves to anything but a positive number of milliseconds up to `2147483647`
 - a cache decorator on a name that holds no function on the instance
 
 These reject the call, with the error reaching the caller:
