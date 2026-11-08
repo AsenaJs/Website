@@ -20121,6 +20121,10 @@ export class AppRedis extends AsenaRedisService {}
 | `'bun'` (default) | None (Bun built-in) | Bun runtime, maximum performance |
 | `'node-redis'` | `redis` ^5.12.1 | Node.js compatibility, Redis modules |
 
+Both adapters reconnect on their own when the connection drops. The node-redis adapter logs one
+`NodeRedisAdapter: Redis connection error: ...` line on `console.error` per outage, not one per
+reconnect attempt.
+
 ## API Reference
 
 ### String Operations
@@ -20360,9 +20364,9 @@ The wrapper is installed on the instance, which has two consequences:
 
 ### Options
 
-`redis`, `prefix` and `ttl` can be set at three levels and resolve independently, nearest level
-first: `method option > @CacheConfig > @RedisCache`. A method that overrides only `ttl` keeps the
-class's `prefix`. The other options exist only on the method decorators.
+`redis`, `prefix`, `ttl` and `timeout` can be set at three levels and resolve independently,
+nearest level first: `method option > @CacheConfig > @RedisCache`. A method that overrides only
+`ttl` keeps the class's `prefix`. The other options exist only on the method decorators.
 
 | Option | Applies to | Meaning |
 |:--|:--|:--|
@@ -20370,6 +20374,7 @@ class's `prefix`. The other options exist only on the method decorators.
 | `prefix` | all three, `@CacheConfig`, `@RedisCache` | Key namespace, joined with `:`; a trailing `:` is not doubled. Also the scope of `allEntries`. Omitted → no prefix |
 | `ttl` | `@Cacheable`, `@CachePut`, `@CacheConfig`, `@RedisCache` | **Seconds**, a positive whole number. Unset at every level means the entry never expires |
 | `redis` | all three, `@CacheConfig`, `@RedisCache` | Name the `@Redis` service is registered under. Omit it when exactly one is registered |
+| `timeout` | all three, `@CacheConfig`, `@RedisCache` | **Milliseconds**, a positive finite number: the limit on each Redis command the cache sends. A command past it counts as failed. Default `500`. See [Time limit](#time-limit) |
 | `cacheNull` | `@Cacheable`, `@CachePut` | Store `null` and `undefined` results, which then count as hits. Default `true` |
 | `allEntries` | `@CacheEvict` | Delete every key under the prefix, via `SCAN`, instead of one key. Requires a prefix. Default `false` |
 | `beforeInvocation` | `@CacheEvict` | Evict before the method runs rather than after it succeeds. Default `false` |
@@ -20392,20 +20397,36 @@ or a foreign value under the key each produce a `[RedisCache]` warning on the fr
 the call carries on as though there were no cache. A cache outage must not become an application
 outage.
 
-The cost lands on eviction: when `@CacheEvict` cannot reach Redis, the method's result is still
-returned and the old entry stays until its `ttl` runs out or something overwrites it.
+A failed read runs the method and skips the write for that call. A failed write or eviction still
+returns the method's result. The cost lands on eviction: when `@CacheEvict` cannot reach Redis, the
+old entry stays until its `ttl` runs out or something overwrites it.
 
-::: warning Failing open needs the command to fail
-With `enableOfflineQueue` at its default of `true`, a command issued while the connection is down
-does not fail. It waits in the queue, and the cached method waits with it:
+#### Time limit
 
-- On the Bun adapter, until a reconnect succeeds or `maxRetries` runs out, which takes about 30
-  seconds with the default settings. After that the client stays closed, so every call warns and
-  runs the method until the process restarts.
-- On `node-redis`, with no upper bound at the default settings.
+Every Redis command the cache sends has a time limit, set with the `timeout` option in milliseconds
+(default `500`). It applies to each command on its own: every `GET`, `SET` and `DEL`, and each `SCAN`
+round and delete batch of an `allEntries` eviction, so a long sweep on a healthy server is not cut
+short. A command past the limit counts as failed, with the same warning and the same outcome as any
+other failed command:
 
-For a cache, running the method straight away is usually the better failure, so turn the queue off
-on the service behind it:
+```text
+[RedisCache] cache read for 'user:42' failed, running the method instead: GET timed out after 500ms
+```
+
+This is what makes the cache fail open while Redis is down. With the client's offline queue on, the
+default for both adapters, a command issued during an outage does not fail; it waits in the queue
+for a reconnect. The limit stops the cached call from waiting with it: during an outage a call waits
+at most the limit for each command it sends, and since a failed read skips the write, a `@Cacheable`
+miss costs one limit.
+
+A command that times out is not cancelled: one waiting in the offline queue is sent once the
+connection returns. See [Limitations](#limitations) for what a late `SET` can do.
+
+::: tip The offline queue on a cache-only service
+Failing open does not depend on the queue, but turning it off with `enableOfflineQueue: false`
+changes what an outage costs. A command issued while the client knows it is disconnected
+fails straight away instead of waiting out the limit, and nothing is queued to land after the
+reconnect:
 
 ```typescript
 @Redis({
@@ -20422,12 +20443,18 @@ The setting covers everything that uses that service, so give the cache its own 
 something else relies on the queue.
 :::
 
-**Mistakes in the code are not contained.** They are bugs, and they say so. These fail the boot:
+A client that stops reconnecting, such as the Bun client once `maxRetries` runs out, stays closed:
+every cached call warns and runs the method until the process restarts.
+
+#### Mistakes in the code
+
+Mistakes in the code are not contained. They are bugs, and they say so. These fail the boot:
 
 - `@Cacheable` and `@CachePut` on the same method
 - `allEntries` with no prefix at any level, which would otherwise delete every key in the database
-- a `ttl` that resolves to anything but a positive whole number
-- a cache decorator whose name is not a method on the instance, such as an arrow-function property
+- a `ttl` that resolves to anything but a positive whole number of seconds
+- a `timeout` that resolves to anything but a positive, finite number of milliseconds
+- a cache decorator on a name that holds no function on the instance
 
 These reject the call, with the error reaching the caller:
 
@@ -20439,11 +20466,19 @@ With `@Cacheable` the method has not run when one of these rejects. With an afte
 `@CacheEvict`, and with `@CachePut` when the Redis service cannot be picked, it has: its work stands
 even though the caller sees an error.
 
-::: warning A wrong Redis service only shows on the first cached call
-A `redis` name that resolves to nothing, or to something other than a `@Redis` service, and an
-omitted `redis` with zero or several services registered, all reject the **first cached call**
-rather than failing the boot. A post-processor sees the component graph while it is still being
-built, and core has no later hook, so the count cannot be trusted until the application is serving.
+::: warning Wiring mistakes surface on the first cached call, not at boot
+A post-processor sees the component graph while it is still being built, and core has no later
+hook, so the cache picks its Redis service on the call. These mistakes reject cached calls instead
+of failing the boot:
+
+- no `@Redis` service is registered;
+- more than one is registered and the decorators do not name one;
+- the named service does not exist;
+- the service was replaced by something that is not an `AsenaRedisService`, such as a plain test
+  double registered through `overrides`.
+
+The error is thrown before the method runs for `@Cacheable` and for `@CacheEvict` with
+`beforeInvocation`, and after the method has run for `@CachePut` and `@CacheEvict`.
 
 Name the service explicitly whenever the application has more than one, and exercise one cached
 endpoint in staging before you ship.
@@ -20458,8 +20493,13 @@ endpoint in staging before you ship.
   warning.
 - **Wrapped methods always return a Promise.** The cache read has to be awaited, so a synchronous
   method becomes asynchronous.
-- **Arrow-function class properties are not supported.** Use `async method()` syntax so the method
-  exists on the instance when post-processing runs.
+- **The decorators are typed for methods**, so TypeScript rejects them on an arrow-function
+  property. Applied to one anyway (plain JavaScript, or Bun running without a type check), the
+  property is wrapped and cached like a method and keeps its `this`.
+- **A command that times out is not cancelled.** With the client's offline queue on, it is sent when
+  the connection returns: a late `SET` stores the value computed during the outage with a fresh
+  `ttl`, and can overwrite a newer entry written after the reconnect, for example by another
+  instance of the application.
 - **`allEntries` deletes everything under the prefix**, including keys written by other classes that
   share it and keys the cache never wrote. `SCAN` is not a snapshot, so a key written mid-scan may
   survive until its `ttl`. On Redis Cluster it only covers the node it reaches. The walk runs inside
@@ -20689,8 +20729,8 @@ async findById(id: string) {
 }
 ```
 
-See [Caching Decorators](#caching-decorators), including the `enableOfflineQueue` note under
-[Failure Policy](#failure-policy).
+See [Caching Decorators](#caching-decorators), including the [time limit](#time-limit) that keeps a
+cached call from waiting on Redis during an outage.
 
 ### 3. Health Checks
 
