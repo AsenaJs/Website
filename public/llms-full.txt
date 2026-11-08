@@ -47,7 +47,7 @@ This is why Redis, Kafka, OpenTelemetry, Drizzle and Winston all live in optiona
 
 Asena is not a framework that happens to run on Bun. It is built for Bun.
 
-`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 151,923 req/s on plaintext from a single CPU in [our published benchmarks](/docs/benchmarks).
+`Bun.serve()`, `Bun.file()`, `server.upgrade()`, `Bun.CookieMap`, native cron, and Bun's own router are used directly instead of being abstracted behind portable shims. The `Ergenecore` adapter has zero runtime dependencies and hands routing entirely to Bun's native router — which is precisely why it reaches 211,630 req/s on plaintext from one CPU in [our published benchmarks](/docs/benchmarks).
 
 The trade-off is deliberate: Asena will not run on Node.js. In exchange, it does not pay the abstraction tax that portability demands.
 
@@ -14759,21 +14759,25 @@ Layers, top to bottom:
 
 Asena currently provides two official adapters:
 
-- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 152k req/s (plaintext · measured on the published benchmark)
-- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 142k req/s (plaintext · measured on the published benchmark)
+- [Ergenecore](/docs/adapters/ergenecore) - Zero runtime dependencies — Zod is a peer your project owns. Routing is handed entirely to Bun's native router. Built for production APIs and microservices. - 212k req/s (plaintext · measured on the published benchmark)
+- [Hono Adapter](/docs/adapters/hono) - `hono` and `zod` as peers your project owns. Middleware compatibility with the Hono ecosystem, ideal for gradual migration. Runs on Bun. - 191k req/s (plaintext · measured on the published benchmark)
 
 Identical application code runs on both — only the adapter import changes. See [Benchmarks](/docs/benchmarks) for the full comparison across eleven scenarios.
 
 ## Performance Comparison
 
-Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections:
+Published numbers from the [benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections. The database column reads through each stack's ORM: Drizzle for Asena, TypeORM for NestJS.
 
-| Adapter            | Runtime | Plaintext | JSON serialization | DB read by id |
-|:-------------------|:--------|----------:|-------------------:|--------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**      | **64,995**    |
-| **Hono adapter**   | Bun     | 141,822   | 132,708            | 62,664        |
-| NestJS · Express   | Bun     | 65,750    | 63,540             | 15,148        |
-| NestJS · Express   | Node    | 57,408    | 57,824             | 15,461        |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Database · read by id, ORM |
+|:-----------------|:--------|------------:|-------------------:|---------------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |                 **46,422** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |                     45,683 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |                     26,737 |
+| NestJS · Express | Node    |      81,623 |             80,660 |                     26,636 |
+
+
 
 ::: tip
 Full methodology — hardware, load generator, isolation and the byte-level conformance gate — is documented on the [Benchmarks](/docs/benchmarks) page.
@@ -15033,16 +15037,20 @@ Ergenecore is a high-performance adapter that:
 
 ### Performance
 
-Ergenecore is the **fastest** Asena adapter:
+Ergenecore leads the Asena adapters on plaintext and JSON serialization:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization |
-|:-------------------|:--------|------------:|-------------------:|
-| **Ergenecore**     | Bun     | **151,923** | **148,415**        |
-| Hono adapter       | Bun     | 141,822     | 132,708            |
-| NestJS · Express   | Bun     | 65,750      | 63,540             |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization |
+|:-----------------|:--------|------------:|-------------------:|
+| **Ergenecore**   | Bun     | **211,630** |        **201,879** |
+| Hono adapter     | Bun     |     191,199 |            190,401 |
+| NestJS · Express | Bun     |     110,435 |            105,136 |
+
+
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Ergenecore
@@ -15732,15 +15740,19 @@ Hono Adapter brings together the best of both worlds:
 
 Hono Adapter delivers excellent performance powered by Bun and Hono:
 
-| Adapter            | Runtime | Plaintext   | JSON serialization | Full API endpoint |
-|:-------------------|:--------|------------:|-------------------:|------------------:|
-| Ergenecore         | Bun     | 151,923     | 148,415            | 86,710            |
-| **Hono adapter**   | Bun     | **141,822** | **132,708**        | **86,840**        |
+
+
+| Adapter          | Runtime |   Plaintext | JSON serialization | Full API endpoint |
+|:-----------------|:--------|------------:|-------------------:|------------------:|
+| Ergenecore       | Bun     |     211,630 |            201,879 |           133,533 |
+| **Hono adapter** | Bun     | **191,199** |        **190,401** |       **135,480** |
+
+
 
 The two are level on the body-heavy API endpoint; Ergenecore leads on raw plaintext throughput.
 
 ::: tip
-Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 1 GB per server, `wrk` at 128 connections, full methodology attached.
+Numbers from the [published benchmark suite](/docs/benchmarks) — byte-verified workloads, one CPU and 2 GB per server, `wrk` at 128 connections, full methodology attached.
 :::
 
 ### When to Use Hono Adapter
