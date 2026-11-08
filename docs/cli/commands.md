@@ -389,6 +389,30 @@ Build completed successfully.
 Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
 
+## asena console
+
+Run the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging,
+config and exceptions. It restarts the app when a file under `sourceFolder` changes, and does not start when
+`NODE_ENV=production`.
+
+### Usage
+
+```bash
+asena console                # free port, opens the browser
+asena console --port 23530   # a fixed port for the console
+asena console --no-open      # print the address only
+asena console --no-watch     # restart by hand only
+```
+
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--port <port>` | The console's own port; `0` picks a free one | A free port |
+| `--no-open` | Do not open the browser | Opens it |
+| `--no-watch` | Do not restart the app when a source file changes | Restarts |
+
+The project needs `@asenajs/asena` 0.13.0 or newer. See [Asena Console](/docs/cli/console) for the panels and the
+security model.
+
 ## asena build
 
 Build the project for production deployment.
@@ -585,6 +609,7 @@ check is the fastest way to rule it in or out.
 | `asena generate exception-handler` | `asena g eh` | Generate an exception handler |
 | `asena generate websocket` | `asena g ws` | Generate a WebSocket namespace |
 | `asena dev start`    | -               | Start development server             |
+| `asena console`      | -               | Run the app with a browser console   |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
 | `asena doctor`       | -               | Check the project for configuration mistakes |
@@ -593,6 +618,7 @@ check is the fastest way to rule it in or out.
 
 ## Related
 
+- [Asena Console](/docs/cli/console) - The browser console for a running app
 - [Configuration](/docs/cli/configuration) - CLI configuration options
 - [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See complete project examples

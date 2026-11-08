@@ -26,6 +26,7 @@ packages accept it as a peer from their next patch release: `@asenajs/ergenecore
 - **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.1.1)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
 - **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
 - **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
+- **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
 
 ---
 
@@ -285,7 +286,7 @@ We welcome contributions in many forms:
 - **v0.10.0** - Released July 2026 (Component lifecycle (`@OnStart` / `@OnStop`), reordered graceful shutdown, signal handling, `keepAlive`, liveness/readiness probes, `server.resolve()`). **Breaking:** start hooks moved from the component scan to `server.start()`
 - **v0.11.0** - Released August 2026 (`imports`, `@Value`, `createTestApp` dependency closure, `asena doctor`, wrapper-based `asena build`, lazy decorator options, drizzle transaction boot guard). **Breaking:** both adapters moved to 4.0.0 for unified context semantics, and every official package took a major to require core 0.11
 - **v0.12.0** - Released October 2026 (Route context contracts, `validatorCache`, OpenAPI from contracts, the `@asenajs/asena/auth` contract, one middleware order on both adapters, canonical duplicate-route detection, `WebSocketOriginMiddleware`). **Breaking:** both adapters moved to 5.0.0 — `RateLimiterMiddleware` keys on the connecting peer
-- **v0.13.0** - In progress (`@ExceptionHandler` with `@Catch` / `@NotFound`, ready-made status exceptions). **Deprecated:** `@Config.onError` and `onNotFound`
+- **v0.13.0** - In progress (`@ExceptionHandler` with `@Catch` / `@NotFound`, ready-made status exceptions, `asena console`). **Deprecated:** `@Config.onError` and `onNotFound`
 - **v1.0.0** - TBD (Plugin system). **Breaking:** removes `@Config.onError` and `onNotFound`
 
 ::: tip Follow Progress
