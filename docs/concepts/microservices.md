@@ -354,8 +354,8 @@ On the receiving side, a failure in a `@MessagePattern` or `@EventPattern` handl
 
 | Handler | What the `@Catch` return value does |
 |---|---|
-| `@MessagePattern` | A value other than `undefined` or a `Response` is a **successful** reply: the caller's `send()` resolves with it. `undefined`, or a `@Catch` that throws, sends the original error back as `ok: false`, so `send()` rejects with `REMOTE_ERROR`. A returned `Response` is declined the same way and logs a warning |
-| `@EventPattern` | Nothing. The `@Catch` observes, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
+| `@MessagePattern` | A value other than `undefined` or a `Response`, `null` included, is a **successful** reply: the caller's `send()` resolves with it. `undefined` sends the original error back as `ok: false`, so `send()` rejects with `REMOTE_ERROR`. A returned `Response` is declined the same way and logs a warning. An error the `@Catch` **throws** replaces the original one, so the caller can be sent a sanitized failure |
+| `@EventPattern` | Nothing. The `@Catch` observes, for 5 seconds at most, then the original error reaches the transport, so no ack, redelivery and DLQ apply unchanged. A returned value logs a warning |
 
 ```typescript
 @Catch(OutOfStockError)
@@ -367,8 +367,13 @@ public outOfStock(error: OutOfStockError, ctx: ExceptionContext) {
 ```
 
 The caller's `send()` resolves with `{ status: 'rejected', ... }`, so the caller has to check
-`status`. To make `send()` reject instead, return `undefined`. See
+`status`. To make `send()` reject instead, return `undefined`, or throw the error the caller
+should see. See
 [Error Handling - `@MessagePattern`](/docs/guides/error-handling#messagepattern-the-return-value-is-the-reply).
+
+A failure set off by a message the `@Catch` itself published is not routed back to `@Catch` while
+it stays inside the process. Across a real broker it is a new failure; see
+[Error Handling](/docs/guides/error-handling#no-feedback-loops).
 
 ---
 

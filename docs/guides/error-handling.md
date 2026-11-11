@@ -149,14 +149,20 @@ answers by returning a `Response`. It may be `async`.
 | `HttpException`, the [status exceptions](#ready-made-status-exceptions), `ContractValidationError`, `isHttpException`, `isValidationError`, `NotFoundRequest` | `@asenajs/asena/adapter` |
 | `ValidationError` (thrown by validator classes) | `@asenajs/ergenecore` or `@asenajs/hono-adapter` |
 
+`@asenajs/asena/exception` exports the two decorators and the context types (`ExceptionContext`,
+`HttpExceptionContext`, `EventExceptionContext`, `MicroserviceExceptionContext`, `ExceptionScope`,
+`ExceptionType`) and nothing else. The table that resolves a thrown value to its handler is built at
+boot and is not part of the public API.
+
 ---
 
 ## Choosing a Handler
 
 ### Most specific wins
 
-The thrown value's constructor chain is walked upward, and the first `@Catch` found on it
-answers. No handler declares an order; the class hierarchy is the order.
+The thrown value's prototype chain is walked upward, and the first `@Catch` found on it answers.
+It is the same test as `instanceof`, so an error class wired up with `util.inherits` matches like
+one declared with `extends`. No handler declares an order; the class hierarchy is the order.
 
 ```typescript
 import { ExceptionHandler } from '@asenajs/asena/decorators';
@@ -237,16 +243,28 @@ So a typed handler can read `error.message` without checking first: values that 
 only ever reach the catch-all. Both may exist side by side. Only **one** catch-all is allowed per
 application; a second one fails the boot.
 
-A catch-all also receives every `ValidationError` and `HttpException` that no narrower `@Catch`
-claimed, which replaces the adapter's own 400 and status envelopes. The boot log says so:
+### Who receives HTTP exceptions
+
+Without a `@Catch(HttpException)`, every `HttpException` goes to the nearest handler above it:
+`@Catch(Error)`, or the catch-all when there is none. That includes each `ValidationError` and the
+auth guard's 401s and 403s, so that handler's answer replaces the adapter's own 400 and status
+envelopes. An info line at boot names the handler:
 
 ```
-@Catch() catch-all ApiExceptionHandler.fallback() will receive every error, including ValidationError and
-HttpException — narrow it with @Catch(HttpException) if the adapter's envelopes should be kept.
+@Catch(Error) ApiExceptionHandler.unexpected() will also receive HttpException, ValidationError and auth 401s —
+add @Catch(HttpException) if the adapter's envelopes should be kept.
 ```
 
-To keep those envelopes, declare `@Catch(HttpException)` next to it, or
-[decline](#the-resolution-chain) them inside the catch-all:
+```
+@Catch() catch-all ApiExceptionHandler.fallback() will receive every error, including HttpException,
+ValidationError and auth 401s — add @Catch(HttpException) if the adapter's envelopes should be kept.
+```
+
+With both a `@Catch(Error)` and a catch-all, the line names `@Catch(Error)`, since it is the one
+that receives them. With a `@Catch(HttpException)` declared there is no line.
+
+To keep those envelopes, declare `@Catch(HttpException)`, or
+[decline](#the-resolution-chain) HTTP exceptions inside the broader handler:
 
 ```typescript
 @Catch()
@@ -349,20 +367,26 @@ default response fires.**
 | | a handler answered | nothing answered, or every link declined or threw |
 |:--|:--|:--|
 | response | yours | the framework's |
-| log | none | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
+| log | one DEBUG line when a `@Catch` answered | `5xx` ERROR + stack · `4xx` DEBUG (INFO when the logger has no `debug`) · `404` INFO |
 
 If your `@Catch` returns a `Response`, you own the response and therefore the record: log it
-there, with your correlation id, and the adapter stays out of the way. If it declines or throws,
-the adapter is the one answering, so it writes the original error rather than letting it
-disappear. The same holds for `@NotFound()`.
+there, with your correlation id, and the adapter stays out of the way. The framework keeps only a
+trace of the original error, at debug level and only when the logger has a `debug` method:
+
+```
+@Catch handler ApiExceptionHandler.orderNotFound() answered: OrderNotFoundError: Order 42 not found
+```
+
+If the `@Catch` declines or throws, the adapter is the one answering, so it writes the original
+error rather than letting it disappear. The same holds for `@NotFound()`, which has no debug line.
 
 The level split exists so a wall of 401s from a bot cannot flood the error stream: only `5xx`
 carries a stack. An unmatched route logs `Route not found:` with `{ path, method, status }` at
 INFO, low enough that a scanner walking `/wp-admin` and `/.env` cannot fill the warning stream,
 high enough that a mistyped route in a deployed client is visible without turning on debug.
 
-Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence all of it,
-including the 404 line. There is no setting that forces a log line for a request your own handler
+Pass `logErrors: false` (`createHonoAdapter` / `createErgenecoreAdapter`) to silence the adapter's
+lines, including the 404 line. Above debug level, nothing is logged for a request your own handler
 answered.
 
 ---
@@ -377,6 +401,9 @@ discriminant, and narrowing on it gives the fields of that scope:
 | `'http'` | a controller, a middleware or a validator | `context`: the adapter's request context |
 | `'event'` | an `@On` handler | `event`, `data`, `source` (`UserEventService.onCreated`; absent for a handler registered on the emitter directly) |
 | `'microservice'` | a `@MessagePattern` or `@EventPattern` handler, or its `onReceive` interceptors | `kind` (`'message'` or `'event'`), `message`, `data`, `source`, `transport` |
+
+`source` is the component name and the method. The component name is the class name unless the
+decorator sets another, as in `@Service('users')`.
 
 The generic of `ExceptionContext<Context>` types `ctx.context` as your adapter's `Context`.
 
@@ -410,15 +437,39 @@ What the `@Catch` method does decides what the caller of `ulak.send()` sees:
 
 | The `@Catch` method | The caller |
 |:--------------------|:-----------|
-| returns a value other than `undefined` or a `Response` | a **successful** reply: `send()` resolves with that value, as if the handler had returned it |
+| returns a value other than `undefined` or a `Response`, `null` included | a **successful** reply: `send()` resolves with that value, as if the handler had returned it |
 | returns `undefined` | the failure: the **original** error reaches the transport, which replies `ok: false`, and `send()` rejects with `REMOTE_ERROR` |
-| throws | the same failure; the `@Catch` method's own error is logged |
-| returns a `Response` | the same failure, and a warning naming the method is logged |
-| does not exist for this type | the same failure |
+| throws | a failure carrying the error the `@Catch` threw: it **replaces** the original, and `send()` rejects with `REMOTE_ERROR` |
+| returns a `Response` | the original failure, and a warning naming the method is logged |
+| does not exist for this type | the original failure |
 
 A returned value is delivered as it is, never inspected. `{ ok: false }` or `{ error: 'OUT_OF_STOCK' }`
 is still a successful reply, and `send()` resolves with it. Return a value only when it is an answer
 the caller is written to act on; **return `undefined` when the caller must see the failure.**
+
+Throwing is how the caller gets a failure that is not the original one. The message of a database
+or driver error can carry table names and queries; a `@Catch` that throws its own error sends that
+one instead:
+
+```typescript
+@Catch(DatabaseError)
+public database(error: DatabaseError, ctx: ExceptionContext) {
+  if (ctx.scope !== 'microservice' || ctx.kind !== 'message') return;
+
+  this.logger.error('Database failure in a message handler', { source: ctx.source, error });
+
+  throw new Error('Service unavailable');
+}
+```
+
+The caller's `send()` rejects with `REMOTE_ERROR` carrying `Service unavailable` instead of the
+driver's message. The exception handling itself logs neither error, so log the original in the
+handler. This is the one scope where a
+throwing `@Catch` is not a decline: on HTTP and in the event scopes its error is logged and the
+original failure carries on.
+
+When a `@Catch` replies, the framework writes the original error at debug level
+(`@Catch handler ApiExceptionHandler.database() answered:`), as it does on HTTP.
 
 A `Response` is an HTTP answer, never a message reply. It typically comes from a handler shared
 between scopes, such as a `@Catch(HttpException)` that returns `error.getResponse()` without checking
@@ -451,8 +502,40 @@ naming the method:
 has no effect in event scopes (@On, @EventPattern); the original error continues unchanged.
 ```
 
+An `@EventPattern` failure waits for its `@Catch` before it goes to the transport, for 5 seconds at
+most. A `@Catch` still running then is left to finish on its own, and the consumer's ack, retry and
+DLQ decision is not held up any longer:
+
+```
+@Catch for @EventPattern OrderEvents.shipped() did not settle within 5000 ms — the original failure
+goes to the transport now; the @Catch keeps running.
+```
+
+An `@On` failure does not wait at all: the error line is written first, and the `@Catch` runs
+after it.
+
 Use these scopes for alerting, metrics and audit. To stop an event from being retried, handle the
 error inside the event handler itself.
+
+### A `@Catch` does not receive its own fallout {#no-feedback-loops}
+
+A `@Catch` that emits an event or sends an in-process message can set off a second failure: the
+`@On` handler it reached throws, or the message handler does. That failure is **not** routed to
+`@Catch` again, in any scope, so a catch-all that reports every error through an event cannot loop
+on a broken listener. The framework default handles it instead (the `@On` error line, the transport's
+failure path), with a warning that names the `@Catch` whose work raised it:
+
+```
+An error was raised by work that @Catch handler ApiExceptionHandler.fallback() started — it is not routed
+to @Catch again, so a handler cannot loop on its own failures; the framework default handles it:
+```
+
+The guard follows the async call chain of the running `@Catch`, including work it started without
+awaiting. It therefore covers `@On` handlers and transports that dispatch inside the process. It
+does **not** follow a message through a real broker: a message a `@Catch` publishes to Redis Streams
+or Kafka comes back on the consumer's own call chain, possibly in another process, and a failure
+in its handler reaches `@Catch` as a new one. A `@Catch` that publishes on failure must not publish
+to a pattern whose handler can fail into the same `@Catch`.
 
 ### Headless applications
 
@@ -839,8 +922,8 @@ public unexpected(error: Error, ctx: ExceptionContext<Context>) {
 }
 ```
 
-A handler that answers also owns the log line: the adapter writes nothing for a request a
-`@Catch` answered.
+A handler that answers also owns the log line: for a request a `@Catch` answered the adapter
+writes nothing, and the framework keeps the original error at debug level only.
 
 ### 4. Use specific status codes
 

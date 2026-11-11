@@ -261,7 +261,9 @@ application continues running normally.
 A `@Catch` method in an [`@ExceptionHandler`](/docs/guides/error-handling) also receives `@On`
 failures, with `ctx.scope === 'event'`, the event name, its data and the failing method as
 `source`. It can only **observe**: the error line above is logged whatever the `@Catch` does, and
-the other handlers keep running. A value it returns has no effect and logs a warning.
+the other handlers keep running. A value it returns has no effect and logs a warning. An `@On`
+failure raised by an event the `@Catch` itself emitted is
+[not routed back to it](/docs/guides/error-handling#no-feedback-loops).
 
 ```typescript
 @Catch(QuotaExceededError)
