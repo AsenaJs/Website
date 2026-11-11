@@ -22191,10 +22191,38 @@ HTTP port: Endpoints then lists nothing to call, and the other panels work as us
 
 ### An app with more than one server
 
-The agent attaches to each server the process starts, and the console follows the most recent one: its components,
-routes and config are what the page describes, and it is the one that runs the actions in
-[Messaging](#messaging). Requests and dispatches of every server in the process are listed, each once, and the metrics
-are those of the process. When the most recent server stops, the one started before it takes over.
+The agent attaches to each `AsenaServer` the process starts, and every one of them is in the same console. With one
+server, the usual case, the page shows no sign of this. With two or more:
+
+- **A Server picker appears in the sidebar**, above the box that names the adapter. It names each server by adapter
+  and port, such as `Ergenecore :3000`, and a headless one by the id the framework gave it, such as
+  `Headless server-2`. The page opens on the server that attached last.
+- **The picked server is the one on screen.** Components, Endpoints, Messaging, Config and Exceptions describe it, and
+  the state in the top bar and the Health card are its own. Memory, CPU, event-loop lag and Output belong to the
+  process, so they are the same whichever server is picked.
+- **Actions go to the picked server.** A request sent from Endpoints goes to its port, and **Run now**, **Emit** and
+  **Send** run on it. Each result says which server answered.
+- **[Requests](#requests) lists every server's records**, each once, under the server whose handler, job or adapter
+  produced it. A **Server** filter narrows the list to one, and the details of a record name its server.
+
+A server that stops while the process runs on stays in the picker, marked `(stopped)`. The page keeps what it
+reported, the top bar reads `Server stopped`, and its actions are off. The other servers keep reporting and
+answering.
+
+### An app whose agent has not reported
+
+The agent attaches when `AsenaServer.start()` finishes. Until then the only live part of the page is the app's output. On
+the first run the other panels wait for the app to report. After a restart they keep what the previous run reported,
+under a note that says so, and Endpoints and Messaging say `The app has not reported yet` in place of their actions.
+When 10 seconds pass without a report, the console says so in the terminal and in Output, and the top bar reads
+`No report yet`:
+
+```
+[asena console] The app's devtools agent has not reported yet (10 s). It attaches when AsenaServer.start() finishes, and never under NODE_ENV=production. Until it reports, the console shows only the app's output.
+```
+
+The console cannot tell an app that is slow to start from one that will never report, so the message names both. A
+slow app fills the page as soon as its `start()` finishes.
 
 ### An app that runs as production
 
@@ -22207,14 +22235,15 @@ warning:
 ```
 
 The warning shows in the terminal and in Output. The other panels have nothing to show, because nothing reports to
-them.
+them, and after 10 seconds the console adds [its own message](#an-app-whose-agent-has-not-reported).
 
 ## The page
 
-The sidebar holds the seven panels. The bar at the top shows the app's state (`Starting`, `Ready`, `Not ready`,
-`Degraded`, `Restarting`, `Stopped`, `Crashed`, or `Disconnected` when the page has lost the console), the current run
-and process id, the uptime, the **Restart** button and the theme switch. The box at the bottom of the sidebar names the
-adapter, the port and the core version the app reports.
+The sidebar holds the seven panels. The bar at the top shows the app's state (`Starting`, `No report yet`, `Ready`,
+`Not ready`, `Degraded`, `Server stopped`, `Restarting`, `Stopped`, `Crashed`, or `Disconnected` when the page has lost
+the console), the current run and process id, the uptime, the **Restart** button and the theme switch. The box at the
+bottom of the sidebar names the adapter, the port and the core version the app reports; in
+[an app with more than one server](#an-app-with-more-than-one-server) the picker above it chooses the server.
 
 ### Components
 
@@ -22332,13 +22361,15 @@ Selecting a row opens its details:
   this request was in scope, up to 100 entries or 16 KiB. Concurrent requests do not mix. See
   [How output is captured](#how-output-is-captured).
 - **Replay in Endpoints** opens the route with this request's method and path values. Headers and bodies are not
-  recorded, so fill those in again. A dispatch is run again from Messaging instead.
+  recorded, so fill those in again. A dispatch is run again from Messaging instead. In
+  [an app with more than one server](#an-app-with-more-than-one-server), a request another server served is replayed
+  after picking that server in the sidebar.
 
 #### How output is captured
 
 In a process the console started, the agent wraps `console.log`, `info`, `debug`, `trace`, `dir`, `table`, `warn`,
-`error` and `assert`, and `process.stdout.write` / `process.stderr.write`, once, when it loads, which is before your
-entry file runs. The wrappers stay for the life of the process. Outside a request or dispatch they only pass the call
+`error` and `assert`, and `process.stdout.write` / `process.stderr.write`, once, when it loads, which is before any
+module of your app does. The wrappers stay for the life of the process. Outside a request or dispatch they only pass the call
 on, and every write still reaches its stream.
 
 - Inside a request, a console call whose arguments are plain data (primitives, and plain objects and arrays of them)
@@ -22346,8 +22377,9 @@ on, and every write still reaches its stream.
   rendered once for the record and the original method prints that text, so inspecting the arguments runs once.
 - `console.count`, the `console.time` family and the label and indent of `console.group` are not part of the record.
 - A console method that something replaced before the agent loaded, such as a preload script, is left as it is. The
-  record then holds only what that replacement writes to `process.stdout` or `process.stderr`. A logger that wraps the
-  console from your own code loads after the agent, so what it passes on to the console is recorded.
+  record then holds only what that replacement writes to `process.stdout` or `process.stderr`.
+- A console method your own code replaces is replaced after the agent loaded, so the record holds the line as the
+  replacement prints it. A wrapper that redacts secrets before it calls the original keeps them out of the record too.
 - A request's chain holds 100 steps at most. Past that each new step replaces the last one kept, so the final step
   shown is always the most recent one.
 
@@ -22372,6 +22404,7 @@ An action the app cannot run ends as failed with the reason:
 | Reason | When |
 |:-------|:-----|
 | `The server is stopping; the command was not run` | The action arrived after the app began to stop |
+| `No attached server has the id "..."; the command was not run` | The action arrived after its server stopped, in an app with more than one |
 | `@Schedule job "..." not run: it is already running` | **Run now** on a job whose previous run has not finished. A job never overlaps itself |
 | `@Schedule job "..." not run: the scheduler is stopped` | **Run now** after the app called `stopAll()` on its `CronRunner` |
 
