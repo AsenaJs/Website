@@ -141,16 +141,18 @@ protected async onOpen(ws: Socket): Promise<void> {
   ws.binaryType = 'arraybuffer';
 }
 
-protected async onMessage(ws: Socket, message: Buffer | string): Promise<void> {
+protected async onMessage(ws: Socket, message: string | ArrayBuffer): Promise<void> {
   if (typeof message !== 'string') {
-    const view = new DataView(message as unknown as ArrayBuffer);
+    const view = new DataView(message);
     // ...
   }
 }
 ```
 
-The `message` parameter is typed `Buffer | string` whatever the socket is set to, so cast it to the
-type you asked for. A value Bun does not accept throws, and the socket keeps the type it had.
+`AsenaWebSocketService` types `message` as `string | Buffer | ArrayBuffer | Uint8Array | Blob`, and
+an override may declare only the types its sockets receive, as above, so no cast is needed.
+TypeScript does not check that declaration against `binaryType`: keep the two in step. A value Bun
+does not accept throws, and the socket keeps the type it had.
 
 ### ws.data
 

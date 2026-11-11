@@ -2149,7 +2149,7 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.2.0)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
 - **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
 - **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
-- **[`AsenaSocket.binaryType`](/docs/concepts/websocket#ws-binarytype)** - setting it reaches the underlying Bun socket, so `onMessage` receives binary frames as the type the socket asked for
+- **[`AsenaSocket.binaryType`](/docs/concepts/websocket#ws-binarytype)** - setting it reaches the underlying Bun socket, so `onMessage` receives binary frames as the type the socket asked for, and its `message` parameter is typed for each of them
 - **[Signal exit under `bun --hot` and `bun --watch`](/docs/concepts/lifecycle#under-the-file-watcher)** - a shutdown signal ends the process once every running `stop()` has settled, and a second signal during the drain exits with `128 +` the signal number
 - **[Exit code of a signal-triggered shutdown](/docs/concepts/lifecycle#exit-code)** - `1` when `stop()` rejects or an `@OnStop` hook throws, rejects or times out, with or without a file watcher, and a non-zero `process.exitCode` the application set is kept; an explicit `server.stop()` does not set the exit code
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
@@ -10245,16 +10245,18 @@ protected async onOpen(ws: Socket): Promise<void> {
   ws.binaryType = 'arraybuffer';
 }
 
-protected async onMessage(ws: Socket, message: Buffer | string): Promise<void> {
+protected async onMessage(ws: Socket, message: string | ArrayBuffer): Promise<void> {
   if (typeof message !== 'string') {
-    const view = new DataView(message as unknown as ArrayBuffer);
+    const view = new DataView(message);
     // ...
   }
 }
 ```
 
-The `message` parameter is typed `Buffer | string` whatever the socket is set to, so cast it to the
-type you asked for. A value Bun does not accept throws, and the socket keeps the type it had.
+`AsenaWebSocketService` types `message` as `string | Buffer | ArrayBuffer | Uint8Array | Blob`, and
+an override may declare only the types its sockets receive, as above, so no cast is needed.
+TypeScript does not check that declaration against `binaryType`: keep the two in step. A value Bun
+does not accept throws, and the socket keeps the type it had.
 
 ### ws.data
 
