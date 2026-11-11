@@ -121,12 +121,12 @@ interface AsenaConfig<C extends AsenaContext<any, any> = AsenaContext<any, any>>
   /**
    * @deprecated Removed in 1.0. Use an `@ExceptionHandler` class with `@Catch()` methods.
    */
-  onError?(error: Error, context: C): Response | Promise<Response>;
+  onError?(error: Error, context: C): Response | undefined | Promise<Response | undefined>;
 
   /**
    * @deprecated Removed in 1.0. Use a `@NotFound()` method in an `@ExceptionHandler` class.
    */
-  onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>;
+  onNotFound?(context: C, request: NotFoundRequest): Response | undefined | Promise<Response | undefined>;
 
   /**
    * Global middleware configuration with pattern-based filtering
@@ -418,8 +418,8 @@ Use `@Catch` and `@NotFound()` methods in an `@ExceptionHandler` class instead. 
 :::
 
 ```typescript
-onError?(error: Error, context: C): Response | Promise<Response>
-onNotFound?(context: C, request: NotFoundRequest): Response | Promise<Response>
+onError?(error: Error, context: C): Response | undefined | Promise<Response | undefined>
+onNotFound?(context: C, request: NotFoundRequest): Response | undefined | Promise<Response | undefined>
 ```
 
 Both hooks still run, as the last link before the adapter's default answer:
@@ -430,7 +430,8 @@ Both hooks still run, as the last link before the adapter's default answer:
 ```
 
 `onError` is called only after every `@Catch` declined, and `onNotFound` only when no
-`@NotFound()` answered. Returning nothing declines to the adapter default. Each hook logs a
+`@NotFound()` answered. Returning `undefined` declines to the adapter default, and the return
+types say so, so a hook that answers only some requests needs no cast. Each hook logs a
 deprecation warning at boot.
 
 ## globalMiddlewares() Method
