@@ -36,6 +36,7 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Signal exit under `bun --hot` and `bun --watch`](/docs/concepts/lifecycle#under-the-file-watcher)** - a shutdown signal ends the process once every running `stop()` has settled, and a second signal during the drain exits with `128 +` the signal number
 - **[Exit code of a signal-triggered shutdown](/docs/concepts/lifecycle#exit-code)** - `1` when `stop()` rejects or an `@OnStop` hook throws, rejects or times out, with or without a file watcher, and a non-zero `process.exitCode` the application set is kept; an explicit `server.stop()` does not set the exit code
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
+- **[Redis cache decorators](/docs/packages/redis#caching-decorators)** *(asena-redis 4.1.0)* - `@Cacheable`, `@CachePut` and `@CacheEvict` put the caching policy on a service method instead of repeating the read, compute and write steps inside it
 
 ### New in v0.12
 
@@ -128,7 +129,7 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[@asenajs/asena-auth](/docs/packages/auth)** - Authentication behind core's auth contract: server-side sessions and Better Auth, `@Protected` / `@Public` / `@Roles` route guards, WebSocket upgrade authentication and a test provider
 - **[@asenajs/asena-drizzle](/docs/packages/drizzle)** - Drizzle ORM integration with repository pattern
 - **[@asenajs/asena-openapi](/docs/packages/openapi)** - Automatic OpenAPI 3.1 spec generation from existing validators
-- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
+- **[@asenajs/asena-redis](/docs/packages/redis)** - Redis client with [cache decorators](/docs/packages/redis#caching-decorators), multi-pod WebSocket transport (pub/sub) and production-grade microservice transport (Redis Streams: consumer groups, retry + DLQ, graceful drain)
 - **[@asenajs/asena-kafka](/docs/packages/kafka)** - Kafka microservice transport with deterministic topic management, broker-tracked retry attempts, DLQ, and external-topic interop
 - **[@asenajs/asena-otel](/docs/packages/opentelemetry)** - OpenTelemetry tracing with automatic instrumentation, including distributed tracing across microservices via `otelMessaging()`
 

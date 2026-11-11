@@ -53,7 +53,7 @@
 - [Asena Drizzle](https://asena.sh/raw/packages/drizzle.md): Type-safe database integration with Repository pattern for Asena
 - [Asena OpenAPI](https://asena.sh/raw/packages/openapi.md): Zero-config OpenAPI 3.1 spec generation from your route context contracts and validators, with built-in Swagger UI and Scalar API Reference
 - [Asena OpenTelemetry](https://asena.sh/raw/packages/opentelemetry.md): Automatic HTTP tracing, method-level auto-tracing, metrics, and distributed tracing for Asena
-- [Asena Redis](https://asena.sh/raw/packages/redis.md): Redis integration with @Redis - multi-pod WebSocket transport and a Redis Streams microservice transport with consumer groups, retry and DLQ
+- [Asena Redis](https://asena.sh/raw/packages/redis.md): Redis integration with @Redis - cache decorators (@Cacheable, @CachePut, @CacheEvict), multi-pod WebSocket transport and a Redis Streams microservice transport with consumer groups, retry and DLQ
 - [Asena Kafka](https://asena.sh/raw/packages/kafka.md): Kafka for AsenaJS - a decorator-based produce/consume client, plus a microservice transport with broker-tracked delivery attempts
 
 ## Asena CLI
