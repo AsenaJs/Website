@@ -337,6 +337,8 @@ const server = await AsenaServerFactory.create({
 | `timeout` | `number` | `5000` | Per-`@OnStop` ceiling, in ms. `stop({ hookTimeout })` overrides it for one call |
 | `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began. [Under the file watcher](#under-the-file-watcher) the process exits without it |
 | `onUnhandledError` | `boolean` | `false` | Treat an uncaught exception or unhandled rejection as a shutdown request: log, stop, exit non-zero |
+| `closeActiveConnections` | `boolean` | `false` | What a signal-triggered shutdown does to in-flight HTTP requests: `false` drains them, `true` closes them at once. An explicit `server.stop()` keeps its own default of `true` |
+| `drainTimeout` | `number` | transport's own | How long a signal-triggered shutdown lets the microservice transports drain in-flight messages, in ms |
 
 ### The exit code {#exit-code}
 
@@ -347,11 +349,19 @@ released. It counts as failed when:
 - `stop()` rejects, because a teardown step such as the adapter or a transport did not close, or
 - an `@OnStop` hook throws, rejects or runs out of `shutdown.timeout`.
 
-Each failure is logged, and the remaining hooks and teardown steps still run. Without a file
-watcher the process still exits on its own, when the event loop empties: the framework sets
-`process.exitCode` to `1` and leaves a non-zero code your application already set as it is.
-[Under `bun --hot` and `bun --watch`](#under-the-file-watcher) the framework ends the process
-with that code itself.
+Each failure is logged, and the remaining hooks and teardown steps still run.
+
+A non-zero `process.exitCode` your application set is kept, after a failed shutdown and after a
+clean one:
+
+```typescript
+process.exitCode = 3;   // the process exits with 3 once a signal has stopped the server
+```
+
+The rule is the same with and without a file watcher; what differs is who ends the process.
+Without one it exits on its own when the event loop empties, with the code in `process.exitCode`.
+[Under `bun --hot` and `bun --watch`](#under-the-file-watcher) the framework ends it with that
+code itself.
 
 An explicit `await server.stop()` does not set the exit code. A failed step makes its promise
 reject, and a failed `@OnStop` hook is logged; what the process exits with is up to the caller.
@@ -380,7 +390,7 @@ a shutdown signal ends the process itself rather than leaving it to the event lo
 | | Without the watcher | Under `--hot` / `--watch` |
 |:--|:--------------------|:--------------------------|
 | A signal arrives | `stop()` runs; the process exits when the event loop empties | `stop()` runs; the process exits once **every** `stop()` running in it has settled, an explicit `stop()` on another server included |
-| [Exit code](#exit-code) | `0`, or `1` when the shutdown failed, through `process.exitCode` | `0`, or `1` when the shutdown failed |
+| [Exit code](#exit-code) | a non-zero `process.exitCode` the application set, else `1` when the shutdown failed and `0` when it was clean | the same code |
 | Another listener of the same signal | runs alongside | is waited for until the event loop empties, for `shutdown.timeout` at most (default `5000` ms) |
 | `forceExitAfter` | the only thing that ends a process a leaked handle holds open | still a deadline, but the process ends without it too |
 | An explicit `server.stop()` with no signal | never exits the process | never exits the process |
