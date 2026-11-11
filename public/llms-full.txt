@@ -2149,6 +2149,8 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.2.0)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
 - **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
 - **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
+- **[`AsenaSocket.binaryType`](/docs/concepts/websocket#ws-binarytype)** - setting it reaches the underlying Bun socket, so `onMessage` receives binary frames as the type the socket asked for
+- **[Signal exit under `bun --hot` and `bun --watch`](/docs/concepts/lifecycle#under-the-file-watcher)** - a shutdown signal ends the process once every running `stop()` has settled, with code `1` when one failed, and a second signal during the drain exits with `128 +` the signal number
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
 
 ### New in v0.12
@@ -5999,11 +6001,37 @@ const server = await AsenaServerFactory.create({
 |:-------|:-----|:--------|:------------|
 | `signals` | `boolean \| NodeJS.Signals[]` | `true` | `true` covers `SIGTERM`, `SIGINT`, `SIGHUP`. Pass a list to narrow it, or `false` to own the signals yourself |
 | `timeout` | `number` | `5000` | Per-`@OnStop` ceiling, in ms. `stop({ hookTimeout })` overrides it for one call |
-| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began |
+| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began. [Under the file watcher](#under-the-file-watcher) the process exits without it |
 | `onUnhandledError` | `boolean` | `false` | Treat an uncaught exception or unhandled rejection as a shutdown request: log, stop, exit non-zero |
 
-A second signal while a shutdown is already running exits immediately with code `130` — someone
-pressing `Ctrl+C` again because the first one looked stuck means it.
+### A second signal
+
+A second signal while a signal-triggered shutdown is still draining ends the process at once —
+someone pressing `Ctrl+C` again because the first one looked stuck means it. The exit code is
+`128 +` the signal number, the code a shell reports for a process the signal killed:
+
+| Second signal | Exit code |
+|:--------------|:----------|
+| `SIGINT` (`Ctrl+C`) | `130` |
+| `SIGTERM` | `143` |
+| `SIGHUP` | `129` |
+
+A warning is logged first: `SIGINT received again during shutdown, exiting now`. It holds when
+another library listens to the same signal too, such as a telemetry exporter with its own hook,
+and under `bun --watch` and `bun --hot`.
+
+### Under `bun --hot` and `bun --watch` {#under-the-file-watcher}
+
+Bun's file watcher keeps a process open after everything in it has stopped, so in these two modes
+a shutdown signal ends the process itself rather than leaving it to the event loop:
+
+| | Without the watcher | Under `--hot` / `--watch` |
+|:--|:--------------------|:--------------------------|
+| A signal arrives | `stop()` runs; the process exits when the event loop empties | `stop()` runs; the process exits once **every** `stop()` running in it has settled, an explicit `stop()` on another server included |
+| Exit code | the event loop's, normally `0` | `0`, or `1` when a signal-triggered stop failed (the failure is logged) |
+| Another listener of the same signal | runs alongside | is waited for until the event loop empties, for `shutdown.timeout` at most (default `5000` ms) |
+| `forceExitAfter` | the only thing that ends a process a leaked handle holds open | still a deadline, but the process ends without it too |
+| An explicit `server.stop()` with no signal | never exits the process | never exits the process |
 
 ::: warning `forceExitAfter` is a deadline on the process, not on `stop()`
 The case worth protecting against is a `stop()` that completed cleanly and left something ref'd
@@ -10171,6 +10199,34 @@ Unique identifier for the socket connection.
 console.log(`Socket ID: ${ws.id}`);
 ```
 
+### ws.binaryType
+
+The type `onMessage` receives a binary frame as. Setting it reaches the underlying Bun socket, so it
+changes what the frames after it are delivered as. Text frames are always strings.
+
+| Value | `onMessage` receives |
+|:------|:---------------------|
+| `'nodebuffer'` (Bun's default) | `Buffer` |
+| `'arraybuffer'` | `ArrayBuffer` |
+| `'uint8array'` | `Uint8Array` |
+| `'blob'` | `Blob` |
+
+```typescript
+protected async onOpen(ws: Socket): Promise<void> {
+  ws.binaryType = 'arraybuffer';
+}
+
+protected async onMessage(ws: Socket, message: Buffer | string): Promise<void> {
+  if (typeof message !== 'string') {
+    const view = new DataView(message as unknown as ArrayBuffer);
+    // ...
+  }
+}
+```
+
+The `message` parameter is typed `Buffer | string` whatever the socket is set to, so cast it to the
+type you asked for. A value Bun does not accept throws, and the socket keeps the type it had.
+
 ### ws.data
 
 Custom data attached to the socket (typed). It holds 3 values.
@@ -13645,6 +13701,7 @@ export class CronController {
 | `getJobNames()` | `string[]` | Get all registered job names |
 | `registerJob(name, cron, fn)` | `void` | Register a job programmatically |
 | `startAll()` / `stopAll()` | `void` | Start or stop every registered job |
+| `runNow(name)` | `Promise<void>` | Run a registered job once, now, without touching its schedule. See [Running a job on demand](#running-a-job-on-demand) |
 | `clearJobs()` | `void` | Stop and drop all registered jobs |
 | `jobCount` | `number` | Number of registered jobs |
 | `hasRunningJobs` | `boolean` | Whether any job is **scheduled** (started and not stopped) - not whether one is executing right now |
@@ -13654,6 +13711,31 @@ CronRunner starts all registered jobs when the server is ready and stops them du
 
 Relative to [component lifecycle hooks](/docs/concepts/lifecycle): jobs start **after** every `@OnStart` has returned, and stop **before** any `@OnStop` runs — the first step of `server.stop()` is "take no new work". A job already executing when shutdown begins is not cancelled; `stopAll()` only unschedules future runs.
 :::
+
+### Running a job on demand
+
+`runNow(name)` runs a job through the same path a timed run takes, so a failure is logged the same
+way, and then rejects with it. The name is the one `getJobNames()` lists.
+
+```typescript
+@Post('/:name/run')
+public async run(context: Context) {
+  await this.cronRunner.runNow(context.getParam('name'));
+
+  return context.send({ ran: true });
+}
+```
+
+A job never runs concurrently with itself, and nothing runs once the scheduler has stopped:
+
+| Situation | Result |
+|:----------|:-------|
+| No job has that name | rejects: `No @Schedule job named "..."` |
+| `stopAll()` ran, as it does at the start of `server.stop()` | rejects: `@Schedule job "..." not run: the scheduler is stopped`. `startAll()` lifts it |
+| The job is still executing, from a timed run or an earlier `runNow` | rejects: `@Schedule job "..." not run: it is already running` |
+| A timed run comes due while a `runNow` is still executing | the timed run is skipped with a warning, `Skipped "...": the previous run has not finished`, and the next one is scheduled as usual |
+
+**Run now** in the [Asena console](/docs/cli/console#messaging) calls this method.
 
 ## Real-World Examples
 

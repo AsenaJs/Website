@@ -124,6 +124,34 @@ Unique identifier for the socket connection.
 console.log(`Socket ID: ${ws.id}`);
 ```
 
+### ws.binaryType
+
+The type `onMessage` receives a binary frame as. Setting it reaches the underlying Bun socket, so it
+changes what the frames after it are delivered as. Text frames are always strings.
+
+| Value | `onMessage` receives |
+|:------|:---------------------|
+| `'nodebuffer'` (Bun's default) | `Buffer` |
+| `'arraybuffer'` | `ArrayBuffer` |
+| `'uint8array'` | `Uint8Array` |
+| `'blob'` | `Blob` |
+
+```typescript
+protected async onOpen(ws: Socket): Promise<void> {
+  ws.binaryType = 'arraybuffer';
+}
+
+protected async onMessage(ws: Socket, message: Buffer | string): Promise<void> {
+  if (typeof message !== 'string') {
+    const view = new DataView(message as unknown as ArrayBuffer);
+    // ...
+  }
+}
+```
+
+The `message` parameter is typed `Buffer | string` whatever the socket is set to, so cast it to the
+type you asked for. A value Bun does not accept throws, and the socket keeps the type it had.
+
 ### ws.data
 
 Custom data attached to the socket (typed). It holds 3 values.

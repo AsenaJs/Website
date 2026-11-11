@@ -32,6 +32,8 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Non-`Error` throws on the Hono adapter](/docs/guides/error-handling#catch-is-not-catch-error)** *(hono-adapter 5.2.0)* - `throw 'text'` or a thrown plain object reaches the `@Catch()` catch-all unchanged, and with nothing answering the adapter answers `500`, as Ergenecore does
 - **[`asena generate exception-handler`](/docs/cli/commands#generate-exception-handler)** *(CLI 0.13.0)* - scaffolds an `@ExceptionHandler` with an HTTP catch-all; `asena generate config` emits a `@Config` class without `onError`
 - **`@Config.onError` and `onNotFound` deprecated** - they keep running as the last link before the adapter default and log a warning at boot; removed in 1.0.0
+- **[`AsenaSocket.binaryType`](/docs/concepts/websocket#ws-binarytype)** - setting it reaches the underlying Bun socket, so `onMessage` receives binary frames as the type the socket asked for
+- **[Signal exit under `bun --hot` and `bun --watch`](/docs/concepts/lifecycle#under-the-file-watcher)** - a shutdown signal ends the process once every running `stop()` has settled, with code `1` when one failed, and a second signal during the drain exits with `128 +` the signal number
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
 
 ### New in v0.12

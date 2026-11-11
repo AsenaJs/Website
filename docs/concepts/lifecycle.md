@@ -335,11 +335,37 @@ const server = await AsenaServerFactory.create({
 |:-------|:-----|:--------|:------------|
 | `signals` | `boolean \| NodeJS.Signals[]` | `true` | `true` covers `SIGTERM`, `SIGINT`, `SIGHUP`. Pass a list to narrow it, or `false` to own the signals yourself |
 | `timeout` | `number` | `5000` | Per-`@OnStop` ceiling, in ms. `stop({ hookTimeout })` overrides it for one call |
-| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began |
+| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began. [Under the file watcher](#under-the-file-watcher) the process exits without it |
 | `onUnhandledError` | `boolean` | `false` | Treat an uncaught exception or unhandled rejection as a shutdown request: log, stop, exit non-zero |
 
-A second signal while a shutdown is already running exits immediately with code `130` — someone
-pressing `Ctrl+C` again because the first one looked stuck means it.
+### A second signal
+
+A second signal while a signal-triggered shutdown is still draining ends the process at once —
+someone pressing `Ctrl+C` again because the first one looked stuck means it. The exit code is
+`128 +` the signal number, the code a shell reports for a process the signal killed:
+
+| Second signal | Exit code |
+|:--------------|:----------|
+| `SIGINT` (`Ctrl+C`) | `130` |
+| `SIGTERM` | `143` |
+| `SIGHUP` | `129` |
+
+A warning is logged first: `SIGINT received again during shutdown, exiting now`. It holds when
+another library listens to the same signal too, such as a telemetry exporter with its own hook,
+and under `bun --watch` and `bun --hot`.
+
+### Under `bun --hot` and `bun --watch` {#under-the-file-watcher}
+
+Bun's file watcher keeps a process open after everything in it has stopped, so in these two modes
+a shutdown signal ends the process itself rather than leaving it to the event loop:
+
+| | Without the watcher | Under `--hot` / `--watch` |
+|:--|:--------------------|:--------------------------|
+| A signal arrives | `stop()` runs; the process exits when the event loop empties | `stop()` runs; the process exits once **every** `stop()` running in it has settled, an explicit `stop()` on another server included |
+| Exit code | the event loop's, normally `0` | `0`, or `1` when a signal-triggered stop failed (the failure is logged) |
+| Another listener of the same signal | runs alongside | is waited for until the event loop empties, for `shutdown.timeout` at most (default `5000` ms) |
+| `forceExitAfter` | the only thing that ends a process a leaked handle holds open | still a deadline, but the process ends without it too |
+| An explicit `server.stop()` with no signal | never exits the process | never exits the process |
 
 ::: warning `forceExitAfter` is a deadline on the process, not on `stop()`
 The case worth protecting against is a `stop()` that completed cleanly and left something ref'd
