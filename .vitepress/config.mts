@@ -73,7 +73,8 @@ export default defineConfig({
 
         nav: [
             {text: "Home", link: "/"},
-            {text: "Docs", link: "/docs/", activeMatch: "^/docs/(?!examples|benchmarks|showcase|roadmap)"},
+            {text: "Docs", link: "/docs/", activeMatch: "^/docs/(?!examples|benchmarks|showcase|roadmap|cli/console)"},
+            {text: "Console", link: "/docs/cli/console"},
             {text: "Examples", link: "/docs/examples"},
             {text: "Benchmarks", link: "/docs/benchmarks"},
             {text: "Showcase", link: "/docs/showcase"},

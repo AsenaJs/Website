@@ -118,6 +118,35 @@ export class UserController {
 
 <TypeShowcase />
 
+<section class="lp-section lp-section-tight" id="console">
+
+<div class="lp-wrap">
+
+<div class="lp-console" data-reveal>
+
+<div class="lp-console-head">
+<span class="lp-eyebrow">Asena Console</span>
+<h2 class="lp-h2">See the app you wired</h2>
+<p class="lp-lead">One command runs your app in development and opens a page for it: the dependency graph the container built, memory and output as they move, every route ready to call, and each request followed through the chain that handled it.</p>
+<CopyCmd cmd="asena console" />
+</div>
+
+<a class="lp-console-shot" href="/docs/cli/console">
+<span class="lp-console-bar"><i></i><i></i><i></i><b>127.0.0.1:41873</b></span>
+<img src="/images/console/components.png" width="2880" height="1800" loading="lazy" alt="The Asena Console Components panel: the dependency graph of a task-list app, with TaskService selected and the inspector listing what it injects and who uses it" />
+</a>
+
+<div class="lp-console-foot">
+<div class="lp-pills"><span class="lp-pill">Component graph</span><span class="lp-pill">Runtime</span><span class="lp-pill">Endpoints</span><span class="lp-pill">Requests</span><span class="lp-pill">Messaging</span><span class="lp-pill">Config</span><span class="lp-pill">Exceptions</span></div>
+<a class="lp-more" href="/docs/cli/console">Tour the console →</a>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
 <section class="lp-bench lp-bleed lp-section">
 
 <div class="lp-wrap">
