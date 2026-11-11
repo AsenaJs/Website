@@ -252,8 +252,29 @@ export class TestService {
 ```
 
 ::: tip Errors are caught and logged
-Errors are automatically caught and logged. Your application continues running normally.
+Errors are automatically caught and logged with an `[EventDispatchService]` error line. Your
+application continues running normally.
 :::
+
+### Observing failures with `@Catch`
+
+A `@Catch` method in an [`@ExceptionHandler`](/docs/guides/error-handling) also receives `@On`
+failures, with `ctx.scope === 'event'`, the event name, its data and the failing method as
+`source`. It can only **observe**: the error line above is logged whatever the `@Catch` does, and
+the other handlers keep running. A value it returns has no effect and logs a warning. An `@On`
+failure raised by an event the `@Catch` itself emitted is
+[not routed back to it](/docs/guides/error-handling#no-feedback-loops).
+
+```typescript
+@Catch(QuotaExceededError)
+public async quota(error: QuotaExceededError, ctx: ExceptionContext) {
+  if (ctx.scope === 'event') {
+    await this.metrics.increment('event.quota_exceeded', { event: ctx.event });
+  }
+}
+```
+
+See [Error Handling - Scopes](/docs/guides/error-handling#scopes).
 
 ---
 

@@ -152,6 +152,7 @@ export default defineConfig({
                     {text: "Overview", link: "/docs/cli/overview"},
                     {text: "Installation", link: "/docs/cli/installation"},
                     {text: "Commands", link: "/docs/cli/commands"},
+                    {text: "Console", link: "/docs/cli/console"},
                     {text: "Configuration", link: "/docs/cli/configuration"},
                     {text: "Suffix Configuration", link: "/docs/cli/suffix-configuration"},
                     {text: "Examples", link: "/docs/cli/examples"},

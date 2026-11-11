@@ -16,6 +16,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 - **Code Generation** - Generate controllers, services, middleware, and more
 - **Build System** - Bundle your application for production
 - **Development Mode** - One-shot build and run with `asena dev start`; use the scaffolded `bun run dev:hot` for hot reload
+- **Console** - `asena console` runs the app with a browser page for its component graph, requests, logs and handlers
 - **Diagnostics** - `asena doctor` checks the project for the configuration mistakes that only surface in production
 - **Multi-Adapter Support** - Works with both Ergenecore and Hono adapters
 
@@ -30,12 +31,17 @@ Asena CLI provides essential tools for building and managing Asena applications:
   <div class="info-card">
     <span class="ic-kicker">🔧 Generation</span>
     <div class="ic-title">Code Generation</div>
-    <p class="ic-desc">Generate controllers with route handlers, services with business logic, middleware, config classes and WebSocket namespaces.</p>
+    <p class="ic-desc">Generate controllers with route handlers, services with business logic, middleware, config classes, exception handlers and WebSocket namespaces.</p>
   </div>
   <div class="info-card">
     <span class="ic-kicker">⚡ Development</span>
     <div class="ic-title">Fast Development</div>
     <p class="ic-desc">One-shot build and run — the CLI discovers and registers all your components automatically. No manual imports needed.</p>
+  </div>
+  <div class="info-card">
+    <span class="ic-kicker">🧭 Console</span>
+    <div class="ic-title">asena console</div>
+    <p class="ic-desc">Run the app in development with a browser page to read its dependency graph, call its routes, follow a request through its chain and run a schedule.</p>
   </div>
   <div class="info-card">
     <span class="ic-kicker">📦 Production</span>
@@ -74,6 +80,7 @@ asena dev start
 
 - [Installation](/docs/cli/installation) - Install and verify the CLI
 - [Commands](/docs/cli/commands) - All available commands and options
+- [Console](/docs/cli/console) - The browser console for a running app
 - [Configuration](/docs/cli/configuration) - Configure your project
 - [Examples](/docs/cli/examples) - Step-by-step tutorials
 

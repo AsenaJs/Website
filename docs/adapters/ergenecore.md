@@ -150,7 +150,7 @@ const adapter = createErgenecoreAdapter({
 | `logger`            | `ServerLogger`               | `undefined` | Custom logger instance         |
 | `enableWebSocket`   | `boolean`                    | `true`      | Enable WebSocket support       |
 | `websocketAdapter`  | `ErgenecoreWebsocketAdapter` | Auto        | Custom WebSocket adapter       |
-| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `onError`/`onNotFound` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
+| `logErrors`         | `boolean`                    | `true`      | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
 ### createProductionAdapter(options?)
 
@@ -517,66 +517,68 @@ Extend `ConfigService` for server configuration:
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
-import type { NotFoundRequest } from '@asenajs/asena/adapter';
+import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
   globalMiddlewares() {
     return [GlobalCors, ApiRateLimiter];
   }
+}
+```
 
-  onError(error: Error, context: Context): Response | Promise<Response> {
-    return context.send({ error: 'Something went wrong' }, 500);
+### Error Handling
+
+Errors and unmatched routes are answered by an `@ExceptionHandler` class, not by the config:
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, NotFound, type ExceptionContext } from '@asenajs/asena/exception';
+import { HttpException, type HttpExceptionLike, type NotFoundRequest } from '@asenajs/asena/adapter';
+import type { Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(HttpException)
+  public http(error: HttpExceptionLike, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
+    return error.getResponse?.() ?? ctx.context.send({ error: error.message }, error.status);
   }
 
-  onNotFound(context: Context, request: NotFoundRequest): Response | Promise<Response> {
+  @NotFound()
+  public missing(context: Context, request: NotFoundRequest) {
     return context.send({ title: 'Not Found', status: 404, instance: request.path }, 404);
   }
 }
 ```
 
-### The two handlers do not overlap
+`@Catch` is for something your code **threw**. `@NotFound()` is for a request that matched **no
+route** — a routing outcome, not a failure — so an unmatched route never reaches `@Catch`, not even
+a catch-all. A file that `@StaticServe` cannot find reaches `@NotFound()` too; the per-route
+`StaticServeService.onNotFound` still runs first when you declare one.
 
-`onError` is for something your code **threw**. `onNotFound` is for a request that matched **no
-route** — a routing outcome, not a failure — so neither handler has to ask which case it is looking
-at. An unmatched route never reaches `onError`.
-
-`request.path` is the path only, with no origin and no query string, and `request.method` is
-normalised by the adapter, so the same handler body works unchanged on the Hono adapter. With no
-`onNotFound` declared, both adapters answer `{"error":"Not Found"}` with a 404.
-
-A *domain* 404 — the route exists, the record does not — is still a throw, and still goes to
-`onError`:
+A *domain* 404 — the route exists, the record does not — is a throw, and goes to `@Catch`:
 
 ```typescript
-import { HttpException } from '@asenajs/asena/adapter';
+import { NotFoundException } from '@asenajs/asena/adapter';
 
-throw new HttpException(404, { error: 'User not found' });
+throw new NotFoundException({ error: 'User not found' });
 ```
 
-`HttpException` lives in the framework core, not in this adapter, so the same throw works
-unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports it under the name it has always
-had, and that re-export is the same class object.
+`HttpException` and its status subclasses live in the framework core, not in this adapter, so the
+same throw works unchanged on the Hono adapter. `@asenajs/ergenecore` re-exports `HttpException`
+under the name it has always had, and that re-export is the same class object.
 
-::: warning `onNotFound` also catches missing static files
-A file that `@StaticServe` cannot find reaches this hook too, so both adapters answer the same
-body. The per-route `StaticServeService.onNotFound` still runs first when you declare one.
-:::
-
-### Every thrown error reaches `onError` first
-
-Including `HttpException`, so you can reshape your own 4xx envelopes the same way on both
-adapters. The adapter falls back to `getResponse()` (or a generic 500) only when there is no
-handler, when it returns nothing, or when it throws.
-
-With no `onError` declared, an unhandled error answers `{"error":"Internal Server Error"}`. The
-thrown message is deliberately not echoed to the caller — it is written to the log with its stack
-instead.
+When nothing answers, this adapter answers from the error itself: an `HttpException` from its
+own status and body, a validation failure with its 400 envelope, anything else with
+`{"error":"Internal Server Error"}` and a 500. The thrown message of an unexpected error is not
+echoed to the caller — it is written to the log with its stack instead. An unmatched route
+answers `{"error":"Not Found"}` with a 404.
 
 ::: info
-For configuration, see [Configuration](/docs/guides/configuration), and for the full picture of
-both hooks see [Error Handling](/docs/guides/error-handling).
+For the resolution chain, scopes and the full set of status exceptions, see
+[Error Handling](/docs/guides/error-handling).
 :::
 
 ## Best Practices
@@ -615,7 +617,6 @@ import {
   type Context,
   type ValidationSchema,
 } from '@asenajs/ergenecore';
-import { isHttpException } from '@asenajs/asena/adapter';
 import { z } from 'zod';
 
 // MiddlewareService requires handle() - it is the only abstract member
@@ -637,13 +638,8 @@ export class MyValidator extends ValidationService {
 // ConfigService has no abstract members; override only the hooks you need
 @Config()
 export class MyConfig extends ConfigService {
-  public onError(error: Error, context: Context) {
-    // Without this branch every deliberate 401/403/404 arrives at the client as a 500
-    if (isHttpException(error)) {
-      return error.getResponse?.() ?? context.send({ error: error.message }, error.status);
-    }
-
-    return context.send({ error: 'Internal Server Error' }, 500);
+  public globalMiddlewares() {
+    return [MyMiddleware];
   }
 }
 ```

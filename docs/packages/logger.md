@@ -280,27 +280,34 @@ export class RequestLoggerMiddleware extends MiddlewareService {
 }
 ```
 
-### Error Handling in Config
+### Error Handling in an Exception Handler
 
 ```typescript
-import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import type { Context } from '@asenajs/ergenecore';
 import { logger } from '../logger';
 
-@Config()
-export class ServerConfig extends ConfigService {
-  onError(error: Error, context: Context): Response {
+@ExceptionHandler()
+export class ApiExceptionHandler {
+  @Catch(Error)
+  public unexpected(error: Error, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http') return;
+
     logger.error('Unhandled error', {
       error: error.message,
       stack: error.stack,
-      url: context.req.url,
-      method: context.req.method
+      url: ctx.context.req.url,
+      method: ctx.context.req.method
     });
 
-    return context.send({ error: 'Internal server error' }, 500);
+    return ctx.context.send({ error: 'Internal server error' }, 500);
   }
 }
 ```
+
+A `@Catch` that answers owns the log line: the adapter writes nothing for a request it did not
+answer itself. See [Error Handling](/docs/guides/error-handling#adapter-logging).
 
 ### Performance Profiling
 

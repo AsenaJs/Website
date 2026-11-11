@@ -217,7 +217,7 @@ The two halves fail differently on purpose.
 | | A hook that throws | A hook that hangs |
 |:--|:--|:--|
 | `@OnStart` | Boot aborts. Components that already started are rolled back, the lifecycle state becomes `FAILED`, and `server.start()` rejects with an error naming the hook and carrying the original error as `cause` | No timeout — an `@OnStart` that never resolves is a `start()` that never resolves |
-| `@OnStop` | Logged and skipped; shutdown continues | Bounded per hook (default `5000` ms), then logged and skipped |
+| `@OnStop` | Logged and skipped; shutdown continues. After a signal the process [exits with `1`](#exit-code) | Bounded per hook (default `5000` ms), then logged and skipped, and counted as a failure |
 
 A half-initialised application must not serve traffic, so a failing start hook stops the boot.
 A shutdown that gives up halfway leaves more behind than one that limps to the end, so a failing
@@ -335,11 +335,65 @@ const server = await AsenaServerFactory.create({
 |:-------|:-----|:--------|:------------|
 | `signals` | `boolean \| NodeJS.Signals[]` | `true` | `true` covers `SIGTERM`, `SIGINT`, `SIGHUP`. Pass a list to narrow it, or `false` to own the signals yourself |
 | `timeout` | `number` | `5000` | Per-`@OnStop` ceiling, in ms. `stop({ hookTimeout })` overrides it for one call |
-| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began |
+| `forceExitAfter` | `number \| false` | `false` | Force the **process** to exit this many ms after a signal-triggered shutdown began. [Under the file watcher](#under-the-file-watcher) the process exits without it |
 | `onUnhandledError` | `boolean` | `false` | Treat an uncaught exception or unhandled rejection as a shutdown request: log, stop, exit non-zero |
+| `closeActiveConnections` | `boolean` | `false` | What a signal-triggered shutdown does to in-flight HTTP requests: `false` drains them, `true` closes them at once. An explicit `server.stop()` keeps its own default of `true` |
+| `drainTimeout` | `number` | transport's own | How long a signal-triggered shutdown lets the microservice transports drain in-flight messages, in ms |
 
-A second signal while a shutdown is already running exits immediately with code `130` — someone
-pressing `Ctrl+C` again because the first one looked stuck means it.
+### The exit code {#exit-code}
+
+A shutdown a signal started ends the process with `0` when it was clean and with `1` when it
+failed, so a supervisor or a CI step that reads the exit code learns whether everything was
+released. It counts as failed when:
+
+- `stop()` rejects, because a teardown step such as the adapter or a transport did not close, or
+- an `@OnStop` hook throws, rejects or runs out of `shutdown.timeout`.
+
+Each failure is logged, and the remaining hooks and teardown steps still run.
+
+A non-zero `process.exitCode` your application set is kept, after a failed shutdown and after a
+clean one:
+
+```typescript
+process.exitCode = 3;   // the process exits with 3 once a signal has stopped the server
+```
+
+The rule is the same with and without a file watcher; what differs is who ends the process.
+Without one it exits on its own when the event loop empties, with the code in `process.exitCode`.
+[Under `bun --hot` and `bun --watch`](#under-the-file-watcher) the framework ends it with that
+code itself.
+
+An explicit `await server.stop()` does not set the exit code. A failed step makes its promise
+reject, and a failed `@OnStop` hook is logged; what the process exits with is up to the caller.
+
+### A second signal
+
+A second signal while a signal-triggered shutdown is still draining ends the process at once —
+someone pressing `Ctrl+C` again because the first one looked stuck means it. The exit code is
+`128 +` the signal number, the code a shell reports for a process the signal killed:
+
+| Second signal | Exit code |
+|:--------------|:----------|
+| `SIGINT` (`Ctrl+C`) | `130` |
+| `SIGTERM` | `143` |
+| `SIGHUP` | `129` |
+
+A warning is logged first: `SIGINT received again during shutdown, exiting now`. It holds when
+another library listens to the same signal too, such as a telemetry exporter with its own hook,
+and under `bun --watch` and `bun --hot`.
+
+### Under `bun --hot` and `bun --watch` {#under-the-file-watcher}
+
+Bun's file watcher keeps a process open after everything in it has stopped, so in these two modes
+a shutdown signal ends the process itself rather than leaving it to the event loop:
+
+| | Without the watcher | Under `--hot` / `--watch` |
+|:--|:--------------------|:--------------------------|
+| A signal arrives | `stop()` runs; the process exits when the event loop empties | `stop()` runs; the process exits once **every** `stop()` running in it has settled, an explicit `stop()` on another server included |
+| [Exit code](#exit-code) | a non-zero `process.exitCode` the application set, else `1` when the shutdown failed and `0` when it was clean | the same code |
+| Another listener of the same signal | runs alongside | is waited for until the event loop empties, for `shutdown.timeout` at most (default `5000` ms) |
+| `forceExitAfter` | the only thing that ends a process a leaked handle holds open | still a deadline, but the process ends without it too |
+| An explicit `server.stop()` with no signal | never exits the process | never exits the process |
 
 ::: warning `forceExitAfter` is a deadline on the process, not on `stop()`
 The case worth protecting against is a `stop()` that completed cleanly and left something ref'd

@@ -187,6 +187,7 @@ export class CronController {
 | `getJobNames()` | `string[]` | Get all registered job names |
 | `registerJob(name, cron, fn)` | `void` | Register a job programmatically |
 | `startAll()` / `stopAll()` | `void` | Start or stop every registered job |
+| `runNow(name)` | `Promise<void>` | Run a registered job once, now, without touching its schedule. See [Running a job on demand](#running-a-job-on-demand) |
 | `clearJobs()` | `void` | Stop and drop all registered jobs |
 | `jobCount` | `number` | Number of registered jobs |
 | `hasRunningJobs` | `boolean` | Whether any job is **scheduled** (started and not stopped) - not whether one is executing right now |
@@ -196,6 +197,31 @@ CronRunner starts all registered jobs when the server is ready and stops them du
 
 Relative to [component lifecycle hooks](/docs/concepts/lifecycle): jobs start **after** every `@OnStart` has returned, and stop **before** any `@OnStop` runs — the first step of `server.stop()` is "take no new work". A job already executing when shutdown begins is not cancelled; `stopAll()` only unschedules future runs.
 :::
+
+### Running a job on demand
+
+`runNow(name)` runs a job through the same path a timed run takes, so a failure is logged the same
+way, and then rejects with it. The name is the one `getJobNames()` lists.
+
+```typescript
+@Post('/:name/run')
+public async run(context: Context) {
+  await this.cronRunner.runNow(context.getParam('name'));
+
+  return context.send({ ran: true });
+}
+```
+
+A job never runs concurrently with itself, and nothing runs once the scheduler has stopped:
+
+| Situation | Result |
+|:----------|:-------|
+| No job has that name | rejects: `No @Schedule job named "..."` |
+| `stopAll()` ran, as it does at the start of `server.stop()` | rejects: `@Schedule job "..." not run: the scheduler is stopped`. `startAll()` lifts it |
+| The job is still executing, from a timed run or an earlier `runNow` | rejects: `@Schedule job "..." not run: it is already running` |
+| A timed run comes due while a `runNow` is still executing | the timed run is skipped with a warning, `Skipped "...": the previous run has not finished`, and the next one is scheduled as usual |
+
+**Run now** in the [Asena console](/docs/cli/console#messaging) calls this method.
 
 ## Real-World Examples
 

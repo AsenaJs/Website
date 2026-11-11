@@ -1,6 +1,6 @@
 ---
 title: CLI Commands
-description: Reference for every CLI command - create, generate, dev start, build, init and doctor, including shortcuts
+description: Reference for every CLI command - create, generate, dev start, console, build, init and doctor, including shortcuts
 outline: deep
 ---
 
@@ -123,7 +123,7 @@ Quickly and consistently create project components with proper structure and imp
 
 ### Features
 
-- **Multi-Component Support** - Generate controllers, services, middlewares, configs, and websockets
+- **Multi-Component Support** - Generate controllers, services, middlewares, validators, configs, exception handlers and websockets
 - **Automatic Code Generation** - Creates template code with base structure and necessary imports
 - **Adapter-Aware** - Generates adapter-specific code based on project configuration
 - **Suffix Configuration** - Customize component naming conventions (see [Suffix Configuration](/docs/cli/suffix-configuration))
@@ -139,6 +139,7 @@ Quickly and consistently create project components with proper structure and imp
 | Middleware | `asena generate middleware` | `asena g m`   | Generates a middleware      |
 | Validator  | `asena generate validator`  | `asena g v`   | Generates a Zod validator   |
 | Config     | `asena generate config`     | `asena g config` | Generates a server config |
+| Exception Handler | `asena generate exception-handler` | `asena g eh` | Generates an exception handler |
 | WebSocket  | `asena generate websocket`  | `asena g ws`  | Generates a WebSocket namespace |
 
 ### Examples
@@ -250,19 +251,58 @@ asena generate config
 
 ```typescript
 import { Config } from '@asenajs/asena/decorators';
-import { ConfigService, type Context } from '@asenajs/ergenecore';
+import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
 export class ServerConfig extends ConfigService {
 
-  public onError(error: Error, context: Context): Response | Promise<Response> {
-    console.error('Error:', error.message);
+}
+```
 
-    return context.send({ error: error.message }, 500);
+The class is empty: add the [server options](/docs/guides/configuration) you need. Errors are
+answered by an exception handler, which has a generator of its own.
+
+#### Generate Exception Handler
+
+```bash
+asena g eh
+# or
+asena generate exception-handler
+```
+
+**Prompt:**
+```bash
+✔ Enter exception handler name: Api
+```
+
+**Generated:** `src/exceptions/ApiExceptionHandler.ts`
+
+```typescript
+import { ExceptionHandler } from '@asenajs/asena/decorators';
+import { Catch, type ExceptionContext } from '@asenajs/asena/exception';
+import { isHttpException } from '@asenajs/asena/adapter';
+import { type Context } from '@asenajs/ergenecore';
+
+@ExceptionHandler()
+export class ApiExceptionHandler {
+
+  @Catch()
+  public fallback(error: unknown, ctx: ExceptionContext<Context>) {
+    if (ctx.scope !== 'http' || isHttpException(error)) return;
+
+    console.error('Unhandled error:', error);
+
+    return ctx.context.send({ error: 'Internal Server Error' }, 500);
   }
 
 }
 ```
+
+The generated `@Catch()` is a catch-all that answers unexpected HTTP errors with `500`. It returns
+nothing in two cases: for an HTTP exception, so validation failures and status exceptions keep the
+adapter's own envelopes, and outside HTTP (`@On`, `@MessagePattern`, `@EventPattern`), so those
+failures keep their default handling. Add `@Catch(YourError)` methods next to it for your domain
+errors. See [Error Handling](/docs/guides/error-handling).
 
 #### Generate WebSocket
 
@@ -348,6 +388,30 @@ Build completed successfully.
 ::: info Controller Names in Output
 Controller names are visible in logs when `buildOptions.minify.identifiers` is set to `false` in `asena-config.ts`.
 :::
+
+## asena console
+
+Run the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging,
+config and exceptions. It restarts the app when a file under `sourceFolder` changes, and does not start when
+`NODE_ENV=production`.
+
+### Usage
+
+```bash
+asena console                # free port, opens the browser
+asena console --port 23530   # a fixed port for the console
+asena console --no-open      # print the address only
+asena console --no-watch     # restart by hand only
+```
+
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--port <port>` | The console's own port; `0` picks a free one | A free port |
+| `--no-open` | Do not open the browser | Opens it |
+| `--no-watch` | Do not restart the app when a source file changes | Restarts |
+
+The project needs `@asenajs/asena` 0.13.0 or newer. See [Asena Console](/docs/cli/console) for the panels and the
+security model.
 
 ## asena build
 
@@ -512,8 +576,8 @@ computed at runtime is not checked.
 ✗ asena-config — minify.identifiers drops component names that are read at runtime (keepNames does not preserve them)
   hint: disable identifier minification: minify: { whitespace: true, syntax: true, identifiers: false }
 ✓ direct-dependencies — all required packages are direct dependencies
-✓ duplicate-packages — @asenajs/asena@0.12.3, hono@4.12.9, zod@4.4.3
-✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.12.3
+✓ duplicate-packages — @asenajs/asena@0.13.0, hono@4.12.9, zod@4.4.3
+✓ peer-ranges — all @asenajs/* peer ranges are satisfied by @asenajs/asena@0.13.0
 ✗ auth-enforcement — @Protected/@Roles imported at src/controllers/MeController.ts:1 and @asenajs/asena-auth is a dependency, but neither authComponents nor AuthGuard is imported from it - the markers are metadata only and those routes are served open
   hint: add `imports: [...authComponents]` (from @asenajs/asena-auth) to AsenaServerFactory.create
 ✓ auth-better-auth-dep — Better Auth provider of @asenajs/asena-auth not used
@@ -542,8 +606,10 @@ check is the fastest way to rule it in or out.
 | `asena generate service` | `asena g s`    | Generate a service            |
 | `asena generate middleware` | `asena g m` | Generate a middleware         |
 | `asena generate config` | `asena g config` | Generate a config          |
+| `asena generate exception-handler` | `asena g eh` | Generate an exception handler |
 | `asena generate websocket` | `asena g ws` | Generate a WebSocket namespace |
 | `asena dev start`    | -               | Start development server             |
+| `asena console`      | -               | Run the app with a browser console   |
 | `asena build`        | -               | Build for production                 |
 | `asena init`         | -               | Initialize configuration             |
 | `asena doctor`       | -               | Check the project for configuration mistakes |
@@ -552,6 +618,7 @@ check is the fastest way to rule it in or out.
 
 ## Related
 
+- [Asena Console](/docs/cli/console) - The browser console for a running app
 - [Configuration](/docs/cli/configuration) - CLI configuration options
 - [Suffix Configuration](/docs/cli/suffix-configuration) - Component naming conventions
 - [CLI Examples](/docs/cli/examples) - See complete project examples

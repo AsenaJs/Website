@@ -124,6 +124,36 @@ Unique identifier for the socket connection.
 console.log(`Socket ID: ${ws.id}`);
 ```
 
+### ws.binaryType
+
+The type `onMessage` receives a binary frame as. Setting it reaches the underlying Bun socket, so it
+changes what the frames after it are delivered as. Text frames are always strings.
+
+| Value | `onMessage` receives |
+|:------|:---------------------|
+| `'nodebuffer'` (Bun's default) | `Buffer` |
+| `'arraybuffer'` | `ArrayBuffer` |
+| `'uint8array'` | `Uint8Array` |
+| `'blob'` | `Blob` |
+
+```typescript
+protected async onOpen(ws: Socket): Promise<void> {
+  ws.binaryType = 'arraybuffer';
+}
+
+protected async onMessage(ws: Socket, message: string | ArrayBuffer): Promise<void> {
+  if (typeof message !== 'string') {
+    const view = new DataView(message);
+    // ...
+  }
+}
+```
+
+`AsenaWebSocketService` types `message` as `string | Buffer | ArrayBuffer | Uint8Array | Blob`, and
+an override may declare only the types its sockets receive, as above, so no cast is needed.
+TypeScript does not check that declaration against `binaryType`: keep the two in step. A value Bun
+does not accept throws, and the socket keeps the type it had.
+
 ### ws.data
 
 Custom data attached to the socket (typed). It holds 3 values.
