@@ -66,6 +66,26 @@ the console spawned runs it. `asena build`, `asena dev start` and your own `bun`
 agent attached the framework and the adapters record nothing. The console also works on a headless app, which has no
 HTTP port: Endpoints then lists nothing to call, and the other panels work as usual.
 
+### An app with more than one server
+
+The agent attaches to each server the process starts, and the console follows the most recent one: its components,
+routes and config are what the page describes, and it is the one that runs the actions in
+[Messaging](#messaging). Requests and dispatches of every server in the process are listed, each once, and the metrics
+are those of the process. When the most recent server stops, the one started before it takes over.
+
+### An app that runs as production
+
+`NODE_ENV=production` inside the app keeps the agent out even when `asena console` started the process, for example
+when the entry file sets the variable itself. The app starts and serves as usual, records nothing, and logs one
+warning:
+
+```
+[AsenaServer] devtools agent not attached: NODE_ENV is production; the console is a development tool
+```
+
+The warning shows in the terminal and in Output. The other panels have nothing to show, because nothing reports to
+them.
+
 ## The page
 
 The sidebar holds the seven panels. The bar at the top shows the app's state (`Starting`, `Ready`, `Not ready`,
@@ -137,7 +157,9 @@ Whether the app is up, what it costs, and what it is saying.
 - **Restarts this session** is a timeline of the runs. Each says what started it: the first start, the Restart button,
   or the file you saved.
 - **Metrics** sample RSS, heap, CPU and event-loop lag once a second. The console keeps the last 120 samples and starts
-  over with each run.
+  over with each run. When the console is not reading, the agent does not queue telemetry in the app's memory: past
+  1000 unread messages it drops request records and metrics samples, and each later sample carries the number dropped
+  so far in that run.
 - **Output** is the app's stdout and stderr, with a separator between runs and a filter for level and text.
 
 The level comes from a marker at the start of an entry's first line, such as `[WARN]`, `error:` or `TypeError:`. Without
@@ -184,9 +206,27 @@ Selecting a row opens its details:
 - **Chain** lists the steps it went through (global middleware, middleware, validator, handler, `@Catch`,
   `@Config.onError`, the adapter's default, not found) and marks the one that answered.
 - **Output during the request** is what the app wrote through `console.*`, `process.stdout` and `process.stderr` while
-  this request was in scope, up to 100 entries or 16 KiB. Concurrent requests do not mix.
+  this request was in scope, up to 100 entries or 16 KiB. Concurrent requests do not mix. See
+  [How output is captured](#how-output-is-captured).
 - **Replay in Endpoints** opens the route with this request's method and path values. Headers and bodies are not
   recorded, so fill those in again. A dispatch is run again from Messaging instead.
+
+#### How output is captured
+
+In a process the console started, the agent wraps `console.log`, `info`, `debug`, `trace`, `dir`, `table`, `warn`,
+`error` and `assert`, and `process.stdout.write` / `process.stderr.write`, once, when it loads, which is before your
+entry file runs. The wrappers stay for the life of the process. Outside a request or dispatch they only pass the call
+on, and every write still reaches its stream.
+
+- Inside a request, a console call whose arguments are plain data (primitives, and plain objects and arrays of them)
+  reaches the original method unchanged. Any other call (a class instance, a getter, a `%s`-style format string) is
+  rendered once for the record and the original method prints that text, so inspecting the arguments runs once.
+- `console.count`, the `console.time` family and the label and indent of `console.group` are not part of the record.
+- A console method that something replaced before the agent loaded, such as a preload script, is left as it is. The
+  record then holds only what that replacement writes to `process.stdout` or `process.stderr`. A logger that wraps the
+  console from your own code loads after the agent, so what it passes on to the console is recorded.
+- A request's chain holds 100 steps at most. Past that each new step replaces the last one kept, so the final step
+  shown is always the most recent one.
 
 ### Messaging
 
@@ -203,6 +243,14 @@ through the same path a real trigger takes.
 
 Each action asks for an inline confirmation that says what it will do, and then shows the result or the error. A
 command still waiting when the app restarts or exits ends as failed.
+
+An action the app cannot run ends as failed with the reason:
+
+| Reason | When |
+|:-------|:-----|
+| `The server is stopping; the command was not run` | The action arrived after the app began to stop |
+| `@Schedule job "..." not run: it is already running` | **Run now** on a job whose previous run has not finished. A job never overlaps itself |
+| `@Schedule job "..." not run: the scheduler is stopped` | **Run now** after the app called `stopAll()` on its `CronRunner` |
 
 ### Config
 
@@ -234,7 +282,8 @@ How errors resolve in this app, per the rules in [Error Handling](/docs/guides/e
 The console is a development tool that can act on your app, so it is built to stay on your machine.
 
 - **It does not start in production.** With `NODE_ENV=production` the command prints a refusal and exits with code 1.
-  That variable is the only check it makes, so see the warning below.
+  That variable is the only check it makes, so see the warning below. The framework makes the same check inside the
+  app: with `NODE_ENV=production` it [does not attach the agent](#an-app-that-runs-as-production) or record anything.
 - **It binds to `127.0.0.1`.** The console's server is not reachable from another machine. The app keeps its own
   binding, which the console does not change.
 - **The URL carries a token.** Each start creates a random token. Without it the page, the page's socket and the request
