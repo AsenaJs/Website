@@ -139,7 +139,7 @@ Answer the interactive prompts:
 ✔ Enter your project name: my-app
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup ESLint? No
-✔ Do you want to setup Prettier? No
+✔ Set up formatting (bun fmt)? No
 ```
 
 ### 3. Start Development Server
@@ -251,7 +251,7 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-// createHonoAdapter returns a tuple and requires a logger
+// createHonoAdapter returns a tuple: [adapter, logger]
 const [adapter] = createHonoAdapter({ logger });
 
 const server = await AsenaServerFactory.create({
@@ -1595,7 +1595,6 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       refillRate: 100 / 60, // per minute
       // Per user on a protected route, otherwise per client IP
       keyGenerator: (ctx) => getAuthSession(ctx)?.user.id ?? ctx.getRequestIp() ?? 'unknown',
-      trustProxy: true,     // one reverse proxy in front: read the client from X-Forwarded-For
       skip: (ctx) => getAuthSession(ctx)?.user.roles?.includes('admin') ?? false,
       cost: (ctx) => (new URL(ctx.req.url).pathname.endsWith('/export') ? 10 : 1),
     });
@@ -1625,8 +1624,10 @@ export class ReportController {
 ```
 
 The [asena-auth](#authentication) guard runs before route middleware, so the session is already
-on the context when the limiter reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
-client could otherwise pick its own bucket by sending the header.
+on the context when the limiter reads it. A custom `keyGenerator` replaces the default key, so `trustProxy` does not
+apply to it: the fallback here, `getRequestIp()`, is the connecting peer, which behind a reverse proxy is the proxy.
+Without a `keyGenerator`, the limiter keys on the peer and reads `X-Forwarded-For` only when
+[`trustProxy`](/docs/adapters/ergenecore#rate-limiter-options) trusts the peer.
 
 ---
 
@@ -2145,6 +2146,8 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Exit code of a signal-triggered shutdown](/docs/concepts/lifecycle#exit-code)** - `1` when `stop()` rejects or an `@OnStop` hook throws, rejects or times out, with or without a file watcher, and a non-zero `process.exitCode` the application set is kept; an explicit `server.stop()` does not set the exit code
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
 - **[Redis cache decorators](/docs/packages/redis#caching-decorators)** *(asena-redis 4.1.0)* - `@Cacheable`, `@CachePut` and `@CacheEvict` put the caching policy on a service method instead of repeating the read, compute and write steps inside it
+- **[Formatting with `bun fmt`](/docs/cli/commands#cli-options)** *(CLI 0.14.0)* - `asena create --format`, the default, sets up `bun fmt` through a `[fmt]` table in `bunfig.toml` and needs Bun 1.4.4 or later; `--prettier` / `--no-prettier` are deprecated aliases that print a warning
+- **TypeScript 6 and 7** - every official package with a `typescript` peer range accepts 5.x, 6.x and 7.x, and `asena create` projects pass their own lint, `format:check`, `tsc` and `asena doctor` checks on TypeScript 7 with `strict: true` *(CLI 0.14.0)*
 
 ### New in v0.12
 
@@ -8026,7 +8029,7 @@ async useNative(context: Context) {
 
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
-| `getParam(name)` | `string` | Get route parameter |
+| `getParam(name)` | `string` | Get route parameter — `''` when the route does not declare it, or for an optional parameter the request leaves out |
 | `getQuery(name)` | `Promise<string \| undefined>` | Get single query parameter — `undefined` when absent, `''` when present but empty |
 | `getQueryAll(name)` | `Promise<string[]>` | Get all values of a query parameter |
 | `getAllQueries()` | `Record<string, string \| string[]>` | Get all query parameters as object |
@@ -15034,10 +15037,10 @@ const adapter = createErgenecoreAdapter({
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-// Single argument: either a bare logger, or an options object containing one
+// Single argument: either a bare logger, or an options object; without a logger the factory creates a console logger
 const [adapter, asenaLogger] = createHonoAdapter({
   logger,
-  strict: false, // match '/health' and '/health/' alike - useful behind a reverse proxy
+  strict: true, // answer 404 for '/health/' when the route is '/health'
 });
 ```
 
@@ -15473,13 +15476,19 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
+| `keyGenerator`    | `(ctx) => string`           | The connecting peer (`getRequestIp()`), or the client hop of `X-Forwarded-For` when `trustProxy` trusts the peer; `'unknown'` without a peer address | Client identifier function. A custom one replaces the default key, so `trustProxy` does not apply to it |
+| `trustProxy`      | `boolean \| string[] \| (address) => boolean` | `false`                | Which connecting peers are reverse proxies whose `X-Forwarded-For` is read. `false`: the header is ignored. `true`: one proxy layer (or a unix-socket listener) - the rightmost entry is the client. `string[]` (exact addresses; an IPv4 entry also matches its `::ffff:` form) or a predicate: entries are walked from the right and the first untrusted address is the client |
+| `maxBuckets`      | `number`                    | `10000`                                  | Distinct client buckets held in memory; at the cap the least recently seen client is evicted. Must be a positive integer |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
 | `skip`            | `(ctx) => boolean`          | `undefined`                              | Skip rate limiting function    |
 | `cleanupInterval` | `number`                    | `60000`                                  | Cleanup interval (ms)          |
 | `bucketTTL`       | `number`                    | `600000`                                 | Inactive bucket TTL (ms)       |
+
+::: warning Behind a reverse proxy
+With the default key and `trustProxy: false`, the connecting peer is the proxy, so every client behind it shares one bucket. Set `trustProxy: true` for one proxy layer; behind two or more, list every proxy or pass a predicate - `true` there keys on the outer proxy. A trusted peer that sends no usable `X-Forwarded-For` (missing, or longer than 1024 characters) is keyed on itself, and a warning is logged once. Leave `trustProxy` at `false` when clients connect to Bun directly: any client can write the header.
+:::
 
 #### Rate Limit Headers
 
@@ -15897,7 +15906,7 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
-// Create adapter (returns tuple: [adapter, logger]) - a logger is required
+// Create adapter (returns tuple: [adapter, logger])
 const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
 // Create and start server
@@ -15951,6 +15960,10 @@ import { createHonoAdapter } from '@asenajs/hono-adapter';
 const [adapter, logger] = createHonoAdapter(myLogger);
 ```
 
+A logger passed on its own - anything with an `info` method - is the logger the adapter uses, also when it has a
+`logger` field of its own: `createHonoAdapter(new AsenaLogger())` uses the `AsenaLogger` and returns it. `new HonoAdapter()`
+tells a logger from options the same way.
+
 **Options object (recommended)**
 
 ```typescript
@@ -15966,28 +15979,28 @@ const [adapter, logger] = createHonoAdapter({
 
 | Property | Type | Required | Default | Description |
 |:---------|:-----|:---------|:--------|:------------|
-| `logger` | `ServerLogger` | Yes | — | Logger instance |
+| `logger` | `ServerLogger` | No | Console logger | Logger instance. Without one - no argument, options without `logger`, or `logger: undefined` - the factory creates a console logger |
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
-| `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
+| `strict` | `boolean` | No | `false` | Strict route matching (trailing slash). Ignored when `app` is passed |
 | `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
-**Returns:** Tuple: `[adapter, logger]`
+**Returns:** Tuple: `[adapter, logger]` - the logger passed in, or the console logger the factory created
 
 ### Trailing Slash (Strict Mode)
 
-By default, Hono uses strict mode where `/health` and `/health/` are **different** routes. Set `strict: false` to treat them as the same:
+By default `/health` and `/health/` match the **same** route, as on Ergenecore. Set `strict: true` to answer 404 for the trailing-slash form:
 
 ```typescript
-// strict: true (default) — /users and /users/ are different routes
+// strict: false (default) — /users and /users/ match the same route
 const [adapter, logger] = createHonoAdapter({ logger: myLogger });
 
-// strict: false — /users and /users/ match the same route
-const [adapter, logger] = createHonoAdapter({ logger: myLogger, strict: false });
+// strict: true — /users/ answers 404
+const [adapter, logger] = createHonoAdapter({ logger: myLogger, strict: true });
 ```
 
-::: tip Reverse Proxies
-Set `strict: false` when deploying behind reverse proxies (Nginx, Cloudflare, etc.) that may add or remove trailing slashes. This prevents 404 errors from slash mismatches.
+::: tip Your own Hono app
+An application that passes its own Hono `app` keeps that app's `strict` setting.
 :::
 
 ## Built-in Middleware
@@ -16161,13 +16174,19 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
+| `keyGenerator`    | `(ctx) => string`           | The connecting peer (`getRequestIp()`), or the client hop of `X-Forwarded-For` when `trustProxy` trusts the peer; `'unknown'` without a peer address | Client identifier function. A custom one replaces the default key, so `trustProxy` does not apply to it |
+| `trustProxy`      | `boolean \| string[] \| (address) => boolean` | `false`                | Which connecting peers are reverse proxies whose `X-Forwarded-For` is read. `false`: the header is ignored. `true`: one proxy layer (or a unix-socket listener) - the rightmost entry is the client. `string[]` (exact addresses; an IPv4 entry also matches its `::ffff:` form) or a predicate: entries are walked from the right and the first untrusted address is the client |
+| `maxBuckets`      | `number`                    | `10000`                                  | Distinct client buckets held in memory; at the cap the least recently seen client is evicted. Must be a positive integer |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
 | `skip`            | `(ctx) => boolean`          | `undefined`                              | Skip rate limiting function    |
 | `cleanupInterval` | `number`                    | `60000`                                  | Cleanup interval (ms)          |
 | `bucketTTL`       | `number`                    | `600000`                                 | Inactive bucket TTL (ms)       |
+
+::: warning Behind a reverse proxy
+With the default key and `trustProxy: false`, the connecting peer is the proxy, so every client behind it shares one bucket. Set `trustProxy: true` for one proxy layer; behind two or more, list every proxy or pass a predicate - `true` there keys on the outer proxy. A trusted peer that sends no usable `X-Forwarded-For` (missing, or longer than 1024 characters) is keyed on itself, and a warning is logged once. Leave `trustProxy` at `false` when clients connect to Bun directly: any client can write the header.
+:::
 
 #### Rate Limit Headers
 
@@ -16568,8 +16587,7 @@ describe("UserController", () => {
     // sockets the suite itself holds open - TIME_WAIT included - and Bun.serve then
     // fails with EADDRINUSE, randomly, in whichever test happened to draw it.
     const port = 10000 + Math.floor(Math.random() * 22000);
-    // createHonoAdapter returns a tuple and requires a logger - calling it with no argument
-    // yields [adapter, undefined], and AsenaServerFactory.create throws on the undefined logger
+    // createHonoAdapter returns a tuple: [adapter, logger]
     const [adapter] = createHonoAdapter({ logger });
 
     server = await AsenaServerFactory.create({
@@ -16792,7 +16810,7 @@ import { AsenaLogger } from '@asenajs/asena-logger';
 // Create logger
 export const logger = new AsenaLogger();
 
-// Create adapter - returns a tuple, and the logger is required
+// Create adapter - returns a tuple: [adapter, logger]
 const [adapter] = createHonoAdapter({ logger });
 
 // Create and start server
@@ -18086,7 +18104,7 @@ bun add mysql2          # For MySQL
 ## Supported Databases
 
 - ✅ **PostgreSQL** - using `pg` (node-postgres) with connection pooling
-- ✅ **MySQL** - using `mysql2`
+- ✅ **MySQL** - using `mysql2` (the `BaseRepository` [write methods](#repository-methods) are not available)
 - ✅ **BunSQL** - using Bun's built-in SQL interface
 - ⏳ **SQLite** - coming soon
 
@@ -18535,6 +18553,13 @@ show is gone. `DatabaseAdapter.createConnectionString()` was removed in the same
 ## Repository Methods
 
 The `BaseRepository` provides a comprehensive set of CRUD methods:
+
+::: warning Write methods need `.returning()`
+`create`, `createMany`, `update`, `updateById`, `delete`, `deleteById` and the `updateMany` / `deleteMany` aliases
+build their queries with `.returning()`, which Drizzle's MySQL query builders do not have. With a `mysql` database
+they reject with `Query builder does not support .returning() for this database driver`; use `this.db` for writes
+there. `postgresql` and `bun-sql` databases are not affected.
+:::
 
 ### Finding Records
 
@@ -21598,7 +21623,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
 
 ## Key Features
 
-- **Quick Project Setup** - Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.
+- **Quick Project Setup** - Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and formatting with bun fmt.
 - **Code Generation** - Generate controllers with route handlers, services with business logic, middleware, config classes, exception handlers and WebSocket namespaces.
 - **Fast Development** - One-shot build and run — the CLI discovers and registers all your components automatically. No manual imports needed.
 - **asena console** - Run the app in development with a browser page to read its dependency graph, call its routes, follow a request through its chain and run a schedule.
@@ -21636,8 +21661,8 @@ asena dev start
 
 ## Requirements
 
-- **Bun Runtime** - v1.4 or higher
-- **TypeScript** - v5.8.2 or higher (installed automatically)
+- **Bun Runtime** - v1.4 or higher; v1.4.4 or higher for `bun fmt`, which formats the projects `asena create` sets up formatting for (the default)
+- **TypeScript** - 5.x, 6.x or 7.x (installed automatically)
 
 ## Related
 
@@ -21804,8 +21829,8 @@ Bootstrap a new Asena project with a complete development environment setup.
 - **Multi-Adapter Support** - Choose between Hono or Ergenecore adapters
 - **Project Structure** - Creates complete project structure with necessary files
 - **Default Components** - Generates default controller and server setup
-- **Development Tools** - Optional ESLint and Prettier integration
-- **Dependency Management** - Automatically installs required dependencies
+- **Development Tools** - Optional ESLint and formatting with `bun fmt`
+- **Dependency Management** - Automatically installs required dependencies, and the version of `@asenajs/asena-cli` that is running as a dev dependency
 
 ### Usage
 
@@ -21825,10 +21850,10 @@ Interactive prompts may not work properly over SSH connections or in non-TTY env
 
 ```bash
 # Create with all features enabled
-asena create my-project --adapter=hono --logger --eslint --prettier
+asena create my-project --adapter=hono --logger --eslint --format
 
 # Create in current directory without optional features
-asena create . --adapter=ergenecore --no-logger --no-eslint --no-prettier
+asena create . --adapter=ergenecore --no-logger --no-eslint --no-format
 
 # Mix of CLI arguments and interactive prompts
 asena create my-app --adapter=hono  # Will prompt for remaining options
@@ -21842,7 +21867,13 @@ asena create my-app --adapter=hono  # Will prompt for remaining options
 | `--adapter <adapter>` | Adapter to use | `hono`, `ergenecore` | Prompted |
 | `--logger` / `--no-logger` | Setup Asena logger | boolean | `true` |
 | `--eslint` / `--no-eslint` | Setup ESLint | boolean | `true` |
-| `--prettier` / `--no-prettier` | Setup Prettier | boolean | `true` |
+| `--format` / `--no-format` | Set up formatting with `bun fmt`: a `[fmt]` table in `bunfig.toml` and the scripts `format` (`bun fmt --no-config`) and `format:check` (`bun fmt --check --no-config`). Needs Bun 1.4.4 or later | boolean | `true` |
+| `--prettier` / `--no-prettier` | Deprecated aliases of `--format` / `--no-format`; they print a warning. Combining one with the opposite `--format` flag is an error | boolean | - |
+| `--skip-install` | Skip dependency installation; the dependencies are written to `package.json` for a later `bun install` | boolean | `false` |
+
+When the target directory already has a `bunfig.toml`, `asena create` keeps its other settings and adds the `[fmt]`
+table. Keys an existing `[fmt]` table already sets keep their values, and `asena create` names the ones that differ from
+its own. `asena create` exits with code `1` when it fails.
 
 ### Interactive Prompts
 
@@ -21853,7 +21884,7 @@ When using interactive mode without CLI arguments:
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
-✔ Do you want to setup Prettier? Yes
+✔ Set up formatting (bun fmt)? Yes
 ⠙ Creating asena project...
 ```
 
@@ -21875,8 +21906,7 @@ my-asena-app/
 ├── tsconfig.json
 ├── .gitignore
 ├── eslint.config.cjs            # Only when ESLint is enabled
-├── .prettierrc.js               # Only when Prettier is enabled
-└── .prettierignore              # Only when Prettier is enabled
+└── bunfig.toml                  # [fmt] table, only when formatting is enabled
 ```
 
 ::: info Directories are created on demand
@@ -21932,18 +21962,15 @@ asena generate controller
 
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore';
 
 @Controller()
-export class UserController {
-
-}
+export class UserController {}
 ```
 
 ::: tip The body is intentionally empty
-The generator scaffolds the class and its imports only - add the path and your routes
-yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler.
+The generator scaffolds the class and the `Controller` import only - add the path, your routes
+and what they import yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler that takes
+the adapter's `Context`.
 :::
 
 #### Generate Service
@@ -21965,9 +21992,7 @@ asena generate service
 import { Service } from '@asenajs/asena/decorators';
 
 @Service()
-export class UserService {
-
-}
+export class UserService {}
 ```
 
 #### Generate Middleware
@@ -21987,16 +22012,14 @@ asena generate middleware
 
 ```typescript
 import { Middleware } from '@asenajs/asena/decorators';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+import { type Context, MiddlewareService } from '@asenajs/ergenecore';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
-
   public async handle(context: Context, next: () => Promise<void>) {
     context.setValue('testValue', 'test');
     await next();
   }
-
 }
 ```
 
@@ -22025,9 +22048,7 @@ import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
-export class ServerConfig extends ConfigService {
-
-}
+export class ServerConfig extends ConfigService {}
 ```
 
 The class is empty: add the [server options](/docs/guides/configuration) you need. Errors are
@@ -22056,7 +22077,6 @@ import { type Context } from '@asenajs/ergenecore';
 
 @ExceptionHandler()
 export class ApiExceptionHandler {
-
   @Catch()
   public fallback(error: unknown, ctx: ExceptionContext<Context>) {
     if (ctx.scope !== 'http' || isHttpException(error)) return;
@@ -22065,7 +22085,6 @@ export class ApiExceptionHandler {
 
     return ctx.context.send({ error: 'Internal Server Error' }, 500);
   }
-
 }
 ```
 
@@ -22096,19 +22115,17 @@ import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @WebSocket({ path: '/chat', name: 'ChatNamespace' })
 export class ChatNamespace extends AsenaWebSocketService {
-
-  protected async onOpen(ws: Socket): Promise<void> {
+  protected async onOpen(_ws: Socket): Promise<void> {
     console.log('Client connected');
   }
 
-  protected async onMessage(ws: Socket, message: string): Promise<void> {
+  protected async onMessage(_ws: Socket, message: string): Promise<void> {
     console.log('Message received:', message);
   }
 
-  protected async onClose(ws: Socket): Promise<void> {
+  protected async onClose(_ws: Socket): Promise<void> {
     console.log('Client disconnected');
   }
-
 }
 ```
 
@@ -22263,6 +22280,7 @@ Initialize an existing project with Asena configuration.
 ### Features
 
 - **Configuration Generation** - Creates `asena-config.ts`
+- **CLI Dev Dependency** - Installs the version of `@asenajs/asena-cli` that is running, not the one on `PATH`
 - **Default Values** - Provides sensible defaults for quick start
 - **No Need if Using `create`** - Not required if you used `asena create`
 
@@ -23784,7 +23802,7 @@ Answer the prompts:
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
-✔ Do you want to setup Prettier? Yes
+✔ Set up formatting (bun fmt)? Yes
 ⠙ Creating asena project...
 ```
 
@@ -23798,7 +23816,7 @@ If you're working over SSH or in a CI/CD pipeline, interactive prompts won't wor
 
 ```bash
 # Create project with all options via CLI arguments
-asena create my-asena-app --adapter=ergenecore --logger --eslint --prettier
+asena create my-asena-app --adapter=ergenecore --logger --eslint --format
 ```
 :::
 
