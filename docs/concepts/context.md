@@ -1080,7 +1080,7 @@ async useNative(context: Context) {
 
 | Method | Return Type | Description |
 |:-------|:------------|:------------|
-| `getParam(name)` | `string` | Get route parameter |
+| `getParam(name)` | `string` | Get route parameter — `''` when the route does not declare it, or for an optional parameter the request leaves out |
 | `getQuery(name)` | `Promise<string \| undefined>` | Get single query parameter — `undefined` when absent, `''` when present but empty |
 | `getQueryAll(name)` | `Promise<string[]>` | Get all values of a query parameter |
 | `getAllQueries()` | `Record<string, string \| string[]>` | Get all query parameters as object |

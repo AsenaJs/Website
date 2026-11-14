@@ -676,7 +676,6 @@ export class ApiRateLimiter extends RateLimiterMiddleware {
       refillRate: 100 / 60, // per minute
       // Per user on a protected route, otherwise per client IP
       keyGenerator: (ctx) => getAuthSession(ctx)?.user.id ?? ctx.getRequestIp() ?? 'unknown',
-      trustProxy: true,     // one reverse proxy in front: read the client from X-Forwarded-For
       skip: (ctx) => getAuthSession(ctx)?.user.roles?.includes('admin') ?? false,
       cost: (ctx) => (new URL(ctx.req.url).pathname.endsWith('/export') ? 10 : 1),
     });
@@ -706,8 +705,10 @@ export class ReportController {
 ```
 
 The [asena-auth](#authentication) guard runs before route middleware, so the session is already
-on the context when the limiter reads it. Leave `trustProxy` at its default (`false`) when clients connect to Bun directly - a
-client could otherwise pick its own bucket by sending the header.
+on the context when the limiter reads it. A custom `keyGenerator` replaces the default key, so `trustProxy` does not
+apply to it: the fallback here, `getRequestIp()`, is the connecting peer, which behind a reverse proxy is the proxy.
+Without a `keyGenerator`, the limiter keys on the peer and reads `X-Forwarded-For` only when
+[`trustProxy`](/docs/adapters/ergenecore#rate-limiter-options) trusts the peer.
 
 ---
 

@@ -89,7 +89,7 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { AsenaLogger } from '@asenajs/asena-logger';
 
-// Create adapter (returns tuple: [adapter, logger]) - a logger is required
+// Create adapter (returns tuple: [adapter, logger])
 const [adapter, logger] = createHonoAdapter({ logger: new AsenaLogger() });
 
 // Create and start server
@@ -143,6 +143,10 @@ import { createHonoAdapter } from '@asenajs/hono-adapter';
 const [adapter, logger] = createHonoAdapter(myLogger);
 ```
 
+A logger passed on its own - anything with an `info` method - is the logger the adapter uses, also when it has a
+`logger` field of its own: `createHonoAdapter(new AsenaLogger())` uses the `AsenaLogger` and returns it. `new HonoAdapter()`
+tells a logger from options the same way.
+
 **Options object (recommended)**
 
 ```typescript
@@ -158,28 +162,28 @@ const [adapter, logger] = createHonoAdapter({
 
 | Property | Type | Required | Default | Description |
 |:---------|:-----|:---------|:--------|:------------|
-| `logger` | `ServerLogger` | Yes | — | Logger instance |
+| `logger` | `ServerLogger` | No | Console logger | Logger instance. Without one - no argument, options without `logger`, or `logger: undefined` - the factory creates a console logger |
 | `app` | `Hono` | No | — | Pre-configured Hono app instance |
 | `websocketAdapter` | `HonoWebsocketAdapter` | No | — | Custom WebSocket adapter |
-| `strict` | `boolean` | No | `true` | Strict route matching (trailing slash) |
+| `strict` | `boolean` | No | `false` | Strict route matching (trailing slash). Ignored when `app` is passed |
 | `logErrors` | `boolean` | No | `true` | Log the failures the framework itself answers - a request your `@Catch`/`@NotFound()` answered writes nothing. 5xx logs at `error` with a stack, 4xx at `debug` (falling back to `info`) without one, an unmatched route at `info`. Set `false` to silence all three. See [Adapter logging](/docs/guides/error-handling#adapter-logging). |
 
-**Returns:** Tuple: `[adapter, logger]`
+**Returns:** Tuple: `[adapter, logger]` - the logger passed in, or the console logger the factory created
 
 ### Trailing Slash (Strict Mode)
 
-By default, Hono uses strict mode where `/health` and `/health/` are **different** routes. Set `strict: false` to treat them as the same:
+By default `/health` and `/health/` match the **same** route, as on Ergenecore. Set `strict: true` to answer 404 for the trailing-slash form:
 
 ```typescript
-// strict: true (default) — /users and /users/ are different routes
+// strict: false (default) — /users and /users/ match the same route
 const [adapter, logger] = createHonoAdapter({ logger: myLogger });
 
-// strict: false — /users and /users/ match the same route
-const [adapter, logger] = createHonoAdapter({ logger: myLogger, strict: false });
+// strict: true — /users/ answers 404
+const [adapter, logger] = createHonoAdapter({ logger: myLogger, strict: true });
 ```
 
-::: tip Reverse Proxies
-Set `strict: false` when deploying behind reverse proxies (Nginx, Cloudflare, etc.) that may add or remove trailing slashes. This prevents 404 errors from slash mismatches.
+::: tip Your own Hono app
+An application that passes its own Hono `app` keeps that app's `strict` setting.
 :::
 
 ## Built-in Middleware
@@ -353,13 +357,19 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
+| `keyGenerator`    | `(ctx) => string`           | The connecting peer (`getRequestIp()`), or the client hop of `X-Forwarded-For` when `trustProxy` trusts the peer; `'unknown'` without a peer address | Client identifier function. A custom one replaces the default key, so `trustProxy` does not apply to it |
+| `trustProxy`      | `boolean \| string[] \| (address) => boolean` | `false`                | Which connecting peers are reverse proxies whose `X-Forwarded-For` is read. `false`: the header is ignored. `true`: one proxy layer (or a unix-socket listener) - the rightmost entry is the client. `string[]` (exact addresses; an IPv4 entry also matches its `::ffff:` form) or a predicate: entries are walked from the right and the first untrusted address is the client |
+| `maxBuckets`      | `number`                    | `10000`                                  | Distinct client buckets held in memory; at the cap the least recently seen client is evicted. Must be a positive integer |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
 | `skip`            | `(ctx) => boolean`          | `undefined`                              | Skip rate limiting function    |
 | `cleanupInterval` | `number`                    | `60000`                                  | Cleanup interval (ms)          |
 | `bucketTTL`       | `number`                    | `600000`                                 | Inactive bucket TTL (ms)       |
+
+::: warning Behind a reverse proxy
+With the default key and `trustProxy: false`, the connecting peer is the proxy, so every client behind it shares one bucket. Set `trustProxy: true` for one proxy layer; behind two or more, list every proxy or pass a predicate - `true` there keys on the outer proxy. A trusted peer that sends no usable `X-Forwarded-For` (missing, or longer than 1024 characters) is keyed on itself, and a warning is logged once. Leave `trustProxy` at `false` when clients connect to Bun directly: any client can write the header.
+:::
 
 #### Rate Limit Headers
 
@@ -760,8 +770,7 @@ describe("UserController", () => {
     // sockets the suite itself holds open - TIME_WAIT included - and Bun.serve then
     // fails with EADDRINUSE, randomly, in whichever test happened to draw it.
     const port = 10000 + Math.floor(Math.random() * 22000);
-    // createHonoAdapter returns a tuple and requires a logger - calling it with no argument
-    // yields [adapter, undefined], and AsenaServerFactory.create throws on the undefined logger
+    // createHonoAdapter returns a tuple: [adapter, logger]
     const [adapter] = createHonoAdapter({ logger });
 
     server = await AsenaServerFactory.create({

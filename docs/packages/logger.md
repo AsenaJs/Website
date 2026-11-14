@@ -52,7 +52,7 @@ import { AsenaLogger } from '@asenajs/asena-logger';
 // Create logger
 export const logger = new AsenaLogger();
 
-// Create adapter - returns a tuple, and the logger is required
+// Create adapter - returns a tuple: [adapter, logger]
 const [adapter] = createHonoAdapter({ logger });
 
 // Create and start server

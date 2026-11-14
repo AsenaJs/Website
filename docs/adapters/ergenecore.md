@@ -365,13 +365,19 @@ export class CustomRateLimiter extends RateLimiterMiddleware {
 |:------------------|:----------------------------|:-----------------------------------------|:-------------------------------|
 | `capacity`        | `number`                    | `100`                                    | Maximum burst capacity         |
 | `refillRate`      | `number`                    | `10`                                     | Tokens per second              |
-| `keyGenerator`    | `(ctx) => string`           | `x-forwarded-for` → `cf-connecting-ip` → `getRequestIp()` → `'unknown'` | Client identifier function |
+| `keyGenerator`    | `(ctx) => string`           | The connecting peer (`getRequestIp()`), or the client hop of `X-Forwarded-For` when `trustProxy` trusts the peer; `'unknown'` without a peer address | Client identifier function. A custom one replaces the default key, so `trustProxy` does not apply to it |
+| `trustProxy`      | `boolean \| string[] \| (address) => boolean` | `false`                | Which connecting peers are reverse proxies whose `X-Forwarded-For` is read. `false`: the header is ignored. `true`: one proxy layer (or a unix-socket listener) - the rightmost entry is the client. `string[]` (exact addresses; an IPv4 entry also matches its `::ffff:` form) or a predicate: entries are walked from the right and the first untrusted address is the client |
+| `maxBuckets`      | `number`                    | `10000`                                  | Distinct client buckets held in memory; at the cap the least recently seen client is evicted. Must be a positive integer |
 | `message`         | `string`                    | `'Rate limit exceeded...'`               | Error message                  |
 | `statusCode`      | `number`                    | `429`                                    | HTTP status code               |
 | `cost`            | `number \| (ctx) => number` | `1`                                      | Token cost per request         |
 | `skip`            | `(ctx) => boolean`          | `undefined`                              | Skip rate limiting function    |
 | `cleanupInterval` | `number`                    | `60000`                                  | Cleanup interval (ms)          |
 | `bucketTTL`       | `number`                    | `600000`                                 | Inactive bucket TTL (ms)       |
+
+::: warning Behind a reverse proxy
+With the default key and `trustProxy: false`, the connecting peer is the proxy, so every client behind it shares one bucket. Set `trustProxy: true` for one proxy layer; behind two or more, list every proxy or pass a predicate - `true` there keys on the outer proxy. A trusted peer that sends no usable `X-Forwarded-For` (missing, or longer than 1024 characters) is keyed on itself, and a warning is logged once. Leave `trustProxy` at `false` when clients connect to Bun directly: any client can write the header.
+:::
 
 #### Rate Limit Headers
 
