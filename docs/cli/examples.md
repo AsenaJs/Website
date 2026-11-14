@@ -82,7 +82,7 @@ Answer the prompts:
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
-✔ Do you want to setup Prettier? Yes
+✔ Set up formatting (bun fmt)? Yes
 ⠙ Creating asena project...
 ```
 
@@ -96,7 +96,7 @@ If you're working over SSH or in a CI/CD pipeline, interactive prompts won't wor
 
 ```bash
 # Create project with all options via CLI arguments
-asena create my-asena-app --adapter=ergenecore --logger --eslint --prettier
+asena create my-asena-app --adapter=ergenecore --logger --eslint --format
 ```
 :::
 

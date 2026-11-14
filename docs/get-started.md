@@ -40,7 +40,7 @@ Answer the interactive prompts:
 ✔ Enter your project name: my-app
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup ESLint? No
-✔ Do you want to setup Prettier? No
+✔ Set up formatting (bun fmt)? No
 ```
 
 ### 3. Start Development Server
@@ -152,7 +152,7 @@ import { AsenaServerFactory } from '@asenajs/asena';
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-// createHonoAdapter returns a tuple and requires a logger
+// createHonoAdapter returns a tuple: [adapter, logger]
 const [adapter] = createHonoAdapter({ logger });
 
 const server = await AsenaServerFactory.create({

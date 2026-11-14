@@ -219,10 +219,10 @@ const adapter = createErgenecoreAdapter({
 import { createHonoAdapter } from '@asenajs/hono-adapter';
 import { logger } from './logger';
 
-// Single argument: either a bare logger, or an options object containing one
+// Single argument: either a bare logger, or an options object; without a logger the factory creates a console logger
 const [adapter, asenaLogger] = createHonoAdapter({
   logger,
-  strict: false, // match '/health' and '/health/' alike - useful behind a reverse proxy
+  strict: true, // answer 404 for '/health/' when the route is '/health'
 });
 ```
 

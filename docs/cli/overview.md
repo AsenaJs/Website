@@ -26,7 +26,7 @@ Asena CLI provides essential tools for building and managing Asena applications:
   <div class="info-card">
     <span class="ic-kicker">🚀 Setup</span>
     <div class="ic-title">Quick Project Setup</div>
-    <p class="ic-desc">Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and Prettier setup.</p>
+    <p class="ic-desc">Create a fully configured Asena project in seconds with interactive prompts for adapter selection, ESLint, and formatting with bun fmt.</p>
   </div>
   <div class="info-card">
     <span class="ic-kicker">🔧 Generation</span>
@@ -86,8 +86,8 @@ asena dev start
 
 ## Requirements
 
-- **Bun Runtime** - v1.4 or higher
-- **TypeScript** - v5.8.2 or higher (installed automatically)
+- **Bun Runtime** - v1.4 or higher; v1.4.4 or higher for `bun fmt`, which formats the projects `asena create` sets up formatting for (the default)
+- **TypeScript** - 5.x, 6.x or 7.x (installed automatically)
 
 ## Related
 

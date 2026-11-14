@@ -37,6 +37,8 @@ accept it as a peer: `@asenajs/ergenecore` 5.1.0, `@asenajs/hono-adapter` 5.2.0,
 - **[Exit code of a signal-triggered shutdown](/docs/concepts/lifecycle#exit-code)** - `1` when `stop()` rejects or an `@OnStop` hook throws, rejects or times out, with or without a file watcher, and a non-zero `process.exitCode` the application set is kept; an explicit `server.stop()` does not set the exit code
 - **[`asena console`](/docs/cli/console)** *(CLI 0.13.0)* - runs the app in development with a browser page for its component graph, runtime, endpoints, requests, messaging, config and exceptions. HTTP requests reach its Requests panel from `@asenajs/ergenecore` 5.1.0 and `@asenajs/hono-adapter` 5.2.0
 - **[Redis cache decorators](/docs/packages/redis#caching-decorators)** *(asena-redis 4.1.0)* - `@Cacheable`, `@CachePut` and `@CacheEvict` put the caching policy on a service method instead of repeating the read, compute and write steps inside it
+- **[Formatting with `bun fmt`](/docs/cli/commands#cli-options)** *(CLI 0.14.0)* - `asena create --format`, the default, sets up `bun fmt` through a `[fmt]` table in `bunfig.toml` and needs Bun 1.4.4 or later; `--prettier` / `--no-prettier` are deprecated aliases that print a warning
+- **TypeScript 6 and 7** - every official package with a `typescript` peer range accepts 5.x, 6.x and 7.x, and `asena create` projects pass their own lint, `format:check`, `tsc` and `asena doctor` checks on TypeScript 7 with `strict: true` *(CLI 0.14.0)*
 
 ### New in v0.12
 

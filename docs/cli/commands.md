@@ -33,8 +33,8 @@ Bootstrap a new Asena project with a complete development environment setup.
 - **Multi-Adapter Support** - Choose between Hono or Ergenecore adapters
 - **Project Structure** - Creates complete project structure with necessary files
 - **Default Components** - Generates default controller and server setup
-- **Development Tools** - Optional ESLint and Prettier integration
-- **Dependency Management** - Automatically installs required dependencies
+- **Development Tools** - Optional ESLint and formatting with `bun fmt`
+- **Dependency Management** - Automatically installs required dependencies, and the version of `@asenajs/asena-cli` that is running as a dev dependency
 
 ### Usage
 
@@ -54,10 +54,10 @@ Interactive prompts may not work properly over SSH connections or in non-TTY env
 
 ```bash
 # Create with all features enabled
-asena create my-project --adapter=hono --logger --eslint --prettier
+asena create my-project --adapter=hono --logger --eslint --format
 
 # Create in current directory without optional features
-asena create . --adapter=ergenecore --no-logger --no-eslint --no-prettier
+asena create . --adapter=ergenecore --no-logger --no-eslint --no-format
 
 # Mix of CLI arguments and interactive prompts
 asena create my-app --adapter=hono  # Will prompt for remaining options
@@ -71,7 +71,13 @@ asena create my-app --adapter=hono  # Will prompt for remaining options
 | `--adapter <adapter>` | Adapter to use | `hono`, `ergenecore` | Prompted |
 | `--logger` / `--no-logger` | Setup Asena logger | boolean | `true` |
 | `--eslint` / `--no-eslint` | Setup ESLint | boolean | `true` |
-| `--prettier` / `--no-prettier` | Setup Prettier | boolean | `true` |
+| `--format` / `--no-format` | Set up formatting with `bun fmt`: a `[fmt]` table in `bunfig.toml` and the scripts `format` (`bun fmt --no-config`) and `format:check` (`bun fmt --check --no-config`). Needs Bun 1.4.4 or later | boolean | `true` |
+| `--prettier` / `--no-prettier` | Deprecated aliases of `--format` / `--no-format`; they print a warning. Combining one with the opposite `--format` flag is an error | boolean | - |
+| `--skip-install` | Skip dependency installation; the dependencies are written to `package.json` for a later `bun install` | boolean | `false` |
+
+When the target directory already has a `bunfig.toml`, `asena create` keeps its other settings and adds the `[fmt]`
+table. Keys an existing `[fmt]` table already sets keep their values, and `asena create` names the ones that differ from
+its own. `asena create` exits with code `1` when it fails.
 
 ### Interactive Prompts
 
@@ -82,7 +88,7 @@ When using interactive mode without CLI arguments:
 ✔ Select adapter: Ergenecore
 ✔ Do you want to setup logger? Yes
 ✔ Do you want to setup ESLint? Yes
-✔ Do you want to setup Prettier? Yes
+✔ Set up formatting (bun fmt)? Yes
 ⠙ Creating asena project...
 ```
 
@@ -104,8 +110,7 @@ my-asena-app/
 ├── tsconfig.json
 ├── .gitignore
 ├── eslint.config.cjs            # Only when ESLint is enabled
-├── .prettierrc.js               # Only when Prettier is enabled
-└── .prettierignore              # Only when Prettier is enabled
+└── bunfig.toml                  # [fmt] table, only when formatting is enabled
 ```
 
 ::: info Directories are created on demand
@@ -161,18 +166,15 @@ asena generate controller
 
 ```typescript
 import { Controller } from '@asenajs/asena/decorators';
-import { Get } from '@asenajs/asena/decorators/http';
-import type { Context } from '@asenajs/ergenecore';
 
 @Controller()
-export class UserController {
-
-}
+export class UserController {}
 ```
 
 ::: tip The body is intentionally empty
-The generator scaffolds the class and its imports only - add the path and your routes
-yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler.
+The generator scaffolds the class and the `Controller` import only - add the path, your routes
+and what they import yourself, e.g. `@Controller('/users')` with a `@Get('/')` handler that takes
+the adapter's `Context`.
 :::
 
 #### Generate Service
@@ -194,9 +196,7 @@ asena generate service
 import { Service } from '@asenajs/asena/decorators';
 
 @Service()
-export class UserService {
-
-}
+export class UserService {}
 ```
 
 #### Generate Middleware
@@ -216,16 +216,14 @@ asena generate middleware
 
 ```typescript
 import { Middleware } from '@asenajs/asena/decorators';
-import { MiddlewareService, type Context } from '@asenajs/ergenecore';
+import { type Context, MiddlewareService } from '@asenajs/ergenecore';
 
 @Middleware()
 export class AuthMiddleware extends MiddlewareService {
-
   public async handle(context: Context, next: () => Promise<void>) {
     context.setValue('testValue', 'test');
     await next();
   }
-
 }
 ```
 
@@ -254,9 +252,7 @@ import { Config } from '@asenajs/asena/decorators';
 import { ConfigService } from '@asenajs/ergenecore';
 
 @Config()
-export class ServerConfig extends ConfigService {
-
-}
+export class ServerConfig extends ConfigService {}
 ```
 
 The class is empty: add the [server options](/docs/guides/configuration) you need. Errors are
@@ -285,7 +281,6 @@ import { type Context } from '@asenajs/ergenecore';
 
 @ExceptionHandler()
 export class ApiExceptionHandler {
-
   @Catch()
   public fallback(error: unknown, ctx: ExceptionContext<Context>) {
     if (ctx.scope !== 'http' || isHttpException(error)) return;
@@ -294,7 +289,6 @@ export class ApiExceptionHandler {
 
     return ctx.context.send({ error: 'Internal Server Error' }, 500);
   }
-
 }
 ```
 
@@ -325,19 +319,17 @@ import { AsenaWebSocketService, type Socket } from '@asenajs/asena/web-socket';
 
 @WebSocket({ path: '/chat', name: 'ChatNamespace' })
 export class ChatNamespace extends AsenaWebSocketService {
-
-  protected async onOpen(ws: Socket): Promise<void> {
+  protected async onOpen(_ws: Socket): Promise<void> {
     console.log('Client connected');
   }
 
-  protected async onMessage(ws: Socket, message: string): Promise<void> {
+  protected async onMessage(_ws: Socket, message: string): Promise<void> {
     console.log('Message received:', message);
   }
 
-  protected async onClose(ws: Socket): Promise<void> {
+  protected async onClose(_ws: Socket): Promise<void> {
     console.log('Client disconnected');
   }
-
 }
 ```
 
@@ -492,6 +484,7 @@ Initialize an existing project with Asena configuration.
 ### Features
 
 - **Configuration Generation** - Creates `asena-config.ts`
+- **CLI Dev Dependency** - Installs the version of `@asenajs/asena-cli` that is running, not the one on `PATH`
 - **Default Values** - Provides sensible defaults for quick start
 - **No Need if Using `create`** - Not required if you used `asena create`
 
