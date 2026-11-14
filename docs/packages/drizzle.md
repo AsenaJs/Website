@@ -71,7 +71,7 @@ bun add mysql2          # For MySQL
 ## Supported Databases
 
 - ✅ **PostgreSQL** - using `pg` (node-postgres) with connection pooling
-- ✅ **MySQL** - using `mysql2`
+- ✅ **MySQL** - using `mysql2` (the `BaseRepository` [write methods](#repository-methods) are not available)
 - ✅ **BunSQL** - using Bun's built-in SQL interface
 - ⏳ **SQLite** - coming soon
 
@@ -506,6 +506,13 @@ show is gone. `DatabaseAdapter.createConnectionString()` was removed in the same
 ## Repository Methods
 
 The `BaseRepository` provides a comprehensive set of CRUD methods:
+
+::: warning Write methods need `.returning()`
+`create`, `createMany`, `update`, `updateById`, `delete`, `deleteById` and the `updateMany` / `deleteMany` aliases
+build their queries with `.returning()`, which Drizzle's MySQL query builders do not have. With a `mysql` database
+they reject with `Query builder does not support .returning() for this database driver`; use `this.db` for writes
+there. `postgresql` and `bun-sql` databases are not affected.
+:::
 
 ### Finding Records
 
